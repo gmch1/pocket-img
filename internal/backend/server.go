@@ -1,0 +1,639 @@
+package backend
+
+import (
+	"context"
+	"crypto/rand"
+	"crypto/sha256"
+	"crypto/subtle"
+	"encoding/base64"
+	"encoding/hex"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"mime/multipart"
+	"net/http"
+	"net/url"
+	"os"
+	"path/filepath"
+	"runtime/debug"
+	"sort"
+	"strconv"
+	"strings"
+	"time"
+
+	"phone-image-host/internal/webui"
+)
+
+const sessionCookieName = "pih_session"
+
+type credential struct {
+	ownerID     string
+	fingerprint [sha256.Size]byte
+}
+
+type ownerContextKey struct{}
+
+type Server struct {
+	cfg          Config
+	store        *store
+	processor    *processor
+	handler      http.Handler
+	queueSlots   chan struct{}
+	processSlots chan struct{}
+	credentials  []credential
+	location     *time.Location
+}
+
+func New(cfg Config) (*Server, error) {
+	if cfg.DataDir == "" {
+		return nil, errors.New("data directory is required")
+	}
+	credentials, err := configuredCredentials(cfg.Tokens)
+	if err != nil {
+		return nil, err
+	}
+	if cfg.SessionTTL <= 0 {
+		cfg.SessionTTL = 7 * 24 * time.Hour
+	}
+	if cfg.MaxUploadBytes <= 0 {
+		cfg.MaxUploadBytes = 25 << 20
+	}
+	if cfg.MaxPixels <= 0 {
+		cfg.MaxPixels = 20_000_000
+	}
+	if cfg.ThumbnailMax <= 0 {
+		cfg.ThumbnailMax = 640
+	}
+	if cfg.WebPQuality <= 0 {
+		cfg.WebPQuality = 82
+	}
+	if cfg.ThumbQuality <= 0 {
+		cfg.ThumbQuality = 75
+	}
+	if cfg.QueueDepth <= 0 {
+		cfg.QueueDepth = 8
+	}
+
+	for _, directory := range []string{
+		cfg.DataDir,
+		filepath.Join(cfg.DataDir, "tmp"),
+		filepath.Join(cfg.DataDir, "objects"),
+		filepath.Join(cfg.DataDir, "thumbnails"),
+	} {
+		if err := os.MkdirAll(directory, 0o750); err != nil {
+			return nil, err
+		}
+	}
+
+	database, err := openStore(cfg.DataDir)
+	if err != nil {
+		return nil, err
+	}
+	location, err := time.LoadLocation("Asia/Shanghai")
+	if err != nil {
+		database.close()
+		return nil, err
+	}
+
+	server := &Server{
+		cfg:          cfg,
+		store:        database,
+		processor:    newProcessor(cfg),
+		queueSlots:   make(chan struct{}, cfg.QueueDepth),
+		processSlots: make(chan struct{}, 1),
+		credentials:  credentials,
+		location:     location,
+	}
+	legacyImages, err := server.store.hasLegacyImages(context.Background())
+	if err != nil {
+		server.Close()
+		return nil, fmt.Errorf("inspect legacy image ownership: %w", err)
+	}
+	if legacyImages {
+		legacyOwner := ""
+		if len(credentials) == 1 {
+			legacyOwner = credentials[0].ownerID
+		} else {
+			for _, candidate := range credentials {
+				if candidate.ownerID == "default" {
+					legacyOwner = candidate.ownerID
+					break
+				}
+			}
+		}
+		if legacyOwner == "" {
+			server.Close()
+			return nil, errors.New("legacy single-token images require one configured space or a space named default")
+		}
+		adopted, err := server.store.adoptLegacyOwner(context.Background(), legacyOwner)
+		if err != nil {
+			server.Close()
+			return nil, fmt.Errorf("adopt legacy image ownership: %w", err)
+		}
+		if adopted {
+			records, err := server.store.listAllImagesForOwner(context.Background(), legacyOwner)
+			if err != nil {
+				server.Close()
+				return nil, fmt.Errorf("load legacy images: %w", err)
+			}
+			if err := server.processor.migrateLegacyFiles(records); err != nil {
+				server.Close()
+				return nil, fmt.Errorf("migrate legacy image files: %w", err)
+			}
+		}
+	}
+	if err := server.store.syncUsers(context.Background(), credentials); err != nil {
+		server.Close()
+		return nil, fmt.Errorf("sync configured users: %w", err)
+	}
+	if err := server.store.deleteExpiredSessions(context.Background(), time.Now()); err != nil {
+		server.Close()
+		return nil, err
+	}
+	server.handler = server.routes()
+	return server, nil
+}
+
+func configuredCredentials(tokens map[string]string) ([]credential, error) {
+	if len(tokens) == 0 {
+		return nil, errors.New("at least one configured token is required")
+	}
+	ownerIDs := make([]string, 0, len(tokens))
+	for ownerID := range tokens {
+		ownerIDs = append(ownerIDs, ownerID)
+	}
+	sort.Strings(ownerIDs)
+
+	credentials := make([]credential, 0, len(tokens))
+	seen := make(map[[sha256.Size]byte]string, len(tokens))
+	for _, ownerID := range ownerIDs {
+		if !validOwnerID(ownerID) {
+			return nil, fmt.Errorf("invalid space id %q: use 1-64 letters, numbers, underscores, or hyphens", ownerID)
+		}
+		token := tokens[ownerID]
+		if token == "" {
+			return nil, fmt.Errorf("token for space %q is empty", ownerID)
+		}
+		fingerprint := sha256.Sum256([]byte(token))
+		if existing, duplicate := seen[fingerprint]; duplicate {
+			return nil, fmt.Errorf("spaces %q and %q use the same token", existing, ownerID)
+		}
+		seen[fingerprint] = ownerID
+		credentials = append(credentials, credential{ownerID: ownerID, fingerprint: fingerprint})
+	}
+	return credentials, nil
+}
+
+func validOwnerID(value string) bool {
+	if len(value) < 1 || len(value) > 64 {
+		return false
+	}
+	for _, character := range value {
+		if character >= 'a' && character <= 'z' ||
+			character >= 'A' && character <= 'Z' ||
+			character >= '0' && character <= '9' ||
+			character == '_' || character == '-' {
+			continue
+		}
+		return false
+	}
+	return true
+}
+
+func (s *Server) Handler() http.Handler {
+	return s.handler
+}
+
+func (s *Server) Close() error {
+	return s.store.close()
+}
+
+func (s *Server) routes() http.Handler {
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /healthz", s.health)
+	mux.HandleFunc("POST /api/auth/session", s.createSession)
+	mux.Handle("DELETE /api/auth/session", s.requireSession(http.HandlerFunc(s.deleteSession)))
+	mux.Handle("GET /api/images", s.requireSession(http.HandlerFunc(s.listImages)))
+	mux.Handle("POST /api/images", s.requireSession(http.HandlerFunc(s.uploadImage)))
+	mux.Handle("DELETE /api/images", s.requireSession(http.HandlerFunc(s.deleteImages)))
+	mux.HandleFunc("GET /i/{name}", s.serveFullImage)
+	mux.HandleFunc("GET /t/{name}", s.serveThumbnail)
+	mux.Handle("GET /", webui.Handler())
+	return s.securityHeaders(mux)
+}
+
+func (s *Server) health(w http.ResponseWriter, _ *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	_, _ = io.WriteString(w, `{"status":"ok"}`)
+}
+
+func (s *Server) createSession(w http.ResponseWriter, r *http.Request) {
+	presented := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
+	matched, ok := s.matchCredential(presented)
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "invalid token")
+		return
+	}
+
+	raw := make([]byte, 32)
+	if _, err := rand.Read(raw); err != nil {
+		writeError(w, http.StatusInternalServerError, "create session")
+		return
+	}
+	encoded := base64.RawURLEncoding.EncodeToString(raw)
+	hash := sha256.Sum256([]byte(encoded))
+	expires := time.Now().Add(s.cfg.SessionTTL)
+	var replacedHash []byte
+	if currentCookie, err := r.Cookie(sessionCookieName); err == nil && currentCookie.Value != "" {
+		currentHash := sha256.Sum256([]byte(currentCookie.Value))
+		replacedHash = currentHash[:]
+	}
+	if err := s.store.createSession(r.Context(), matched.ownerID, hash[:], matched.fingerprint[:], expires, replacedHash); err != nil {
+		writeError(w, http.StatusInternalServerError, "store session")
+		return
+	}
+
+	http.SetCookie(w, &http.Cookie{
+		Name:     sessionCookieName,
+		Value:    encoded,
+		Path:     "/api",
+		Expires:  expires,
+		MaxAge:   int(s.cfg.SessionTTL.Seconds()),
+		HttpOnly: true,
+		Secure:   s.cfg.CookieSecure,
+		SameSite: http.SameSiteStrictMode,
+	})
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *Server) matchCredential(presented string) (credential, bool) {
+	if presented == "" {
+		return credential{}, false
+	}
+	presentedHash := sha256.Sum256([]byte(presented))
+	var matched credential
+	found := 0
+	for _, candidate := range s.credentials {
+		equal := subtle.ConstantTimeCompare(presentedHash[:], candidate.fingerprint[:])
+		if equal == 1 {
+			matched = candidate
+		}
+		found |= equal
+	}
+	return matched, found == 1
+}
+
+func (s *Server) deleteSession(w http.ResponseWriter, r *http.Request) {
+	cookie, _ := r.Cookie(sessionCookieName)
+	if cookie != nil {
+		hash := sha256.Sum256([]byte(cookie.Value))
+		_ = s.store.deleteSession(r.Context(), hash[:])
+	}
+	http.SetCookie(w, &http.Cookie{
+		Name:     sessionCookieName,
+		Value:    "",
+		Path:     "/api",
+		MaxAge:   -1,
+		HttpOnly: true,
+		Secure:   s.cfg.CookieSecure,
+		SameSite: http.SameSiteStrictMode,
+	})
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *Server) requireSession(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !sameOrigin(r) {
+			writeError(w, http.StatusForbidden, "cross-origin request rejected")
+			return
+		}
+		cookie, err := r.Cookie(sessionCookieName)
+		if err != nil || cookie.Value == "" {
+			writeError(w, http.StatusUnauthorized, "session required")
+			return
+		}
+		hash := sha256.Sum256([]byte(cookie.Value))
+		ownerID, valid, err := s.store.sessionOwner(r.Context(), hash[:], time.Now())
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "validate session")
+			return
+		}
+		if !valid {
+			writeError(w, http.StatusUnauthorized, "session expired")
+			return
+		}
+		contextWithOwner := context.WithValue(r.Context(), ownerContextKey{}, ownerID)
+		next.ServeHTTP(w, r.WithContext(contextWithOwner))
+	})
+}
+
+func authenticatedOwner(r *http.Request) string {
+	ownerID, _ := r.Context().Value(ownerContextKey{}).(string)
+	return ownerID
+}
+
+func (s *Server) uploadImage(w http.ResponseWriter, r *http.Request) {
+	ownerID := authenticatedOwner(r)
+	select {
+	case s.queueSlots <- struct{}{}:
+		defer func() { <-s.queueSlots }()
+	default:
+		writeError(w, http.StatusServiceUnavailable, "image queue is full")
+		return
+	}
+
+	r.Body = http.MaxBytesReader(w, r.Body, s.cfg.MaxUploadBytes+(1<<20))
+	tempPath, err := s.receiveUpload(r)
+	if err != nil {
+		if errors.Is(err, errUploadTooLarge) {
+			writeError(w, http.StatusRequestEntityTooLarge, err.Error())
+		} else {
+			writeError(w, http.StatusBadRequest, err.Error())
+		}
+		return
+	}
+	defer os.Remove(tempPath)
+
+	select {
+	case s.processSlots <- struct{}{}:
+		defer func() { <-s.processSlots }()
+	case <-r.Context().Done():
+		writeError(w, http.StatusRequestTimeout, "request cancelled")
+		return
+	}
+
+	record, err := s.processor.process(tempPath, ownerID)
+	// Uploads are comparatively infrequent and image decoding creates a large,
+	// short-lived pixel buffer. Return that memory to the OS before the process
+	// becomes idle again instead of retaining the peak-sized Go heap.
+	debug.FreeOSMemory()
+	if err != nil {
+		switch {
+		case errors.Is(err, errImageTooLarge):
+			writeError(w, http.StatusRequestEntityTooLarge, err.Error())
+		case errors.Is(err, errUnsupportedImage):
+			writeError(w, http.StatusUnsupportedMediaType, err.Error())
+		default:
+			writeError(w, http.StatusUnprocessableEntity, err.Error())
+		}
+		return
+	}
+	if err := s.store.insertImage(r.Context(), record); err != nil {
+		_ = s.processor.removeFiles(record.OwnerID, record.ID, record.Extension)
+		writeError(w, http.StatusInternalServerError, "store image metadata")
+		return
+	}
+
+	writeJSON(w, http.StatusCreated, map[string]any{"image": record.response()})
+}
+
+var errUploadTooLarge = errors.New("upload exceeds configured size limit")
+
+func (s *Server) receiveUpload(r *http.Request) (string, error) {
+	reader, err := r.MultipartReader()
+	if err != nil {
+		return "", fmt.Errorf("multipart body required: %w", err)
+	}
+	for {
+		part, err := reader.NextPart()
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		if err != nil {
+			return "", err
+		}
+		if part.FormName() != "file" || part.FileName() == "" {
+			part.Close()
+			continue
+		}
+		path, err := s.copyPart(part)
+		part.Close()
+		return path, err
+	}
+	return "", errors.New("multipart file field named 'file' is required")
+}
+
+func (s *Server) copyPart(part *multipart.Part) (string, error) {
+	file, err := os.CreateTemp(filepath.Join(s.cfg.DataDir, "tmp"), "upload-*")
+	if err != nil {
+		return "", err
+	}
+	path := file.Name()
+	remove := true
+	defer func() {
+		file.Close()
+		if remove {
+			_ = os.Remove(path)
+		}
+	}()
+
+	written, err := io.Copy(file, io.LimitReader(part, s.cfg.MaxUploadBytes+1))
+	if err != nil {
+		return "", err
+	}
+	if written > s.cfg.MaxUploadBytes {
+		return "", errUploadTooLarge
+	}
+	if err := file.Sync(); err != nil {
+		return "", err
+	}
+	if err := file.Close(); err != nil {
+		return "", err
+	}
+	remove = false
+	return path, nil
+}
+
+func (s *Server) listImages(w http.ResponseWriter, r *http.Request) {
+	limit := 50
+	if raw := r.URL.Query().Get("limit"); raw != "" {
+		parsed, err := strconv.Atoi(raw)
+		if err != nil || parsed < 1 || parsed > 100 {
+			writeError(w, http.StatusBadRequest, "limit must be between 1 and 100")
+			return
+		}
+		limit = parsed
+	}
+	since, err := s.rangeStart(r.URL.Query().Get("range"), time.Now())
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	records, err := s.store.listImages(r.Context(), authenticatedOwner(r), since, limit)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "list images")
+		return
+	}
+	images := make([]imageResponse, 0, len(records))
+	for _, record := range records {
+		images = append(images, record.response())
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"images": images})
+}
+
+func (s *Server) rangeStart(value string, now time.Time) (int64, error) {
+	local := now.In(s.location)
+	startToday := time.Date(local.Year(), local.Month(), local.Day(), 0, 0, 0, 0, s.location)
+	switch value {
+	case "", "all":
+		return 0, nil
+	case "today":
+		return startToday.UTC().UnixMilli(), nil
+	case "7d":
+		return startToday.AddDate(0, 0, -6).UTC().UnixMilli(), nil
+	case "30d":
+		return startToday.AddDate(0, 0, -29).UTC().UnixMilli(), nil
+	default:
+		return 0, errors.New("range must be today, 7d, 30d, or all")
+	}
+}
+
+func (s *Server) deleteImages(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
+	var request struct {
+		IDs []string `json:"ids"`
+	}
+	decoder := json.NewDecoder(r.Body)
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&request); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid delete request")
+		return
+	}
+	if len(request.IDs) == 0 || len(request.IDs) > 100 {
+		writeError(w, http.StatusBadRequest, "ids must contain between 1 and 100 values")
+		return
+	}
+	seen := make(map[string]struct{}, len(request.IDs))
+	ids := make([]string, 0, len(request.IDs))
+	for _, id := range request.IDs {
+		if !validID(id) {
+			writeError(w, http.StatusBadRequest, "invalid image id")
+			return
+		}
+		if _, exists := seen[id]; !exists {
+			seen[id] = struct{}{}
+			ids = append(ids, id)
+		}
+	}
+
+	ownerID := authenticatedOwner(r)
+	records, err := s.store.getImages(r.Context(), ownerID, ids)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "load images")
+		return
+	}
+	for _, record := range records {
+		if err := s.processor.removeFiles(record.OwnerID, record.ID, record.Extension); err != nil {
+			writeError(w, http.StatusInternalServerError, "delete image files")
+			return
+		}
+	}
+	if err := s.store.deleteImages(r.Context(), ownerID, ids); err != nil {
+		writeError(w, http.StatusInternalServerError, "delete image metadata")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"deleted": len(records)})
+}
+
+func (s *Server) serveFullImage(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	extension := strings.TrimPrefix(filepath.Ext(name), ".")
+	id := strings.TrimSuffix(name, "."+extension)
+	if !validID(id) || (extension != "webp" && extension != "gif") {
+		http.NotFound(w, r)
+		return
+	}
+	record, found, err := s.store.getImageByID(r.Context(), id)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "load image metadata")
+		return
+	}
+	if !found || record.Extension != extension {
+		http.NotFound(w, r)
+		return
+	}
+	s.serveFile(w, r, s.processor.fullPath(record.OwnerID, id, extension), record.MediaType)
+}
+
+func (s *Server) serveThumbnail(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	if filepath.Ext(name) != ".webp" {
+		http.NotFound(w, r)
+		return
+	}
+	id := strings.TrimSuffix(name, ".webp")
+	if !validID(id) {
+		http.NotFound(w, r)
+		return
+	}
+	record, found, err := s.store.getImageByID(r.Context(), id)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "load image metadata")
+		return
+	}
+	if !found {
+		http.NotFound(w, r)
+		return
+	}
+	s.serveFile(w, r, s.processor.thumbnailPath(record.OwnerID, id), "image/webp")
+}
+
+func (s *Server) serveFile(w http.ResponseWriter, r *http.Request, path, mediaType string) {
+	file, err := os.Open(path)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	defer file.Close()
+	info, err := file.Stat()
+	if err != nil || !info.Mode().IsRegular() {
+		http.NotFound(w, r)
+		return
+	}
+	w.Header().Set("Content-Type", mediaType)
+	w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+	http.ServeContent(w, r, filepath.Base(path), info.ModTime(), file)
+}
+
+func (s *Server) securityHeaders(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		w.Header().Set("Referrer-Policy", "no-referrer")
+		next.ServeHTTP(w, r)
+	})
+}
+
+func sameOrigin(r *http.Request) bool {
+	origin := r.Header.Get("Origin")
+	if origin == "" {
+		return true
+	}
+	parsed, err := url.Parse(origin)
+	if err != nil {
+		return false
+	}
+	host := r.Host
+	if forwarded := r.Header.Get("X-Forwarded-Host"); forwarded != "" {
+		host = strings.TrimSpace(strings.Split(forwarded, ",")[0])
+	}
+	return strings.EqualFold(parsed.Host, host)
+}
+
+func validID(id string) bool {
+	if len(id) != 32 {
+		return false
+	}
+	_, err := hex.DecodeString(id)
+	return err == nil
+}
+
+func writeError(w http.ResponseWriter, status int, message string) {
+	writeJSON(w, status, map[string]string{"error": message})
+}
+
+func writeJSON(w http.ResponseWriter, status int, value any) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(value)
+}

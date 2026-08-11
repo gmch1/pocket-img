@@ -1,0 +1,38 @@
+package webui
+
+import (
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"testing"
+)
+
+func TestHandlerServesIndexAndSPAFallback(t *testing.T) {
+	handler := Handler()
+	for _, requestPath := range []string{"/", "/gallery/deep-link"} {
+		request := httptest.NewRequest(http.MethodGet, requestPath, nil)
+		response := httptest.NewRecorder()
+		handler.ServeHTTP(response, request)
+		if response.Code != http.StatusOK {
+			t.Fatalf("path=%s status=%d body=%s", requestPath, response.Code, response.Body.String())
+		}
+		if !strings.Contains(response.Body.String(), `id="root"`) {
+			t.Fatalf("path=%s did not serve the frontend index", requestPath)
+		}
+		if response.Header().Get("Cache-Control") != "no-cache" {
+			t.Fatalf("path=%s cache=%q", requestPath, response.Header().Get("Cache-Control"))
+		}
+	}
+}
+
+func TestHandlerDoesNotMaskReservedBackendPaths(t *testing.T) {
+	handler := Handler()
+	for _, requestPath := range []string{"/api/unknown", "/i/unknown.webp", "/t/unknown.webp"} {
+		request := httptest.NewRequest(http.MethodGet, requestPath, nil)
+		response := httptest.NewRecorder()
+		handler.ServeHTTP(response, request)
+		if response.Code != http.StatusNotFound {
+			t.Fatalf("path=%s status=%d", requestPath, response.Code)
+		}
+	}
+}
