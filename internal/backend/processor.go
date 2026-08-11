@@ -33,6 +33,11 @@ type processor struct {
 	thumbQuality int
 }
 
+type webPInspection struct {
+	animated       bool
+	canPassThrough bool
+}
+
 func newProcessor(cfg Config) *processor {
 	return &processor{
 		dataDir:      cfg.DataDir,
@@ -56,11 +61,15 @@ func (p *processor) process(tempPath, ownerID string) (imageRecord, error) {
 	}
 
 	animated := format == "gif"
+	passThroughWebP := false
 	if format == "webp" {
-		animated, err = animatedWebP(tempPath)
+		inspection, inspectErr := inspectWebP(tempPath)
+		err = inspectErr
 		if err != nil {
 			return imageRecord{}, err
 		}
+		animated = inspection.animated
+		passThroughWebP = inspection.canPassThrough
 	}
 	if format != "png" && format != "jpeg" && format != "gif" && format != "webp" {
 		return imageRecord{}, errUnsupportedImage
@@ -92,9 +101,9 @@ func (p *processor) process(tempPath, ownerID string) (imageRecord, error) {
 		}
 	}()
 
-	if animated {
+	if animated || passThroughWebP {
 		if err := renameOrCopy(tempPath, fullCandidate); err != nil {
-			return imageRecord{}, fmt.Errorf("preserve animation: %w", err)
+			return imageRecord{}, fmt.Errorf("preserve webp or animation: %w", err)
 		}
 	} else if err := writeWebP(fullCandidate, imageValue, p.webpQuality); err != nil {
 		return imageRecord{}, fmt.Errorf("encode full webp: %w", err)
@@ -174,36 +183,96 @@ func decodeFirstFrame(path, format string) (image.Image, error) {
 	}
 }
 
-func animatedWebP(path string) (bool, error) {
+func inspectWebP(path string) (webPInspection, error) {
 	file, err := os.Open(path)
 	if err != nil {
-		return false, err
+		return webPInspection{}, err
 	}
 	defer file.Close()
 
-	data, err := io.ReadAll(io.LimitReader(file, 1<<20))
+	info, err := file.Stat()
 	if err != nil {
-		return false, err
+		return webPInspection{}, err
 	}
-	if len(data) < 12 || string(data[:4]) != "RIFF" || string(data[8:12]) != "WEBP" {
-		return false, errUnsupportedImage
+	var riffHeader [12]byte
+	if _, err := io.ReadFull(file, riffHeader[:]); err != nil {
+		return webPInspection{}, errUnsupportedImage
 	}
-	for offset := 12; offset+8 <= len(data); {
-		chunkType := string(data[offset : offset+4])
-		chunkSize := int(binary.LittleEndian.Uint32(data[offset+4 : offset+8]))
-		dataOffset := offset + 8
-		if chunkSize < 0 || dataOffset+chunkSize > len(data) {
-			break
-		}
-		if chunkType == "VP8X" && chunkSize >= 1 && data[dataOffset]&0x02 != 0 {
-			return true, nil
-		}
-		if chunkType == "ANIM" || chunkType == "ANMF" {
-			return true, nil
-		}
-		offset = dataOffset + chunkSize + chunkSize%2
+	if string(riffHeader[:4]) != "RIFF" || string(riffHeader[8:]) != "WEBP" {
+		return webPInspection{}, errUnsupportedImage
 	}
-	return false, nil
+	if declaredSize := int64(binary.LittleEndian.Uint32(riffHeader[4:8])) + 8; declaredSize != info.Size() {
+		return webPInspection{}, errUnsupportedImage
+	}
+
+	result := webPInspection{canPassThrough: true}
+	imageDataChunks := 0
+	extendedHeaderChunks := 0
+	alphaChunks := 0
+	for offset := int64(len(riffHeader)); offset < info.Size(); {
+		var chunkHeader [8]byte
+		if _, err := io.ReadFull(file, chunkHeader[:]); err != nil {
+			return webPInspection{}, errUnsupportedImage
+		}
+		chunkType := string(chunkHeader[:4])
+		chunkSize := int64(binary.LittleEndian.Uint32(chunkHeader[4:]))
+		paddedSize := chunkSize + chunkSize%2
+		if offset+int64(len(chunkHeader))+paddedSize > info.Size() {
+			return webPInspection{}, errUnsupportedImage
+		}
+
+		consumed := int64(0)
+		switch chunkType {
+		case "VP8 ", "VP8L":
+			imageDataChunks++
+			if imageDataChunks > 1 {
+				result.canPassThrough = false
+			}
+		case "VP8X":
+			if chunkSize != 10 {
+				return webPInspection{}, errUnsupportedImage
+			}
+			var flags [1]byte
+			if _, err := io.ReadFull(file, flags[:]); err != nil {
+				return webPInspection{}, errUnsupportedImage
+			}
+			consumed = 1
+			extendedHeaderChunks++
+			if extendedHeaderChunks > 1 || offset != int64(len(riffHeader)) || imageDataChunks > 0 {
+				result.canPassThrough = false
+			}
+			if flags[0]&0xc1 != 0 || flags[0]&(0x20|0x08|0x04) != 0 {
+				// Reserved or metadata feature flags require sanitizing by re-encoding.
+				result.canPassThrough = false
+			}
+			result.animated = result.animated || flags[0]&0x02 != 0
+		case "ALPH":
+			// Alpha data is part of the encoded image and is safe to retain.
+			alphaChunks++
+			if alphaChunks > 1 || imageDataChunks > 0 {
+				result.canPassThrough = false
+			}
+		case "ANIM", "ANMF":
+			result.animated = true
+			result.canPassThrough = false
+		case "ICCP", "EXIF", "XMP ":
+			// Re-encode metadata-bearing images to retain the existing privacy behavior.
+			result.canPassThrough = false
+		default:
+			// Unknown chunks are accepted by the decoder but are sanitized by re-encoding.
+			result.canPassThrough = false
+		}
+
+		if _, err := file.Seek(chunkSize-consumed+chunkSize%2, io.SeekCurrent); err != nil {
+			return webPInspection{}, errUnsupportedImage
+		}
+		offset += int64(len(chunkHeader)) + paddedSize
+	}
+	if alphaChunks > 0 && extendedHeaderChunks != 1 {
+		result.canPassThrough = false
+	}
+	result.canPassThrough = result.canPassThrough && !result.animated && imageDataChunks == 1
+	return result, nil
 }
 
 func writeWebP(path string, value image.Image, quality int) (returnErr error) {

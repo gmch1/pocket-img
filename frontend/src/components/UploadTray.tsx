@@ -10,7 +10,7 @@ interface UploadTrayProps {
 export function UploadTray({ tasks, onCopyAll, onClear }: UploadTrayProps) {
   if (tasks.length === 0) return null;
   const completed = tasks.filter((task) => task.state === "done");
-  const active = tasks.some((task) => task.state === "queued" || task.state === "uploading");
+  const active = tasks.some((task) => task.state === "queued" || task.state === "optimizing" || task.state === "uploading");
 
   return (
     <aside className="upload-tray" aria-label="上传状态">
@@ -32,7 +32,7 @@ export function UploadTray({ tasks, onCopyAll, onClear }: UploadTrayProps) {
               </div>
               {task.error ? <small>{task.error}</small> : null}
             </div>
-            <b>{task.state === "done" ? "✓" : task.state === "error" ? "!" : `${task.progress}%`}</b>
+            <b>{task.state === "done" ? "✓" : task.state === "error" ? "!" : task.state === "optimizing" ? "…" : `${task.progress}%`}</b>
           </div>
         ))}
       </div>

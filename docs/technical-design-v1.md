@@ -33,6 +33,8 @@
 - 复制、删除等图标使用项目内 SVG，不加载在线图标或字体。
 - 不使用 Redux；页面状态优先使用 React 自带状态能力。
 - 所有前端资源随二进制提供，页面不请求 CDN、字体或第三方脚本。
+- 大于等于 256 KiB 的 PNG/JPEG 在 Web Worker 中通过 `OffscreenCanvas` 尝试编码为质量 82 的同尺寸 WebP；输出类型不符、节省不足 10% 或能力不可用时上传原文件。
+- 浏览器优化队列保持逐张执行，GIF 和 WebP 不进入客户端编码器；压缩阶段不占用 UI 主线程。
 - 当前前端读取最近 100 张并明确显示上限；下一阶段接入游标滚动分页，长期滚动时再根据实测决定是否窗口化。
 
 ## 3. 后端设计
@@ -96,17 +98,19 @@ temporary upload
   → header/decode-config validation
   → pixel-limit check
   → decode once
-  ├── full-size WebP quality 82
+  ├── safe static WebP → validated full-size passthrough
+  ├── PNG/JPEG/metadata WebP → full-size WebP quality 82
   └── 640px thumbnail WebP quality 75
   → fsync/atomic rename
   → SQLite transaction
   → remove temporary source
 ```
 
-- PNG、JPEG 和静态 WebP 都进入静态图片管线。
+- PNG、JPEG 和静态 WebP 都进入静态图片管线，客户端预压缩不能绕过后端校验。
 - 全尺寸输出保持输入宽高，不做放大或缩小。
 - 缩略图保持宽高比，长边不超过 640 px。
 - 解码后的像素缓冲尽量在全尺寸编码和缩略图生成之间复用。
+- 无动画且仅包含标准图像/Alpha 块的 WebP 在成功解码后直接作为全尺寸文件；包含 ICC、EXIF、XMP 或未知块时重编码净化。
 
 ### 4.2 动图
 

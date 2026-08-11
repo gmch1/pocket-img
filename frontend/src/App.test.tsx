@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, test, vi } from "vitest";
 import App from "./App";
 import { APIError, createSession, listImages, uploadImage } from "./api";
 import { copyText } from "./clipboard";
+import { prepareImageForUpload } from "./image-compression";
 import type { ImageItem } from "./types";
 
 vi.mock("./api", async () => {
@@ -18,6 +19,7 @@ vi.mock("./api", async () => {
 });
 
 vi.mock("./clipboard", () => ({ copyText: vi.fn() }));
+vi.mock("./image-compression", () => ({ prepareImageForUpload: vi.fn() }));
 
 const image: ImageItem = {
   id: "0123456789abcdef0123456789abcdef",
@@ -35,6 +37,7 @@ describe("App", () => {
   beforeEach(() => {
     vi.mocked(createSession).mockResolvedValue();
     vi.mocked(copyText).mockResolvedValue();
+    vi.mocked(prepareImageForUpload).mockImplementation(async (file) => file);
     vi.mocked(uploadImage).mockReset();
   });
 
@@ -70,6 +73,7 @@ describe("App", () => {
     });
 
     await waitFor(() => expect(uploadImage).toHaveBeenCalledOnce());
+    expect(prepareImageForUpload).toHaveBeenCalledWith(file);
     await waitFor(() => expect(copyText).toHaveBeenCalledOnce());
     expect(vi.mocked(copyText).mock.calls[0][0]).toContain(image.url);
     expect(await screen.findByRole("button", { name: "复制图片链接" })).toBeTruthy();

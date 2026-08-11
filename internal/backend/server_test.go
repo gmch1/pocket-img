@@ -281,6 +281,39 @@ func TestGIFIsPreservedAndGetsWebPThumbnail(t *testing.T) {
 	}
 }
 
+func TestStaticWebPIsValidatedAndStoredWithoutReencoding(t *testing.T) {
+	backend := newTestBackend(t)
+	backend.login(t)
+	source := makeWebP(t, 640, 360)
+	result := backend.upload(t, "browser-compressed.webp", source)
+	if result.Animated || result.Width != 640 || result.Height != 360 {
+		t.Fatalf("unexpected webp metadata: %#v", result)
+	}
+
+	publicResponse, err := http.Get(backend.http.URL + result.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	stored, err := io.ReadAll(publicResponse.Body)
+	publicResponse.Body.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(source, stored) {
+		t.Fatal("safe static webp was unexpectedly re-encoded")
+	}
+
+	thumbnailResponse, err := http.Get(backend.http.URL + result.ThumbnailURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = webp.Decode(thumbnailResponse.Body)
+	thumbnailResponse.Body.Close()
+	if err != nil {
+		t.Fatalf("decode webp thumbnail: %v", err)
+	}
+}
+
 func TestSpacesAreIsolatedButPublicImagesRemainPublic(t *testing.T) {
 	backend := newTestBackendWithTokens(t, t.TempDir(), map[string]string{
 		"alice": testToken,

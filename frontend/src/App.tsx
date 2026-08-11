@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { APIError, absoluteImageURL, createSession, deleteImages, deleteSession, listImages, uploadImage } from "./api";
 import { copyText } from "./clipboard";
+import { prepareImageForUpload } from "./image-compression";
 import { ImageCard } from "./components/ImageCard";
 import { ImagePreview } from "./components/ImagePreview";
 import { TokenPanel } from "./components/TokenPanel";
@@ -118,9 +119,11 @@ export default function App() {
     uploadQueue.current = uploadQueue.current.then(async () => {
       const successful: ImageItem[] = [];
       for (const { id, file } of uploadable) {
-        updateTask(id, { state: "uploading", progress: 0, error: undefined });
+        updateTask(id, { state: "optimizing", progress: 0, error: undefined });
         try {
-          const image = await uploadImage(file, (progress) => updateTask(id, { progress }));
+          const prepared = await prepareImageForUpload(file);
+          updateTask(id, { state: "uploading" });
+          const image = await uploadImage(prepared, (progress) => updateTask(id, { progress }));
           updateTask(id, { state: "done", progress: 100, image });
           setImages((current) => [image, ...current.filter((item) => item.id !== image.id)]);
           successful.push(image);
