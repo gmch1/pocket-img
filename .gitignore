@@ -6,3 +6,10 @@
 /frontend/*.tsbuildinfo
 /frontend/vite.config.js
 /frontend/vite.config.d.ts
+/android/.gradle/
+/android/local.properties
+/android/keystore.properties
+/android/**/build/
+/android/**/*.jks
+/android/**/*.keystore
+/.idea/

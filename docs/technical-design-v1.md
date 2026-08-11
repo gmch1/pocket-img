@@ -13,7 +13,7 @@
 | 元数据 | SQLite（pure Go 驱动） | 与进程内嵌，无独立数据库服务和 C 运行库依赖 |
 | 图片文件 | 本机普通文件 | 不把大图片写入数据库 |
 | 图片编码 | `libwebp` 的 CGo-free 编译版本 | 保留 WebP 兼容性，同时生成无动态库依赖的产物 |
-| 部署产物 | 静态 Linux ARM64 单文件 | 前端资源、SQLite、时区数据和 WebP 编解码器一并编入后端 |
+| 部署产物 | Linux ARM64 单文件 / Android 管理 APK | 前端资源、SQLite、时区数据和 WebP 编解码器一并编入后端 |
 
 不选择 Node 后端、Java、PostgreSQL、Redis、ImageMagick 常驻服务或微服务拆分。Rust 理论上可以进一步压低运行时开销，但会显著增加开发和图像处理集成成本；本项目规模下 Go 的性能、内存和维护成本更均衡。
 
@@ -181,7 +181,7 @@ data/
 - 推荐通过 `PIH_TOKENS_FILE` 指向权限为 `0600` 的 JSON 对象配置多空间；同时支持 `PIH_TOKENS` 内联 JSON 和兼容旧版的单值 `PIH_TOKEN`，三者互斥。
 - 旧版单 Token 数据库升级且只配置一个空间时，启动过程自动补充 `owner_id` 并把旧文件移动到该空间目录。旧库直接切换到多个空间时，应保留一个名为 `default` 的空间用于接管历史图片。
 - 目标产物不依赖设备上的 Node、npm、SQLite CLI、libwebp 动态库或图片转换命令。
-- 服务通过 Magisk `service.d` 或 Linux chroot 的进程守护方式启动。
+- 已 Root 设备可通过 Magisk `service.d` 或 Linux chroot 的进程守护方式启动；普通 ARM64 Android 设备可使用管理 App 的前台服务手动启停内嵌 Go 后端。
 - 当前开发阶段由手机监听 `0.0.0.0:8080` 提供可信局域网 HTTP，显式设置 `PIH_COOKIE_SECURE=false`，不包含外部入口配置。
 - React 前端已经内嵌并在局域网入口完成验收；接入外部 HTTPS 入口时，把 `PIH_COOKIE_SECURE` 恢复为默认值 `true`。
 - v1 不实现请求频率限制，继续用上传大小、像素上限、有界队列和单 worker 控制资源消耗。

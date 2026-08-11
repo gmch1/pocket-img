@@ -2,13 +2,14 @@
 
 面向单实例、自托管场景的轻量图床，计划部署在一台大容量 Android 设备上。
 
-当前已完成可用的 React 前端、后端关键链路和多 Token 空间隔离。前端支持 Token 换会话、粘贴上传、上传状态、时间筛选、瀑布流、公开链接复制、图片预览、长按多选和永久删除；构建结果直接嵌入 Go 服务。仓库中的服务可以构建为无动态库依赖的 Linux ARM64 单文件，并已在目标 Android 13 / Linux 4.14 设备上通过 PC 浏览器到真机的端到端验证。它仍未覆盖游标滚动分页、异常文件恢复等全部 v1 生产能力。
+当前已完成可用的 React 前端、后端关键链路和多 Token 空间隔离。前端支持 Token 换会话、粘贴上传、上传状态、时间筛选、瀑布流、公开链接复制、图片预览、长按多选和永久删除；构建结果直接嵌入 Go 服务。仓库中的服务可以构建为无动态库依赖的 Linux ARM64 单文件，也可以随无需 Root 的 Android 管理 App 运行，并已在目标 Android 13 / Linux 4.14 设备上通过 PC 浏览器到真机的端到端验证。它仍未覆盖游标滚动分页、异常文件恢复、Android 数据导出等全部生产能力。
 
 - [v1 需求基线](docs/requirements-v1.md)
 - [v1 技术设计](docs/technical-design-v1.md)
 - [后端链路预研报告](docs/backend-spike.md)
 - [前端实现与开发](docs/frontend.md)
 - [内网 HTTP 开发部署](docs/lan-development.md)
+- [Android 管理 App](docs/android-app.md)
 
 推荐使用权限为 `0600` 的 Token 配置文件。对象的 key 是稳定空间 ID，value 是该空间当前使用的长期 Token：
 
@@ -44,6 +45,7 @@ PIH_COOKIE_SECURE=false \
 ```bash
 make test
 make build-arm64
+make android-debug
 ```
 
 前端开发和当前功能边界见[前端实现与开发](docs/frontend.md)。

@@ -1,0 +1,13 @@
+[versions]
+agp = "9.2.0"
+activity = "1.12.3"
+core = "1.17.0"
+junit = "4.13.2"
+
+[libraries]
+androidx-activity-ktx = { module = "androidx.activity:activity-ktx", version.ref = "activity" }
+androidx-core-ktx = { module = "androidx.core:core-ktx", version.ref = "core" }
+junit = { module = "junit:junit", version.ref = "junit" }
+
+[plugins]
+android-application = { id = "com.android.application", version.ref = "agp" }

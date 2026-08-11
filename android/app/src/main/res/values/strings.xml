@@ -1,0 +1,32 @@
+<resources>
+    <string name="app_name">PocketIMG</string>
+    <string name="tagline">手机上的轻量图床</string>
+    <string name="status_stopped">已停止</string>
+    <string name="status_running">运行中</string>
+    <string name="status_port_busy">端口被占用</string>
+    <string name="status_loading">正在读取状态…</string>
+    <string name="start_service">启动</string>
+    <string name="restart_service">重启</string>
+    <string name="service_channel">图床服务</string>
+    <string name="service_channel_description">显示 PocketIMG 后端运行状态</string>
+    <string name="stop_service">停止</string>
+    <string name="open_gallery">打开图库</string>
+    <string name="copy_address">复制地址</string>
+    <string name="service_port">服务端口</string>
+    <string name="management_token">管理 Token</string>
+    <string name="copy">复制</string>
+    <string name="rotate">轮换</string>
+    <string name="service_logs">服务日志</string>
+    <string name="refresh">刷新</string>
+    <string name="no_logs">暂无日志</string>
+    <string name="footer">ARM64 · 无需 Root · 数据保存在应用私有目录</string>
+    <string name="port_number">%1$d</string>
+    <string name="storage_summary">图片数据 %1$s  ·  可用 %2$s</string>
+    <string name="token_preview">%1$s••••••••%2$s</string>
+    <string name="running_detail">PID %1$d · %2$s · %3$s RAM</string>
+    <string name="port_busy_detail">当前端口由其他进程监听，请修改端口</string>
+    <string name="stopped_detail">无需 Root，启动后由前台服务保持运行</string>
+    <string name="just_started">刚刚启动</string>
+    <string name="duration_hours">%1$d小时%2$d分</string>
+    <string name="duration_minutes">%1$d分钟</string>
+</resources>

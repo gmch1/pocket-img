@@ -1,0 +1,128 @@
+name: Release Android APK
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release tag, for example v0.1.0"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: pocketimg-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+
+      - name: Set up Java
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: gradle
+
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Resolve release version
+        shell: bash
+        env:
+          DISPATCH_VERSION: ${{ inputs.version }}
+        run: |
+          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+            release_tag="${GITHUB_REF_NAME}"
+          else
+            release_tag="${DISPATCH_VERSION}"
+          fi
+          if [[ ! "${release_tag}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]]; then
+            echo "Release tag must look like v0.1.0" >&2
+            exit 1
+          fi
+          echo "RELEASE_TAG=${release_tag}" >> "${GITHUB_ENV}"
+          echo "RELEASE_VERSION=${release_tag#v}" >> "${GITHUB_ENV}"
+
+      - name: Build and test web app
+        working-directory: frontend
+        run: |
+          npm ci
+          npm test
+          npm run build
+
+      - name: Test Go backend
+        run: go test -tags=nodynamic ./...
+
+      - name: Restore Android signing key
+        shell: bash
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          if [[ -z "${KEYSTORE_BASE64}" ]]; then
+            echo "ANDROID_KEYSTORE_BASE64 is not configured" >&2
+            exit 1
+          fi
+          install -d -m 700 "${RUNNER_TEMP}/pocketimg-signing"
+          printf '%s' "${KEYSTORE_BASE64}" | base64 --decode > "${RUNNER_TEMP}/pocketimg-signing/release.jks"
+          chmod 600 "${RUNNER_TEMP}/pocketimg-signing/release.jks"
+
+      - name: Build signed Android APK
+        working-directory: android
+        env:
+          ANDROID_KEYSTORE_PATH: ${{ runner.temp }}/pocketimg-signing/release.jks
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          PIH_ANDROID_VERSION_CODE: ${{ github.run_number }}
+          PIH_ANDROID_VERSION_NAME: ${{ env.RELEASE_VERSION }}
+        run: ./gradlew testDebugUnitTest assembleRelease --no-daemon
+
+      - name: Prepare release files
+        shell: bash
+        run: |
+          install -d release
+          cp android/app/build/outputs/apk/release/app-release.apk "release/PocketIMG-${RELEASE_VERSION}-arm64.apk"
+          cd release
+          sha256sum "PocketIMG-${RELEASE_VERSION}-arm64.apk" > "PocketIMG-${RELEASE_VERSION}-arm64.apk.sha256"
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: PocketIMG-${{ env.RELEASE_VERSION }}-arm64
+          path: release/*
+          if-no-files-found: error
+          compression-level: 0
+
+      - name: Publish GitHub Release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "${RELEASE_TAG}" >/dev/null 2>&1; then
+            gh release upload "${RELEASE_TAG}" release/* --clobber
+          elif [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+            gh release create "${RELEASE_TAG}" release/* --verify-tag --generate-notes --title "PocketIMG ${RELEASE_VERSION}"
+          else
+            gh release create "${RELEASE_TAG}" release/* --target "${GITHUB_SHA}" --generate-notes --title "PocketIMG ${RELEASE_VERSION}"
+          fi

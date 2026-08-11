@@ -1,0 +1,13 @@
+<resources>
+    <color name="page">#F4F3EF</color>
+    <color name="surface">#FFFEFB</color>
+    <color name="ink">#1D1D1B</color>
+    <color name="muted">#77766F</color>
+    <color name="line">#DEDDD7</color>
+    <color name="accent">#245B49</color>
+    <color name="danger">#9B3732</color>
+    <color name="danger_soft">#F7E5E3</color>
+    <color name="status_text">#FFFFFF</color>
+    <color name="log_background">#202320</color>
+    <color name="log_text">#D9E2DD</color>
+</resources>
