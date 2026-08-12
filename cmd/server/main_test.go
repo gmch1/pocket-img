@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"testing"
+	"time"
 )
 
 func TestConfiguredTokensSources(t *testing.T) {
@@ -47,6 +48,17 @@ func TestConfiguredTokensSources(t *testing.T) {
 			t.Fatalf("tokens=%#v", tokens)
 		}
 	})
+}
+
+func TestEnvironmentDuration(t *testing.T) {
+	t.Setenv("PIH_TEST_TIMEOUT", "")
+	if value := envDuration("PIH_TEST_TIMEOUT", time.Minute); value != time.Minute {
+		t.Fatalf("fallback duration=%s", value)
+	}
+	t.Setenv("PIH_TEST_TIMEOUT", "3m30s")
+	if value := envDuration("PIH_TEST_TIMEOUT", time.Minute); value != 3*time.Minute+30*time.Second {
+		t.Fatalf("configured duration=%s", value)
+	}
 }
 
 func TestConfiguredTokensRejectsMissingConflictingAndInvalidSources(t *testing.T) {

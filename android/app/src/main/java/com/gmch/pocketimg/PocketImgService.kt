@@ -7,7 +7,9 @@ import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
@@ -15,6 +17,9 @@ import java.util.concurrent.Executors
 
 class PocketImgService : Service() {
     private val executor = Executors.newSingleThreadExecutor()
+    private val retryHandler = Handler(Looper.getMainLooper())
+    @Volatile private var retryAttempt = 0
+    private val retryRunnable = Runnable { launchBackend() }
 
     override fun onCreate() {
         super.onCreate()
@@ -39,41 +44,62 @@ class PocketImgService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onDestroy() {
+        retryHandler.removeCallbacksAndMessages(null)
         executor.shutdown()
         super.onDestroy()
     }
 
     private fun startBackend() {
         ServiceSettings.setDesiredRunning(this, true)
+        retryHandler.removeCallbacks(retryRunnable)
+        retryAttempt = 0
+        launchBackend()
+    }
+
+    private fun launchBackend() {
         executor.execute {
             BackendRuntime.start(this).fold(
-                onSuccess = { pid -> updateNotification("运行中 · PID $pid") },
-                onFailure = { error ->
-                    ServiceSettings.setDesiredRunning(this, false)
-                    updateNotification(error.message ?: "启动失败")
-                    finishService()
+                onSuccess = { pid ->
+                    retryAttempt = 0
+                    updateNotification("运行中 · PID $pid")
                 },
+                onFailure = ::handleStartFailure,
             )
         }
     }
 
     private fun restartBackend() {
         ServiceSettings.setDesiredRunning(this, true)
+        retryHandler.removeCallbacks(retryRunnable)
+        retryAttempt = 0
         executor.execute {
             updateNotification("正在重启…")
             BackendRuntime.restart(this).fold(
                 onSuccess = { pid -> updateNotification("运行中 · PID $pid") },
-                onFailure = { error ->
-                    ServiceSettings.setDesiredRunning(this, false)
-                    updateNotification(error.message ?: "重启失败")
-                    finishService()
-                },
+                onFailure = ::handleStartFailure,
             )
         }
     }
 
+    private fun handleStartFailure(error: Throwable) {
+        if (!ServiceSettings.isDesiredRunning(this)) {
+            finishService()
+            return
+        }
+        val delays = longArrayOf(2_000, 10_000, 30_000)
+        if (retryAttempt < delays.size) {
+            val delay = delays[retryAttempt++]
+            updateNotification("${error.message ?: "启动失败"} · ${delay / 1_000} 秒后重试")
+            retryHandler.postDelayed(retryRunnable, delay)
+            return
+        }
+        updateNotification("${error.message ?: "启动失败"} · 请打开 App 检查")
+    }
+
     private fun stopBackend() {
         ServiceSettings.setDesiredRunning(this, false)
+        retryHandler.removeCallbacks(retryRunnable)
+        retryAttempt = 0
         executor.execute {
             updateNotification("正在停止…")
             BackendRuntime.stop(this)
@@ -145,9 +171,11 @@ class PocketImgService : Service() {
         fun start(context: Context, port: Int) = command(context, ACTION_START, port)
         fun stop(context: Context) = command(context, ACTION_STOP)
         fun restart(context: Context, port: Int) = command(context, ACTION_RESTART, port)
+        fun resume(context: Context) = command(context, null)
 
-        private fun command(context: Context, action: String, port: Int? = null) {
-            val intent = Intent(context, PocketImgService::class.java).setAction(action)
+        private fun command(context: Context, action: String?, port: Int? = null) {
+            val intent = Intent(context, PocketImgService::class.java)
+            if (action != null) intent.action = action
             if (port != null) intent.putExtra(EXTRA_PORT, port)
             ContextCompat.startForegroundService(
                 context,

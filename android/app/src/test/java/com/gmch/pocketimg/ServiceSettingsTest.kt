@@ -21,4 +21,13 @@ class ServiceSettingsTest {
         assertEquals(64, token.length)
         assertTrue(token.matches(Regex("[0-9a-f]{64}")))
     }
+
+    @Test
+    fun accessModesUseExpectedCookieAndTimeoutPolicies() {
+        assertFalse(AccessMode.LAN_HTTP.cookieSecure)
+        assertEquals("60s", AccessMode.LAN_HTTP.readTimeout)
+        assertTrue(AccessMode.EXTERNAL_HTTPS.cookieSecure)
+        assertEquals("180s", AccessMode.EXTERNAL_HTTPS.readTimeout)
+        assertEquals("240s", AccessMode.EXTERNAL_HTTPS.writeTimeout)
+    }
 }

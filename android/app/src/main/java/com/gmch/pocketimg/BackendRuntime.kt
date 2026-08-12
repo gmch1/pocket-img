@@ -36,6 +36,7 @@ object BackendRuntime {
         if (ownedPid != null) stop(context)
 
         ServiceSettings.ensureToken(context)
+        val accessMode = ServiceSettings.accessMode(context)
         rotateLogIfNeeded(ServiceSettings.logFile(context))
         val executable = File(context.applicationInfo.nativeLibraryDir, "libpocketimg.so")
         check(executable.isFile && executable.canExecute()) { "APK 内 Go 服务不可执行" }
@@ -57,7 +58,9 @@ object BackendRuntime {
                 environment()["PIH_TOKENS_FILE"] = ServiceSettings.tokenFile(context).absolutePath
                 environment()["PIH_DATA_DIR"] = ServiceSettings.dataDir(context).absolutePath
                 environment()["PIH_ADDR"] = "0.0.0.0:$port"
-                environment()["PIH_COOKIE_SECURE"] = "false"
+                environment()["PIH_COOKIE_SECURE"] = accessMode.cookieSecure.toString()
+                environment()["PIH_READ_TIMEOUT"] = accessMode.readTimeout
+                environment()["PIH_WRITE_TIMEOUT"] = accessMode.writeTimeout
             }
             .start()
         child = process

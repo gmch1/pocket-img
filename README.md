@@ -10,6 +10,9 @@
 - [前端实现与开发](docs/frontend.md)
 - [内网 HTTP 开发部署](docs/lan-development.md)
 - [Android 管理 App](docs/android-app.md)
+- [Root 实例迁移到 App](docs/root-to-app-migration.md)
+- [外部 HTTPS 反向代理契约](docs/reverse-proxy.md)
+- [版本变更记录](CHANGELOG.md)
 
 推荐使用权限为 `0600` 的 Token 配置文件。对象的 key 是稳定空间 ID，value 是该空间当前使用的长期 Token：
 
@@ -35,6 +38,8 @@ PIH_COOKIE_SECURE=false \
 ```
 
 `PIH_COOKIE_SECURE=false` 只用于本机或可信局域网 HTTP 调试。通过外部 HTTPS 入口提供服务时应保留默认值 `true`。
+
+公网慢速上传可按 Go duration 格式调整 HTTP 超时，例如 `PIH_READ_TIMEOUT=180s`、`PIH_WRITE_TIMEOUT=240s`。域名入口仍由外部运维设施终止 TLS，且必须保留原始 `Host`。
 
 实际开发 Token 可保存在已忽略的 `tokens.json`；Android 设备上的构建、启动、停止和日志命令见[内网部署说明](docs/lan-development.md)。域名、TLS、DDNS 和反向代理属于外部运维设施，本仓库不保存这些配置。
 
