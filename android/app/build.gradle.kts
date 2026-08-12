@@ -56,9 +56,9 @@ val releaseSigningConfigured = listOf(
 ).all { it != null }
 
 val releaseVersionCode =
-    providers.environmentVariable("PIH_ANDROID_VERSION_CODE").orNull?.toIntOrNull() ?: 7
+    providers.environmentVariable("PIH_ANDROID_VERSION_CODE").orNull?.toIntOrNull() ?: 8
 val releaseVersionName =
-    providers.environmentVariable("PIH_ANDROID_VERSION_NAME").orNull?.takeIf(String::isNotBlank) ?: "0.2.1"
+    providers.environmentVariable("PIH_ANDROID_VERSION_NAME").orNull?.takeIf(String::isNotBlank) ?: "0.3.0"
 
 android {
     namespace = "com.gmch.pocketimg"
