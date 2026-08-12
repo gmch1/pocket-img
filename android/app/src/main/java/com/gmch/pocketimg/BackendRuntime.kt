@@ -22,6 +22,7 @@ data class BackendSnapshot(
 
 object BackendRuntime {
     @Volatile private var child: Process? = null
+    @Volatile private var childPid: Int? = null
     @Volatile private var cachedDataBytes = 0L
     @Volatile private var cachedDataBytesAt = 0L
 
@@ -68,11 +69,14 @@ object BackendRuntime {
         while (!pidFile.isFile && System.currentTimeMillis() < pidDeadline) Thread.sleep(10)
         val pid = pidFile.readTextOrNull()?.trim()?.toIntOrNull()
             ?: error("无法取得 Go 服务 PID")
+        childPid = pid
         ServiceSettings.startedAtFile(context).writeText(System.currentTimeMillis().toString())
-        check(waitForHealth(port, 8_000)) {
-            val exited = !process.isAlive
-            if (!exited) process.destroyForcibly()
-            "Go 服务启动失败，请查看日志"
+        if (!waitForHealth(port, 8_000)) {
+            if (process.isAlive) process.destroyForcibly()
+            child = null
+            childPid = null
+            pidFile.delete()
+            error("Go 服务启动失败，请查看日志")
         }
         pid
     }
@@ -81,6 +85,7 @@ object BackendRuntime {
     fun stop(context: Context): Boolean {
         val pid = ownedPid(context) ?: run {
             child = null
+            childPid = null
             ServiceSettings.pidFile(context).delete()
             return false
         }
@@ -95,6 +100,7 @@ object BackendRuntime {
             if (isOwnedProcess(pid)) runCatching { Os.kill(pid, OsConstants.SIGKILL) }
         }
         child = null
+        childPid = null
         ServiceSettings.pidFile(context).delete()
         return true
     }
@@ -122,10 +128,33 @@ object BackendRuntime {
         )
     }
 
-    fun isHealthy(port: Int): Boolean = runCatching {
+    fun isHealthyOwned(context: Context, expectedPid: Int, timeoutMillis: Int): Boolean =
+        ownedPid(context) == expectedPid && isHealthy(ServiceSettings.port(context), timeoutMillis)
+
+    fun awaitOwnedProcessExit(expectedPid: Int): Int? {
+        val process = synchronized(this) {
+            child?.takeIf { childPid == expectedPid }
+        } ?: return null
+
+        val exitCode = try {
+            process.waitFor()
+        } catch (_: InterruptedException) {
+            Thread.currentThread().interrupt()
+            return null
+        }
+        synchronized(this) {
+            if (child === process) {
+                child = null
+                childPid = null
+            }
+        }
+        return exitCode
+    }
+
+    fun isHealthy(port: Int, timeoutMillis: Int = 350): Boolean = runCatching {
         val connection = URL("http://127.0.0.1:$port/healthz").openConnection() as HttpURLConnection
-        connection.connectTimeout = 350
-        connection.readTimeout = 350
+        connection.connectTimeout = timeoutMillis
+        connection.readTimeout = timeoutMillis
         connection.useCaches = false
         try {
             connection.responseCode == HttpURLConnection.HTTP_OK
