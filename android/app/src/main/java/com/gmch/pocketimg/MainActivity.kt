@@ -5,6 +5,7 @@ import android.app.AlertDialog
 import android.content.ClipData
 import android.content.ClipDescription
 import android.content.ClipboardManager
+import android.content.ComponentName
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
@@ -16,6 +17,7 @@ import android.text.format.Formatter
 import android.view.View
 import android.widget.Button
 import android.widget.EditText
+import android.widget.Switch
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.ComponentActivity
@@ -31,6 +33,7 @@ class MainActivity : ComponentActivity() {
     private lateinit var tokenText: TextView
     private lateinit var storageText: TextView
     private lateinit var portInput: EditText
+    private lateinit var httpsModeSwitch: Switch
     private lateinit var logsText: TextView
     private lateinit var startButton: Button
     private lateinit var stopButton: Button
@@ -51,10 +54,14 @@ class MainActivity : ComponentActivity() {
         setContentView(R.layout.activity_main)
         bindViews()
         portInput.setText(getString(R.string.port_number, ServiceSettings.port(this)))
+        httpsModeSwitch.isChecked = ServiceSettings.accessMode(this) == AccessMode.EXTERNAL_HTTPS
         ServiceSettings.ensureToken(this)
         updateTokenPreview()
         bindActions()
         requestNotificationPermission()
+        if (ServiceSettings.isDesiredRunning(this)) {
+            PocketImgService.resume(this)
+        }
     }
 
     override fun onResume() {
@@ -79,6 +86,7 @@ class MainActivity : ComponentActivity() {
         tokenText = findViewById(R.id.token_text)
         storageText = findViewById(R.id.storage_text)
         portInput = findViewById(R.id.port_input)
+        httpsModeSwitch = findViewById(R.id.https_mode_switch)
         logsText = findViewById(R.id.logs_text)
         startButton = findViewById(R.id.start_button)
         stopButton = findViewById(R.id.stop_button)
@@ -93,7 +101,11 @@ class MainActivity : ComponentActivity() {
             validatedPort()?.let { PocketImgService.restart(this, it) }
         }
         findViewById<Button>(R.id.open_button).setOnClickListener {
-            startActivity(Intent(Intent.ACTION_VIEW, DeviceNetwork.localAddress(ServiceSettings.port(this)).toUri()))
+            if (ServiceSettings.accessMode(this) == AccessMode.EXTERNAL_HTTPS) {
+                toast(getString(R.string.https_mode_open_hint))
+            } else {
+                startActivity(Intent(Intent.ACTION_VIEW, DeviceNetwork.localAddress(ServiceSettings.port(this)).toUri()))
+            }
         }
         findViewById<Button>(R.id.copy_address_button).setOnClickListener {
             copyText("PocketIMG 地址", DeviceNetwork.lanAddress(ServiceSettings.port(this)), false)
@@ -105,6 +117,35 @@ class MainActivity : ComponentActivity() {
         }
         findViewById<Button>(R.id.rotate_token_button).setOnClickListener { confirmTokenRotation() }
         findViewById<Button>(R.id.refresh_button).setOnClickListener { refreshStatus() }
+        findViewById<Button>(R.id.background_settings_button).setOnClickListener {
+            openBackgroundSettings()
+        }
+        httpsModeSwitch.setOnCheckedChangeListener { _, checked ->
+            val mode = if (checked) AccessMode.EXTERNAL_HTTPS else AccessMode.LAN_HTTP
+            if (ServiceSettings.accessMode(this) == mode) return@setOnCheckedChangeListener
+            ServiceSettings.setAccessMode(this, mode)
+            if (lastKnownRunning) {
+                PocketImgService.restart(this, ServiceSettings.port(this))
+                toast(getString(R.string.access_mode_restarting))
+            } else {
+                toast(getString(R.string.access_mode_saved))
+            }
+        }
+    }
+
+    private fun openBackgroundSettings() {
+        val miuiAutostart = Intent().setComponent(
+            ComponentName(
+                "com.miui.securitycenter",
+                "com.miui.permcenter.autostart.AutoStartManagementActivity",
+            ),
+        )
+        val applicationDetails = Intent(
+            android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+            "package:$packageName".toUri(),
+        )
+        runCatching { startActivity(miuiAutostart) }
+            .onFailure { startActivity(applicationDetails) }
     }
 
     private fun validatedPort(): Int? {
@@ -173,12 +214,18 @@ class MainActivity : ComponentActivity() {
         logsText.text = snapshot.logTail
         startButton.isEnabled = !snapshot.running
         stopButton.isEnabled = snapshot.running
-        findViewById<Button>(R.id.open_button).isEnabled = snapshot.running
+        findViewById<Button>(R.id.open_button).isEnabled =
+            snapshot.running && ServiceSettings.accessMode(this) == AccessMode.LAN_HTTP
     }
 
     private fun updateTokenPreview() {
         val token = ServiceSettings.ensureToken(this)
-        tokenText.text = getString(R.string.token_preview, token.take(10), token.takeLast(6))
+        tokenText.text = getString(
+            R.string.token_preview,
+            ServiceSettings.spaceId(this),
+            token.take(10),
+            token.takeLast(6),
+        )
     }
 
     private fun copyText(label: String, value: String, sensitive: Boolean) {

@@ -82,6 +82,21 @@ func newCookieClient(t *testing.T) *http.Client {
 	return &http.Client{Jar: jar}
 }
 
+func TestSameOriginUsesThePreservedHost(t *testing.T) {
+	request := httptest.NewRequest(http.MethodDelete, "http://backend/api/images", nil)
+	request.Host = "img.example.com"
+	request.Header.Set("Origin", "https://img.example.com")
+	if !sameOrigin(request) {
+		t.Fatal("matching public host was rejected")
+	}
+
+	request.Header.Set("Origin", "https://attacker.example")
+	request.Header.Set("X-Forwarded-Host", "attacker.example")
+	if sameOrigin(request) {
+		t.Fatal("untrusted forwarded host bypassed the origin check")
+	}
+}
+
 func (backend *testBackend) login(t *testing.T) {
 	t.Helper()
 	backend.loginClient(t, backend.client, testToken)

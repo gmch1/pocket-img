@@ -47,8 +47,8 @@ func main() {
 		Addr:              envString("PIH_ADDR", "127.0.0.1:8080"),
 		Handler:           app.Handler(),
 		ReadHeaderTimeout: 5 * time.Second,
-		ReadTimeout:       60 * time.Second,
-		WriteTimeout:      120 * time.Second,
+		ReadTimeout:       envDuration("PIH_READ_TIMEOUT", 60*time.Second),
+		WriteTimeout:      envDuration("PIH_WRITE_TIMEOUT", 120*time.Second),
 		IdleTimeout:       60 * time.Second,
 	}
 
@@ -123,6 +123,18 @@ func envBool(key string, fallback bool) bool {
 	parsed, err := strconv.ParseBool(value)
 	if err != nil {
 		log.Fatalf("%s must be a boolean: %v", key, err)
+	}
+	return parsed
+}
+
+func envDuration(key string, fallback time.Duration) time.Duration {
+	value := os.Getenv(key)
+	if value == "" {
+		return fallback
+	}
+	parsed, err := time.ParseDuration(value)
+	if err != nil || parsed <= 0 {
+		log.Fatalf("%s must be a positive duration: %q", key, value)
 	}
 	return parsed
 }

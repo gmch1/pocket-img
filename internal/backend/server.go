@@ -613,11 +613,7 @@ func sameOrigin(r *http.Request) bool {
 	if err != nil {
 		return false
 	}
-	host := r.Host
-	if forwarded := r.Header.Get("X-Forwarded-Host"); forwarded != "" {
-		host = strings.TrimSpace(strings.Split(forwarded, ",")[0])
-	}
-	return strings.EqualFold(parsed.Host, host)
+	return strings.EqualFold(parsed.Host, r.Host)
 }
 
 func validID(id string) bool {

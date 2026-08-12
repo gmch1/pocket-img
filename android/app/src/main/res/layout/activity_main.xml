@@ -152,6 +152,39 @@
             android:textColor="@color/ink"
             android:textSize="16sp" />
 
+        <TextView style="@style/SectionTitle" android:text="@string/access_mode" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="@drawable/panel_background"
+            android:orientation="vertical"
+            android:padding="16dp">
+
+            <Switch
+                android:id="@+id/https_mode_switch"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/external_https_mode"
+                android:textColor="@color/ink"
+                android:textSize="15sp" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:text="@string/external_https_mode_hint"
+                android:textColor="@color/muted"
+                android:textSize="12sp" />
+        </LinearLayout>
+
+        <Button
+            android:id="@+id/background_settings_button"
+            style="@style/SecondaryButton"
+            android:layout_width="match_parent"
+            android:layout_marginTop="12dp"
+            android:text="@string/background_settings" />
+
         <TextView style="@style/SectionTitle" android:text="@string/management_token" />
 
         <LinearLayout
