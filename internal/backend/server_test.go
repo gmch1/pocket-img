@@ -18,6 +18,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -60,17 +61,28 @@ func newTestBackendWithTokens(t *testing.T, dataDir string, tokens map[string]st
 }
 
 func testConfig(dataDir string, tokens map[string]string) Config {
+	adminSpaceID := "alice"
+	if _, exists := tokens[adminSpaceID]; !exists {
+		for candidate := range tokens {
+			adminSpaceID = candidate
+			break
+		}
+	}
 	return Config{
-		DataDir:        dataDir,
-		Tokens:         tokens,
-		CookieSecure:   false,
-		SessionTTL:     time.Hour,
-		MaxUploadBytes: 2 << 20,
-		MaxPixels:      5_000_000,
-		ThumbnailMax:   640,
-		WebPQuality:    82,
-		ThumbQuality:   75,
-		QueueDepth:     2,
+		DataDir:              dataDir,
+		Tokens:               tokens,
+		AdminSpaceID:         adminSpaceID,
+		CookieSecure:         false,
+		SessionTTL:           time.Hour,
+		DefaultQuotaBytes:    defaultUserQuotaBytes,
+		DefaultRetentionDays: defaultRetentionDays,
+		CleanupInterval:      time.Hour,
+		MaxUploadBytes:       2 << 20,
+		MaxPixels:            5_000_000,
+		ThumbnailMax:         640,
+		WebPQuality:          82,
+		ThumbQuality:         75,
+		QueueDepth:           2,
 	}
 }
 
@@ -95,6 +107,21 @@ func TestSameOriginUsesThePreservedHost(t *testing.T) {
 	request.Header.Set("X-Forwarded-Host", "attacker.example")
 	if sameOrigin(request) {
 		t.Fatal("untrusted forwarded host bypassed the origin check")
+	}
+}
+
+func TestBrowserSecurityHeaders(t *testing.T) {
+	backend := newTestBackend(t)
+	response, err := http.Get(backend.http.URL + "/")
+	if err != nil {
+		t.Fatal(err)
+	}
+	response.Body.Close()
+	if response.Header.Get("X-Frame-Options") != "DENY" {
+		t.Fatalf("X-Frame-Options=%q", response.Header.Get("X-Frame-Options"))
+	}
+	if !strings.Contains(response.Header.Get("Content-Security-Policy"), "frame-ancestors 'none'") {
+		t.Fatalf("Content-Security-Policy=%q", response.Header.Get("Content-Security-Policy"))
 	}
 }
 
@@ -596,6 +623,162 @@ func TestLegacySingleTokenDatabaseAndFilesAreMigrated(t *testing.T) {
 		if _, err := os.Stat(path); !os.IsNotExist(err) {
 			t.Fatalf("legacy file still present at %s: %v", path, err)
 		}
+	}
+}
+
+func TestAdministratorCreatesUserToken(t *testing.T) {
+	dataDir := t.TempDir()
+	backend := newTestBackendWithTokens(t, dataDir, map[string]string{"alice": testToken, "bob": secondTestToken})
+	backend.login(t)
+
+	body, err := json.Marshal(map[string]string{"space_id": "guest"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	request, err := http.NewRequest(http.MethodPost, backend.http.URL+"/api/admin/users", bytes.NewReader(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	request.Header.Set("Content-Type", "application/json")
+	response, err := backend.client.Do(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusCreated {
+		responseBody, _ := io.ReadAll(response.Body)
+		t.Fatalf("create user status=%d body=%s", response.StatusCode, responseBody)
+	}
+	var created struct {
+		User  accountResponse `json:"user"`
+		Token string          `json:"token"`
+	}
+	if err := json.NewDecoder(response.Body).Decode(&created); err != nil {
+		t.Fatal(err)
+	}
+	if created.User.SpaceID != "guest" || created.User.IsAdmin || created.User.QuotaBytes != defaultUserQuotaBytes || created.User.RetentionDays != defaultRetentionDays {
+		t.Fatalf("unexpected created user: %#v", created.User)
+	}
+	if len(created.Token) != 64 {
+		t.Fatalf("generated token length=%d", len(created.Token))
+	}
+
+	guestClient := newCookieClient(t)
+	if status := loginStatus(t, backend.http.URL, guestClient, created.Token); status != http.StatusNoContent {
+		t.Fatalf("guest login status=%d", status)
+	}
+	if images := listForClient(t, backend, guestClient); len(images) != 0 {
+		t.Fatalf("new guest space is not empty: %#v", images)
+	}
+
+	bobClient := newCookieClient(t)
+	backend.loginClient(t, bobClient, secondTestToken)
+	forbidden, err := http.NewRequest(http.MethodPost, backend.http.URL+"/api/admin/users", bytes.NewReader(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	forbidden.Header.Set("Content-Type", "application/json")
+	forbiddenResponse, err := bobClient.Do(forbidden)
+	if err != nil {
+		t.Fatal(err)
+	}
+	forbiddenResponse.Body.Close()
+	if forbiddenResponse.StatusCode != http.StatusForbidden {
+		t.Fatalf("non-admin create status=%d", forbiddenResponse.StatusCode)
+	}
+}
+
+func TestUploadQuotaIsEnforcedBeforeMetadataCommit(t *testing.T) {
+	backend := newTestBackend(t)
+	backend.login(t)
+	if _, err := backend.server.store.db.Exec(`UPDATE users SET quota_bytes = 1 WHERE id = 'alice'`); err != nil {
+		t.Fatal(err)
+	}
+
+	var body bytes.Buffer
+	writer := multipart.NewWriter(&body)
+	part, err := writer.CreateFormFile("file", "quota.png")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := part.Write(makePNG(t, 16, 16)); err != nil {
+		t.Fatal(err)
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatal(err)
+	}
+	request, err := http.NewRequest(http.MethodPost, backend.http.URL+"/api/images", &body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request.Header.Set("Content-Type", writer.FormDataContentType())
+	response, err := backend.client.Do(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	response.Body.Close()
+	if response.StatusCode != http.StatusRequestEntityTooLarge {
+		t.Fatalf("quota response status=%d", response.StatusCode)
+	}
+	account, found, err := backend.server.store.account(t.Context(), "alice")
+	if err != nil || !found {
+		t.Fatalf("account lookup found=%v err=%v", found, err)
+	}
+	if account.ImageCount != 0 || account.UsedBytes != 0 {
+		t.Fatalf("quota rejection left usage: %#v", account)
+	}
+}
+
+func TestDynamicallyCreatedUserSurvivesRestart(t *testing.T) {
+	dataDir := t.TempDir()
+	cfg := testConfig(dataDir, map[string]string{"alice": testToken})
+	first, err := New(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	guestToken := "persistent-guest-token-with-enough-random-test-material"
+	fingerprint := sha256.Sum256([]byte(guestToken))
+	created, err := first.store.createAccount(t.Context(), "guest", fingerprint[:], defaultUserQuotaBytes, defaultRetentionDays)
+	if err != nil || !created {
+		t.Fatalf("create dynamic user created=%v err=%v", created, err)
+	}
+	if err := first.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	second, err := New(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer second.Close()
+	httpServer := httptest.NewServer(second.Handler())
+	defer httpServer.Close()
+	if status := loginStatus(t, httpServer.URL, newCookieClient(t), guestToken); status != http.StatusNoContent {
+		t.Fatalf("dynamic user login after restart status=%d", status)
+	}
+}
+
+func TestExpiredImagesArePermanentlyCleaned(t *testing.T) {
+	backend := newTestBackend(t)
+	backend.login(t)
+	imageValue := backend.upload(t, "expired.png", makePNG(t, 32, 24))
+	backend.waitForThumbnail(t, imageValue.ID)
+	createdAt := time.Now().AddDate(0, 0, -(defaultRetentionDays + 1)).UnixMilli()
+	if _, err := backend.server.store.db.Exec(`UPDATE images SET created_at_ms = ? WHERE id = ?`, createdAt, imageValue.ID); err != nil {
+		t.Fatal(err)
+	}
+
+	backend.server.cleanupExpiredImages(time.Now())
+	if _, found, err := backend.server.store.getImageByID(t.Context(), imageValue.ID); err != nil || found {
+		t.Fatalf("expired metadata found=%v err=%v", found, err)
+	}
+	publicResponse, err := http.Get(backend.http.URL + imageValue.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	publicResponse.Body.Close()
+	if publicResponse.StatusCode != http.StatusNotFound {
+		t.Fatalf("expired public image status=%d", publicResponse.StatusCode)
 	}
 }
 

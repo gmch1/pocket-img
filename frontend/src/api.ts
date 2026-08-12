@@ -1,4 +1,4 @@
-import type { GalleryRange, ImageItem } from "./types";
+import type { AccountInfo, CreatedUser, GalleryRange, GalleryResponse, ImageItem } from "./types";
 
 export class APIError extends Error {
   readonly status: number;
@@ -38,15 +38,32 @@ export async function deleteSession(): Promise<void> {
   if (!response.ok && response.status !== 401) throw await responseError(response);
 }
 
-export async function listImages(range: GalleryRange, signal?: AbortSignal): Promise<ImageItem[]> {
+export async function listImages(range: GalleryRange, signal?: AbortSignal): Promise<GalleryResponse> {
   const query = new URLSearchParams({ range, limit: "100" });
   const response = await fetch(`/api/images?${query}`, {
     credentials: "same-origin",
     signal,
   });
   if (!response.ok) throw await responseError(response);
-  const body = (await response.json()) as { images: ImageItem[] };
-  return body.images;
+  return (await response.json()) as GalleryResponse;
+}
+
+export async function listUsers(): Promise<AccountInfo[]> {
+  const response = await fetch("/api/admin/users", { credentials: "same-origin" });
+  if (!response.ok) throw await responseError(response);
+  const body = (await response.json()) as { users: AccountInfo[] };
+  return body.users;
+}
+
+export async function createUser(spaceID: string): Promise<CreatedUser> {
+  const response = await fetch("/api/admin/users", {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ space_id: spaceID }),
+  });
+  if (!response.ok) throw await responseError(response);
+  return (await response.json()) as CreatedUser;
 }
 
 export async function deleteImages(ids: string[]): Promise<number> {

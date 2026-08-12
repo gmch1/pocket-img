@@ -50,7 +50,8 @@ Go process
 │   └── public image files
 ├── SQLite metadata store
 ├── bounded image job queue
-└── one image conversion worker
+├── one image conversion worker
+└── retention/session cleanup worker
 ```
 
 所有模块都在同一进程内，不通过 RPC、消息队列或独立数据库进程通信。
@@ -88,6 +89,8 @@ Go process
 - Token 轮换会使该空间旧 Session 失效，但不会改变图片的 `owner_id`；其他空间 Session 不受影响。
 - 删除空间配置只会禁用其登录与管理会话，不自动删除图片；已知公开直链仍保持可访问。
 - v1 使用共享表的 `owner_id` 逻辑分区，不按 Token 动态建表、建库，也不把 Token 写进文件路径。
+- 部署配置指定一个主空间为管理员。管理员通过 API 创建用户时，服务生成 256-bit Token，只返回一次，并只把其 SHA-256 指纹持久化到 SQLite；动态用户不需要写回 Token 配置文件，重启后仍然有效。
+- 每个用户默认具有 10 GiB 实际存储配额与 90 天保留期。配额包含全尺寸文件和已完成的缩略图，配额检查与元数据插入在同一 SQLite 事务中完成。
 
 ## 4. 图片处理管线
 
@@ -126,7 +129,7 @@ temporary GIF / animated WebP
 
 - 临时文件、正式文件和 SQLite 位于同一数据分区，保证重命名可原子完成。
 - 先同步并原子提交全尺寸文件，再写入待生成缩略图的 SQLite 记录；数据库提交失败时删除全尺寸文件。
-- 缩略图先写入临时候选文件，再原子重命名并更新 `thumbnail_size`；服务进程异常退出时，数据库中的零值记录会在下次启动补做。
+- 缩略图先写入临时候选文件，再原子重命名并更新 `thumbnail_size`；服务进程异常退出时，数据库中的零值记录会在下次启动补做。失败任务按批次指数退避，连续 5 次失败后标记为不再重试并回退到全图，避免损坏输入永久消耗设备资源。
 - 待生成记录的 API 响应把 `thumbnail_url` 暂时指向已落盘的全尺寸公开 URL，避免出现不可访问的图片卡片。
 - 永久删除与缩略图提交使用同一互斥区，保证删除完成后后台 worker 不会重新留下缩略图。
 
@@ -138,6 +141,7 @@ temporary GIF / animated WebP
 - 图片表以 `owner_id` 标识所属空间，并为 `(owner_id, created_at, id)` 建联合索引，支持各空间稳定的倒序游标分页。
 - 会话表只保存随机会话凭据的哈希、`owner_id` 和 Token 指纹，不保存浏览器 Cookie 原值。
 - 用户表只保存稳定空间 ID、Token 指纹和启用状态，不包含密码、角色或用户资料。
+- 用户表同时保存管理员标记、字节配额、保留天数和配置/动态来源；管理员标记只有部署指定的主空间为真，不提供任意角色系统。
 - 数据库文件只由当前 Go 进程访问，不放在网络文件系统上。
 
 ## 6. 数据目录
@@ -179,6 +183,7 @@ data/
 - 开发机完成 React 构建和 Go 编译。
 - 预研基线使用 pure Go SQLite 驱动，以及编译到 Go 的 `libwebp` CGo-free 实现。
 - 推荐通过 `PIH_TOKENS_FILE` 指向权限为 `0600` 的 JSON 对象配置多空间；同时支持 `PIH_TOKENS` 内联 JSON 和兼容旧版的单值 `PIH_TOKEN`，三者互斥。
+- 单个引导空间自动成为管理员；配置多个引导空间时必须通过 `PIH_ADMIN_SPACE_ID` 指定管理员。Android App 自动把当前主空间传给后端。
 - 旧版单 Token 数据库升级且只配置一个空间时，启动过程自动补充 `owner_id` 并把旧文件移动到该空间目录。旧库直接切换到多个空间时，应保留一个名为 `default` 的空间用于接管历史图片。
 - 目标产物不依赖设备上的 Node、npm、SQLite CLI、libwebp 动态库或图片转换命令。
 - 已 Root 设备可通过 Magisk `service.d` 或 Linux chroot 的进程守护方式启动；普通 ARM64 Android 设备可使用管理 App 的前台服务手动启停内嵌 Go 后端。
