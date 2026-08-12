@@ -15,7 +15,7 @@
 
 ### 后续实现状态
 
-本报告生成后，当前工作树已完成以下加固：SEC-001 的每用户 10 GiB 实际存储配额；SEC-002 的批次、指数退避和 5 次失败终止；SEC-003 的过期 Session 周期清理；SEC-004 的 CSP、`frame-ancestors`、`X-Frame-Options` 与 `Permissions-Policy`；SEC-009 的 64 KiB `MaxHeaderBytes`。SEC-001 提到的全局系统磁盘保留线、SEC-003 的频率/Session 数量限制以及其余风险仍待处理。下面保留原始发现，便于追踪审查依据。
+本报告生成后，当前工作树已完成以下加固：SEC-001 的每用户 10 GiB 实际存储配额；SEC-002 的批次、指数退避和 5 次失败终止；SEC-003 的过期 Session 周期清理，以及登录、上传、原图和缩略图的内存限流；SEC-004 的 CSP、`frame-ancestors`、`X-Frame-Options` 与 `Permissions-Policy`；SEC-009 的 64 KiB `MaxHeaderBytes`。SEC-001 提到的全局系统磁盘保留线、SEC-003 的活跃 Session 数量上限以及其余风险仍待处理。下面保留原始发现，便于追踪审查依据。
 
 ## 验证结果
 
@@ -53,16 +53,16 @@
 - Mitigation：监控 `thumbnail_size = 0` 数量与日志增长；出现持续失败记录时人工隔离对应对象。
 - False positive notes：尚未针对当前解码库构造最小恶意样本；但无限扫描和失败后状态不变是确定的，任何真实损坏文件或库边界输入都会触发重复工作。
 
-### SEC-003：登录、会话创建和上传缺少滥用控制，会话表可无界增长
+### SEC-003：活跃会话数量仍无硬上限
 
 - Rule ID：GO-HTTP-002 / GO-HTTP-006（abuse control）
 - Severity：Medium
-- Location：`internal/backend/server.go:297-304,316-352,421-475`；`internal/backend/store.go:263-306`
-- Evidence：路由没有速率限制。每次成功 Token 登录都会插入一个新 Session；只有请求携带旧 Cookie 时才替换旧行。过期 Session 仅在服务启动时清理，没有周期清理和每空间 Session 上限。
-- Impact：泄露或主动共享的有效 Token 可通过不保存 Cookie 的客户端快速写大 Session 表，并竞争单连接 SQLite；同一用户也能持续占用上传 CPU/IO。无效 Token 暴力猜测成功率因 256-bit Token 极低，但仍可制造请求与日志/连接压力。
-- Fix：为每空间设置上传令牌桶、同时上传数和日预算；为登录增加按来源与全局速率限制；周期删除过期 Session，并限制每空间活跃 Session 数，超限时淘汰最旧记录。入口侧限流时必须由可信代理确定客户端地址。
-- Mitigation：在 Caddy/公网入口先做连接、请求体和登录频率限制；短期内定期清理过期 Session；发现 Token 被共享过度时轮换该空间 Token。
-- False positive notes：项目先前明确延期了频率限制；此项因此属于已知、尚未实现的生产防护，而非隐藏的认证绕过。
+- Location：`internal/backend/server.go` 的 Session 创建；`internal/backend/store.go` 的 Session 持久化与清理。
+- Evidence：当前已按来源、全局和空间限制登录，按空间限制上传与公开图片请求，并每小时删除过期 Session。每次成功登录仍会插入一个新 Session；没有携带旧 Cookie 时不会替换既有记录，且每空间尚无活跃 Session 数量硬上限。
+- Impact：泄露或主动共享的有效 Token 仍可在允许的登录速率内持续增加 Session 行并竞争 SQLite；限流已显著降低增长速度，但不能替代固定数量上限。
+- Fix：限制每空间活跃 Session 数，超限时在同一事务中淘汰最旧记录。入口侧限流仍必须由可信代理确定客户端地址。
+- Mitigation：保持当前登录限流和过期 Session 周期清理；发现 Token 被共享过度时轮换该空间 Token。
+- False positive notes：频率限制部分已完成，剩余风险仅指 Session 数量上限，不是认证绕过。
 
 ### SEC-004：公网 App 缺少 CSP 与点击劫持保护
 

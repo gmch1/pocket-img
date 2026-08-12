@@ -44,6 +44,18 @@ func main() {
 		WebPQuality:          82,
 		ThumbQuality:         75,
 		QueueDepth:           8,
+		RateLimits: backend.RateLimitConfig{
+			LoginPerMinute:             10,
+			LoginBurst:                 5,
+			LoginGlobalPerMinute:       120,
+			LoginGlobalBurst:           30,
+			UploadPerHour:              500,
+			UploadConcurrentPerOwner:   2,
+			OriginalPerHour:            500,
+			ThumbnailPerImagePerMinute: 5,
+			ThumbnailPerImagePerHour:   10,
+			ThumbnailPerOwnerPerHour:   2000,
+		},
 	}
 
 	app, err := backend.New(cfg)
