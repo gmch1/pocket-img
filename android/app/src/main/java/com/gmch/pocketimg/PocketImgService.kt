@@ -10,6 +10,7 @@ import android.content.pm.ServiceInfo
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
+import android.os.SystemClock
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
@@ -17,9 +18,15 @@ import java.util.concurrent.Executors
 
 class PocketImgService : Service() {
     private val executor = Executors.newSingleThreadExecutor()
-    private val retryHandler = Handler(Looper.getMainLooper())
-    @Volatile private var retryAttempt = 0
-    private val retryRunnable = Runnable { launchBackend() }
+    private val monitorExecutor = Executors.newSingleThreadExecutor()
+    private val watchdogHandler = Handler(Looper.getMainLooper())
+    private val watchdogPolicy = BackendWatchdogPolicy()
+    private var generation = 0L
+    private var activePid: Int? = null
+    private var recoveryScheduled = false
+    private var healthCheckInFlight = false
+    private var destroyed = false
+    private val healthCheckRunnable = Runnable { runHealthCheck() }
 
     override fun onCreate() {
         super.onCreate()
@@ -36,7 +43,7 @@ class PocketImgService : Service() {
             ACTION_STOP -> stopBackend()
             ACTION_RESTART -> restartBackend()
             ACTION_START -> startBackend()
-            else -> if (ServiceSettings.isDesiredRunning(this)) startBackend() else finishService()
+            else -> if (ServiceSettings.isDesiredRunning(this)) resumeBackend() else finishService()
         }
         return START_STICKY
     }
@@ -44,68 +51,169 @@ class PocketImgService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onDestroy() {
-        retryHandler.removeCallbacksAndMessages(null)
+        destroyed = true
+        generation += 1
+        watchdogHandler.removeCallbacksAndMessages(null)
+        monitorExecutor.shutdownNow()
         executor.shutdown()
         super.onDestroy()
     }
 
     private fun startBackend() {
         ServiceSettings.setDesiredRunning(this, true)
-        retryHandler.removeCallbacks(retryRunnable)
-        retryAttempt = 0
-        launchBackend()
+        watchdogPolicy.resetForUserAction()
+        beginLaunch(forceRestart = false)
     }
 
-    private fun launchBackend() {
-        executor.execute {
-            BackendRuntime.start(this).fold(
-                onSuccess = { pid ->
-                    retryAttempt = 0
-                    updateNotification("运行中 · PID $pid")
-                },
-                onFailure = ::handleStartFailure,
-            )
-        }
+    private fun resumeBackend() {
+        beginLaunch(forceRestart = false)
     }
 
     private fun restartBackend() {
         ServiceSettings.setDesiredRunning(this, true)
-        retryHandler.removeCallbacks(retryRunnable)
-        retryAttempt = 0
+        watchdogPolicy.resetForUserAction()
+        beginLaunch(forceRestart = true)
+    }
+
+    private fun beginLaunch(forceRestart: Boolean) {
+        generation += 1
+        val currentGeneration = generation
+        activePid = null
+        recoveryScheduled = false
+        healthCheckInFlight = false
+        watchdogHandler.removeCallbacks(healthCheckRunnable)
+        updateNotification(if (forceRestart) "正在重启…" else "正在启动…")
+        launchBackend(currentGeneration, forceRestart)
+    }
+
+    private fun launchBackend(currentGeneration: Long, forceRestart: Boolean) {
         executor.execute {
-            updateNotification("正在重启…")
-            BackendRuntime.restart(this).fold(
-                onSuccess = { pid -> updateNotification("运行中 · PID $pid") },
-                onFailure = ::handleStartFailure,
-            )
+            val result = if (forceRestart) BackendRuntime.restart(this) else BackendRuntime.start(this)
+            watchdogHandler.post { handleLaunchResult(currentGeneration, result) }
         }
     }
 
-    private fun handleStartFailure(error: Throwable) {
-        if (!ServiceSettings.isDesiredRunning(this)) {
-            finishService()
-            return
+    private fun handleLaunchResult(currentGeneration: Long, result: Result<Int>) {
+        if (!isCurrentDesiredRun(currentGeneration)) return
+        result.fold(
+            onSuccess = { pid -> onBackendStarted(currentGeneration, pid) },
+            onFailure = { error ->
+                beginRecovery(
+                    currentGeneration,
+                    error.message ?: "后端启动失败",
+                )
+            },
+        )
+    }
+
+    private fun onBackendStarted(currentGeneration: Long, pid: Int) {
+        activePid = pid
+        recoveryScheduled = false
+        healthCheckInFlight = false
+        watchdogPolicy.onBackendStarted(SystemClock.elapsedRealtime())
+        updateNotification("运行中 · PID $pid")
+        watchdogHandler.postDelayed(healthCheckRunnable, HEALTH_CHECK_INTERVAL_MILLIS)
+        monitorExecutor.execute {
+            val exitCode = BackendRuntime.awaitOwnedProcessExit(pid) ?: return@execute
+            watchdogHandler.post {
+                if (isCurrentDesiredRun(currentGeneration) && activePid == pid) {
+                    beginRecovery(currentGeneration, "后端异常退出（退出码 $exitCode）")
+                }
+            }
         }
-        val delays = longArrayOf(2_000, 10_000, 30_000)
-        if (retryAttempt < delays.size) {
-            val delay = delays[retryAttempt++]
-            updateNotification("${error.message ?: "启动失败"} · ${delay / 1_000} 秒后重试")
-            retryHandler.postDelayed(retryRunnable, delay)
-            return
+    }
+
+    private fun runHealthCheck() {
+        val currentGeneration = generation
+        val pid = activePid ?: return
+        if (!isCurrentDesiredRun(currentGeneration) || recoveryScheduled || healthCheckInFlight) return
+        healthCheckInFlight = true
+        executor.execute {
+            val healthy = BackendRuntime.isHealthyOwned(this, pid, HEALTH_CHECK_TIMEOUT_MILLIS)
+            watchdogHandler.post {
+                if (!isCurrentDesiredRun(currentGeneration) || activePid != pid) return@post
+                healthCheckInFlight = false
+                val failuresBefore = watchdogPolicy.healthFailureCount
+                val shouldRecover = watchdogPolicy.onHealthResult(
+                    healthy,
+                    SystemClock.elapsedRealtime(),
+                )
+                when {
+                    shouldRecover -> beginRecovery(currentGeneration, "后端连续健康检查失败")
+                    !healthy -> {
+                        updateNotification(
+                            "运行异常 · 健康检查 " +
+                                "${watchdogPolicy.healthFailureCount}/$HEALTH_FAILURE_LIMIT",
+                        )
+                        watchdogHandler.postDelayed(
+                            healthCheckRunnable,
+                            HEALTH_CHECK_INTERVAL_MILLIS,
+                        )
+                    }
+                    else -> {
+                        if (failuresBefore > 0) updateNotification("运行中 · PID $pid")
+                        watchdogHandler.postDelayed(
+                            healthCheckRunnable,
+                            HEALTH_CHECK_INTERVAL_MILLIS,
+                        )
+                    }
+                }
+            }
         }
-        updateNotification("${error.message ?: "启动失败"} · 请打开 App 检查")
+    }
+
+    private fun beginRecovery(currentGeneration: Long, reason: String) {
+        if (!isCurrentDesiredRun(currentGeneration) || recoveryScheduled) return
+        recoveryScheduled = true
+        activePid = null
+        healthCheckInFlight = false
+        watchdogHandler.removeCallbacks(healthCheckRunnable)
+        generation += 1
+        val recoveryGeneration = generation
+        val delayMillis = watchdogPolicy.nextRestartDelayMillis()
+        updateNotification("$reason · ${formatDelay(delayMillis)}后重试")
+        executor.execute {
+            BackendRuntime.stop(this)
+            watchdogHandler.post {
+                if (!isCurrentDesiredRun(recoveryGeneration)) return@post
+                watchdogHandler.postDelayed(
+                    {
+                        if (!isCurrentDesiredRun(recoveryGeneration)) return@postDelayed
+                        recoveryScheduled = false
+                        updateNotification("正在恢复后端…")
+                        launchBackend(recoveryGeneration, forceRestart = false)
+                    },
+                    delayMillis,
+                )
+            }
+        }
     }
 
     private fun stopBackend() {
         ServiceSettings.setDesiredRunning(this, false)
-        retryHandler.removeCallbacks(retryRunnable)
-        retryAttempt = 0
+        generation += 1
+        val stopGeneration = generation
+        activePid = null
+        recoveryScheduled = false
+        healthCheckInFlight = false
+        watchdogPolicy.resetForUserAction()
+        watchdogHandler.removeCallbacksAndMessages(null)
         executor.execute {
-            updateNotification("正在停止…")
             BackendRuntime.stop(this)
-            finishService()
+            watchdogHandler.post {
+                if (!destroyed && generation == stopGeneration) finishService()
+            }
         }
+        updateNotification("正在停止…")
     }
+
+    private fun isCurrentDesiredRun(expectedGeneration: Long): Boolean =
+        !destroyed &&
+            generation == expectedGeneration &&
+            ServiceSettings.isDesiredRunning(this)
+
+    private fun formatDelay(delayMillis: Long): String =
+        if (delayMillis < 60_000L) "${delayMillis / 1_000} 秒" else "${delayMillis / 60_000} 分钟"
 
     private fun finishService() {
         ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
@@ -163,6 +271,9 @@ class PocketImgService : Service() {
     companion object {
         private const val CHANNEL_ID = "pocketimg-service"
         private const val NOTIFICATION_ID = 1708
+        private const val HEALTH_FAILURE_LIMIT = 3
+        private const val HEALTH_CHECK_INTERVAL_MILLIS = 15_000L
+        private const val HEALTH_CHECK_TIMEOUT_MILLIS = 2_000
         private const val ACTION_START = "com.gmch.pocketimg.START"
         private const val ACTION_STOP = "com.gmch.pocketimg.STOP"
         private const val ACTION_RESTART = "com.gmch.pocketimg.RESTART"
