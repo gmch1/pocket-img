@@ -18,6 +18,8 @@
 
 Token 的开发配置保存在本机项目根目录 `tokens.json`，该文件已被 `.gitignore` 排除；手机上对应文件权限为 `0600`。不要把实际 Token 提交到版本库或复制到公开日志。
 
+配置包含多个空间时，还必须给启动环境设置 `PIH_ADMIN_SPACE_ID=<主空间 ID>`；只有一个空间时会自动成为管理员。管理员在 Web 页面创建的用户保存在 SQLite，明文 Token 不写回 `tokens.json`。
+
 ## 生命周期
 
 重新构建并部署二进制。`make build-arm64` 会先构建 React 前端并将其嵌入 ARM64 产物，不需要另外推送静态文件：

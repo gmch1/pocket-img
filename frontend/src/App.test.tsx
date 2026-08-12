@@ -1,19 +1,21 @@
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import App from "./App";
-import { APIError, createSession, listImages, uploadImage } from "./api";
+import { APIError, createSession, createUser, listImages, listUsers, uploadImage } from "./api";
 import { copyText } from "./clipboard";
 import { prepareImageForUpload } from "./image-compression";
-import type { ImageItem } from "./types";
+import type { GalleryResponse, ImageItem } from "./types";
 
 vi.mock("./api", async () => {
   const actual = await vi.importActual<typeof import("./api")>("./api");
   return {
     ...actual,
     createSession: vi.fn(),
+    createUser: vi.fn(),
     deleteImages: vi.fn(),
     deleteSession: vi.fn(),
     listImages: vi.fn(),
+    listUsers: vi.fn(),
     uploadImage: vi.fn(),
   };
 });
@@ -33,10 +35,27 @@ const image: ImageItem = {
   thumbnail_url: "/t/0123456789abcdef0123456789abcdef.webp",
 };
 
+function gallery(images: ImageItem[], isAdmin = false): GalleryResponse {
+  return {
+    images,
+    account: {
+      space_id: "alice",
+      is_admin: isAdmin,
+      quota_bytes: 10 * 1024 * 1024 * 1024,
+      used_bytes: images.reduce((total, item) => total + item.byte_size + item.thumbnail_size, 0),
+      image_count: images.length,
+      retention_days: 90,
+      enabled: true,
+    },
+  };
+}
+
 describe("App", () => {
   beforeEach(() => {
     vi.mocked(listImages).mockReset();
     vi.mocked(createSession).mockResolvedValue();
+    vi.mocked(createUser).mockReset();
+    vi.mocked(listUsers).mockReset();
     vi.mocked(copyText).mockReset();
     vi.mocked(copyText).mockResolvedValue();
     vi.mocked(prepareImageForUpload).mockImplementation(async (file) => file);
@@ -46,7 +65,7 @@ describe("App", () => {
   test("exchanges an in-memory token after an unauthorized gallery request", async () => {
     vi.mocked(listImages)
       .mockRejectedValueOnce(new APIError(401, "session required"))
-      .mockResolvedValueOnce([]);
+      .mockResolvedValueOnce(gallery([]));
 
     render(<App />);
     const input = await screen.findByLabelText("Token");
@@ -59,7 +78,7 @@ describe("App", () => {
   });
 
   test("uploads a pasted image and copies its public URL", async () => {
-    vi.mocked(listImages).mockResolvedValue([]);
+    vi.mocked(listImages).mockResolvedValue(gallery([]));
     vi.mocked(uploadImage).mockImplementation(async (_file, onProgress) => {
       onProgress(100);
       return image;
@@ -81,8 +100,27 @@ describe("App", () => {
     expect(await screen.findByRole("button", { name: "复制图片链接" })).toBeTruthy();
   });
 
+  test("lets an administrator create a user token", async () => {
+    const account = gallery([], true).account;
+    vi.mocked(listImages).mockResolvedValue(gallery([], true));
+    vi.mocked(listUsers).mockResolvedValue([account]);
+    vi.mocked(createUser).mockResolvedValue({
+      user: { ...account, space_id: "guest", is_admin: false },
+      token: "a".repeat(64),
+    });
+
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: "用户管理" }));
+    fireEvent.change(await screen.findByLabelText("新用户空间 ID"), { target: { value: "guest" } });
+    fireEvent.click(screen.getByRole("button", { name: "创建 Token" }));
+
+    await waitFor(() => expect(createUser).toHaveBeenCalledWith("guest"));
+    expect(await screen.findByText("a".repeat(64))).toBeTruthy();
+    expect(screen.getByText("Token 只显示这一次")).toBeTruthy();
+  });
+
   test("renders only icon actions on gallery cards", async () => {
-    vi.mocked(listImages).mockResolvedValue([image]);
+    vi.mocked(listImages).mockResolvedValue(gallery([image]));
     render(<App />);
 
     expect(await screen.findByRole("button", { name: "复制图片链接" })).toBeTruthy();
@@ -92,9 +130,9 @@ describe("App", () => {
   });
 
   test("keeps the current gallery in place while changing the date range", async () => {
-    let finishRefresh: ((images: ImageItem[]) => void) | undefined;
+    let finishRefresh: ((result: GalleryResponse) => void) | undefined;
     vi.mocked(listImages)
-      .mockResolvedValueOnce([image])
+      .mockResolvedValueOnce(gallery([image]))
       .mockImplementationOnce(() => new Promise((resolve) => { finishRefresh = resolve; }));
 
     const { container } = render(<App />);
@@ -106,13 +144,13 @@ describe("App", () => {
     expect(screen.getByLabelText("正在刷新图库")).toBeTruthy();
     expect(screen.getByRole("button", { name: "复制图片链接" })).toBeTruthy();
 
-    await act(async () => finishRefresh?.([image]));
+    await act(async () => finishRefresh?.(gallery([image])));
     await waitFor(() => expect(screen.queryByLabelText("正在刷新图库")).toBeNull());
   });
 
   test("shows server processing instead of a premature 100 percent", async () => {
     let finishUpload: ((image: ImageItem) => void) | undefined;
-    vi.mocked(listImages).mockResolvedValue([]);
+    vi.mocked(listImages).mockResolvedValue(gallery([]));
     vi.mocked(uploadImage).mockImplementation((_file, onProgress, onProcessing) => {
       onProgress(99);
       onProcessing?.();

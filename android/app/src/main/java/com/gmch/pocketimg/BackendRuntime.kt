@@ -57,6 +57,7 @@ object BackendRuntime {
             .redirectOutput(ProcessBuilder.Redirect.appendTo(ServiceSettings.logFile(context)))
             .apply {
                 environment()["PIH_TOKENS_FILE"] = ServiceSettings.tokenFile(context).absolutePath
+                environment()["PIH_ADMIN_SPACE_ID"] = ServiceSettings.spaceId(context)
                 environment()["PIH_DATA_DIR"] = ServiceSettings.dataDir(context).absolutePath
                 environment()["PIH_ADDR"] = "0.0.0.0:$port"
                 environment()["PIH_COOKIE_SECURE"] = accessMode.cookieSecure.toString()

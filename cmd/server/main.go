@@ -22,19 +22,27 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	adminSpaceID, err := configuredAdminSpace(tokens)
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	cookieSecure := envBool("PIH_COOKIE_SECURE", true)
 	cfg := backend.Config{
-		DataDir:        envString("PIH_DATA_DIR", "./data"),
-		Tokens:         tokens,
-		CookieSecure:   cookieSecure,
-		SessionTTL:     7 * 24 * time.Hour,
-		MaxUploadBytes: 25 << 20,
-		MaxPixels:      20_000_000,
-		ThumbnailMax:   640,
-		WebPQuality:    82,
-		ThumbQuality:   75,
-		QueueDepth:     8,
+		DataDir:              envString("PIH_DATA_DIR", "./data"),
+		Tokens:               tokens,
+		AdminSpaceID:         adminSpaceID,
+		CookieSecure:         cookieSecure,
+		SessionTTL:           7 * 24 * time.Hour,
+		DefaultQuotaBytes:    10 << 30,
+		DefaultRetentionDays: 90,
+		CleanupInterval:      time.Hour,
+		MaxUploadBytes:       25 << 20,
+		MaxPixels:            20_000_000,
+		ThumbnailMax:         640,
+		WebPQuality:          82,
+		ThumbQuality:         75,
+		QueueDepth:           8,
 	}
 
 	app, err := backend.New(cfg)
@@ -50,6 +58,7 @@ func main() {
 		ReadTimeout:       envDuration("PIH_READ_TIMEOUT", 60*time.Second),
 		WriteTimeout:      envDuration("PIH_WRITE_TIMEOUT", 120*time.Second),
 		IdleTimeout:       60 * time.Second,
+		MaxHeaderBytes:    64 << 10,
 	}
 
 	stop := make(chan os.Signal, 1)
@@ -68,6 +77,25 @@ func main() {
 	if err := server.Shutdown(ctx); err != nil {
 		log.Printf("shutdown: %v", err)
 	}
+}
+
+func configuredAdminSpace(tokens map[string]string) (string, error) {
+	configured := os.Getenv("PIH_ADMIN_SPACE_ID")
+	if configured != "" {
+		if _, exists := tokens[configured]; !exists {
+			return "", fmt.Errorf("PIH_ADMIN_SPACE_ID %q is not present in the configured token map", configured)
+		}
+		return configured, nil
+	}
+	if len(tokens) == 1 {
+		for spaceID := range tokens {
+			return spaceID, nil
+		}
+	}
+	if _, exists := tokens["admin"]; exists {
+		return "admin", nil
+	}
+	return "", errors.New("PIH_ADMIN_SPACE_ID is required when multiple token spaces are configured")
 }
 
 func configuredTokens() (map[string]string, error) {

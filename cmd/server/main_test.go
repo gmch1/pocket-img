@@ -61,6 +61,28 @@ func TestEnvironmentDuration(t *testing.T) {
 	}
 }
 
+func TestConfiguredAdminSpace(t *testing.T) {
+	t.Run("single token defaults to its space", func(t *testing.T) {
+		t.Setenv("PIH_ADMIN_SPACE_ID", "")
+		value, err := configuredAdminSpace(map[string]string{"phone": "token"})
+		if err != nil || value != "phone" {
+			t.Fatalf("admin=%q err=%v", value, err)
+		}
+	})
+	t.Run("multiple tokens require an explicit admin", func(t *testing.T) {
+		t.Setenv("PIH_ADMIN_SPACE_ID", "")
+		if _, err := configuredAdminSpace(map[string]string{"alice": "a", "bob": "b"}); err == nil {
+			t.Fatal("expected explicit admin error")
+		}
+	})
+	t.Run("explicit admin must exist", func(t *testing.T) {
+		t.Setenv("PIH_ADMIN_SPACE_ID", "missing")
+		if _, err := configuredAdminSpace(map[string]string{"alice": "a"}); err == nil {
+			t.Fatal("expected unknown admin error")
+		}
+	})
+}
+
 func TestConfiguredTokensRejectsMissingConflictingAndInvalidSources(t *testing.T) {
 	t.Run("missing", func(t *testing.T) {
 		clearTokenEnvironment(t)

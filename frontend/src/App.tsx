@@ -4,10 +4,11 @@ import { copyText } from "./clipboard";
 import { prepareImageForUpload } from "./image-compression";
 import { ImageCard } from "./components/ImageCard";
 import { ImagePreview } from "./components/ImagePreview";
+import { AdminPanel } from "./components/AdminPanel";
 import { TokenPanel } from "./components/TokenPanel";
 import { UploadTray } from "./components/UploadTray";
-import { CloseIcon, ImageIcon, KeyIcon, LogoutIcon, TrashIcon } from "./icons";
-import type { GalleryRange, ImageItem, UploadTask } from "./types";
+import { CloseIcon, ImageIcon, KeyIcon, LogoutIcon, TrashIcon, UsersIcon } from "./icons";
+import type { AccountInfo, GalleryRange, ImageItem, UploadTask } from "./types";
 
 type AuthState = "checking" | "required" | "authenticated";
 type Toast = { id: number; message: string; error: boolean };
@@ -29,6 +30,8 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [galleryError, setGalleryError] = useState("");
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [adminOpen, setAdminOpen] = useState(false);
+  const [account, setAccount] = useState<AccountInfo | null>(null);
   const [preview, setPreview] = useState<ImageItem | null>(null);
   const [selected, setSelected] = useState<Set<string>>(() => new Set());
   const [uploadTasks, setUploadTasks] = useState<UploadTask[]>([]);
@@ -53,14 +56,17 @@ export default function App() {
     setSelected(new Set());
     setPreview(null);
     setSettingsOpen(false);
+    setAdminOpen(false);
+    setAccount(null);
   }, []);
 
   const refresh = useCallback(async (nextRange: GalleryRange, signal?: AbortSignal): Promise<boolean> => {
     setLoading(true);
     setGalleryError("");
     try {
-      const nextImages = await listImages(nextRange, signal);
-      setImages(nextImages);
+      const result = await listImages(nextRange, signal);
+      setImages(result.images);
+      setAccount(result.account);
       setAuth("authenticated");
       setSelected(new Set());
       return true;
@@ -245,6 +251,7 @@ export default function App() {
           ))}
         </nav>
         <div className="topbar__actions">
+          {account?.is_admin ? <button className="icon-button" type="button" aria-label="用户管理" onClick={() => setAdminOpen(true)}><UsersIcon /></button> : null}
           <button className="icon-button" type="button" aria-label="设置 Token" onClick={() => setSettingsOpen(true)}><KeyIcon /></button>
           <button className="icon-button" type="button" aria-label="退出会话" onClick={() => void logout()}><LogoutIcon /></button>
         </div>
@@ -294,6 +301,7 @@ export default function App() {
       <UploadTray tasks={uploadTasks} onCopyAll={() => void copyAllUploads()} onClear={() => setUploadTasks([])} />
       {preview ? <ImagePreview image={preview} onClose={() => setPreview(null)} onCopy={() => void copyImage(preview)} onDelete={() => void removeImages([preview.id])} /> : null}
       {settingsOpen ? <TokenPanel modal onClose={() => setSettingsOpen(false)} onAuthenticate={authenticate} /> : null}
+      {adminOpen ? <AdminPanel onClose={() => setAdminOpen(false)} onSessionExpired={expireSession} onNotify={notify} /> : null}
       {toast ? <div key={toast.id} className={`toast${toast.error ? " toast--error" : ""}`} role="status">{toast.message}</div> : null}
     </div>
   );

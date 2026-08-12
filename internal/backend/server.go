@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
-	"crypto/subtle"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
@@ -34,7 +33,7 @@ type credential struct {
 	fingerprint [sha256.Size]byte
 }
 
-type ownerContextKey struct{}
+type principalContextKey struct{}
 
 type Server struct {
 	cfg           Config
@@ -43,12 +42,11 @@ type Server struct {
 	handler       http.Handler
 	queueSlots    chan struct{}
 	processSlots  chan struct{}
-	credentials   []credential
 	location      *time.Location
 	thumbnailCtx  context.Context
 	thumbnailStop context.CancelFunc
 	thumbnailWake chan struct{}
-	thumbnailWG   sync.WaitGroup
+	workerWG      sync.WaitGroup
 	thumbnailMu   sync.Mutex
 	closeOnce     sync.Once
 	closeErr      error
@@ -64,6 +62,15 @@ func New(cfg Config) (*Server, error) {
 	}
 	if cfg.SessionTTL <= 0 {
 		cfg.SessionTTL = 7 * 24 * time.Hour
+	}
+	if cfg.DefaultQuotaBytes <= 0 {
+		cfg.DefaultQuotaBytes = defaultUserQuotaBytes
+	}
+	if cfg.DefaultRetentionDays <= 0 {
+		cfg.DefaultRetentionDays = defaultRetentionDays
+	}
+	if cfg.CleanupInterval <= 0 {
+		cfg.CleanupInterval = time.Hour
 	}
 	if cfg.MaxUploadBytes <= 0 {
 		cfg.MaxUploadBytes = 25 << 20
@@ -82,6 +89,19 @@ func New(cfg Config) (*Server, error) {
 	}
 	if cfg.QueueDepth <= 0 {
 		cfg.QueueDepth = 8
+	}
+	if !validOwnerID(cfg.AdminSpaceID) {
+		return nil, errors.New("a valid admin space id is required")
+	}
+	adminConfigured := false
+	for _, configured := range credentials {
+		if configured.ownerID == cfg.AdminSpaceID {
+			adminConfigured = true
+			break
+		}
+	}
+	if !adminConfigured {
+		return nil, fmt.Errorf("admin space %q is not one of the configured token spaces", cfg.AdminSpaceID)
 	}
 
 	for _, directory := range []string{
@@ -112,7 +132,6 @@ func New(cfg Config) (*Server, error) {
 		processor:     newProcessor(cfg),
 		queueSlots:    make(chan struct{}, cfg.QueueDepth),
 		processSlots:  make(chan struct{}, 1),
-		credentials:   credentials,
 		location:      location,
 		thumbnailCtx:  thumbnailCtx,
 		thumbnailStop: thumbnailStop,
@@ -156,7 +175,9 @@ func New(cfg Config) (*Server, error) {
 			}
 		}
 	}
-	if err := server.store.syncUsers(context.Background(), credentials); err != nil {
+	if err := server.store.syncUsers(
+		context.Background(), credentials, cfg.AdminSpaceID, cfg.DefaultQuotaBytes, cfg.DefaultRetentionDays,
+	); err != nil {
 		server.Close()
 		return nil, fmt.Errorf("sync configured users: %w", err)
 	}
@@ -165,8 +186,9 @@ func New(cfg Config) (*Server, error) {
 		return nil, err
 	}
 	server.handler = server.routes()
-	server.thumbnailWG.Add(1)
+	server.workerWG.Add(2)
 	go server.runThumbnailWorker()
+	go server.runCleanupWorker()
 	return server, nil
 }
 
@@ -223,7 +245,7 @@ func (s *Server) Handler() http.Handler {
 func (s *Server) Close() error {
 	s.closeOnce.Do(func() {
 		s.thumbnailStop()
-		s.thumbnailWG.Wait()
+		s.workerWG.Wait()
 		s.closeErr = s.store.close()
 	})
 	return s.closeErr
@@ -237,7 +259,7 @@ func (s *Server) wakeThumbnailWorker() {
 }
 
 func (s *Server) runThumbnailWorker() {
-	defer s.thumbnailWG.Done()
+	defer s.workerWG.Done()
 	ticker := time.NewTicker(time.Minute)
 	defer ticker.Stop()
 
@@ -252,19 +274,76 @@ func (s *Server) runThumbnailWorker() {
 	}
 }
 
-func (s *Server) processPendingThumbnails() {
-	records, err := s.store.listPendingThumbnails(s.thumbnailCtx)
-	if err != nil {
-		if s.thumbnailCtx.Err() == nil {
-			log.Printf("thumbnail queue scan failed: %v", err)
+func (s *Server) runCleanupWorker() {
+	defer s.workerWG.Done()
+	ticker := time.NewTicker(s.cfg.CleanupInterval)
+	defer ticker.Stop()
+
+	for {
+		now := time.Now()
+		if err := s.store.deleteExpiredSessions(s.thumbnailCtx, now); err != nil && s.thumbnailCtx.Err() == nil {
+			log.Printf("expired session cleanup failed: %v", err)
 		}
-		return
+		s.cleanupExpiredImages(now)
+		select {
+		case <-s.thumbnailCtx.Done():
+			return
+		case <-ticker.C:
+		}
 	}
-	for _, record := range records {
-		if s.thumbnailCtx.Err() != nil {
+}
+
+func (s *Server) cleanupExpiredImages(now time.Time) {
+	const batchSize = 100
+	for {
+		records, err := s.store.listExpiredImages(s.thumbnailCtx, now, batchSize)
+		if err != nil {
+			if s.thumbnailCtx.Err() == nil {
+				log.Printf("expired image scan failed: %v", err)
+			}
 			return
 		}
-		s.processThumbnail(record)
+		failed := false
+		for _, record := range records {
+			if s.thumbnailCtx.Err() != nil {
+				return
+			}
+			s.thumbnailMu.Lock()
+			err := s.processor.removeFiles(record.OwnerID, record.ID, record.Extension)
+			if err == nil {
+				err = s.store.deleteImage(s.thumbnailCtx, record.OwnerID, record.ID)
+			}
+			s.thumbnailMu.Unlock()
+			if err != nil && s.thumbnailCtx.Err() == nil {
+				failed = true
+				log.Printf("expired image cleanup failed for %s: %v", record.ID, err)
+			}
+		}
+		if failed || len(records) < batchSize {
+			return
+		}
+	}
+}
+
+func (s *Server) processPendingThumbnails() {
+	const batchSize = 50
+	for {
+		records, err := s.store.listPendingThumbnails(s.thumbnailCtx, time.Now(), batchSize)
+		if err != nil {
+			if s.thumbnailCtx.Err() == nil {
+				log.Printf("thumbnail queue scan failed: %v", err)
+			}
+			return
+		}
+		for _, record := range records {
+			if s.thumbnailCtx.Err() != nil {
+				return
+			}
+			s.processThumbnail(record)
+		}
+		if len(records) < batchSize {
+			return
+		}
 	}
 }
 
@@ -278,10 +357,20 @@ func (s *Server) processThumbnail(record imageRecord) {
 	size, err := s.processor.generateThumbnail(record)
 	debug.FreeOSMemory()
 	if err != nil {
-		log.Printf("thumbnail generation failed for %s: %v", record.ID, err)
+		delay := time.Minute << min(record.ThumbnailAttempts, 6)
+		permanent, storeErr := s.store.recordThumbnailFailure(s.thumbnailCtx, record, time.Now().Add(delay))
+		if storeErr != nil {
+			log.Printf("thumbnail failure state update failed for %s: %v", record.ID, storeErr)
+			return
+		}
+		if permanent {
+			log.Printf("thumbnail generation permanently disabled for %s after %d attempts: %v", record.ID, thumbnailMaxAttempts, err)
+		} else {
+			log.Printf("thumbnail generation failed for %s; retrying later: %v", record.ID, err)
+		}
 		return
 	}
-	updated, err := s.store.setThumbnailSize(s.thumbnailCtx, record.OwnerID, record.ID, size)
+	result, err := s.store.commitThumbnailWithinQuota(s.thumbnailCtx, record.OwnerID, record.ID, size)
 	if err != nil {
 		_ = os.Remove(s.processor.thumbnailPath(record.OwnerID, record.ID))
 		if s.thumbnailCtx.Err() == nil {
@@ -289,7 +378,7 @@ func (s *Server) processThumbnail(record imageRecord) {
 		}
 		return
 	}
-	if !updated {
+	if result != thumbnailCommitted {
 		_ = os.Remove(s.processor.thumbnailPath(record.OwnerID, record.ID))
 	}
 }
@@ -302,6 +391,8 @@ func (s *Server) routes() http.Handler {
 	mux.Handle("GET /api/images", s.requireSession(http.HandlerFunc(s.listImages)))
 	mux.Handle("POST /api/images", s.requireSession(http.HandlerFunc(s.uploadImage)))
 	mux.Handle("DELETE /api/images", s.requireSession(http.HandlerFunc(s.deleteImages)))
+	mux.Handle("GET /api/admin/users", s.requireAdmin(http.HandlerFunc(s.listUsers)))
+	mux.Handle("POST /api/admin/users", s.requireAdmin(http.HandlerFunc(s.createUser)))
 	mux.HandleFunc("GET /i/{name}", s.serveFullImage)
 	mux.HandleFunc("GET /t/{name}", s.serveThumbnail)
 	mux.Handle("GET /", webui.Handler())
@@ -315,7 +406,11 @@ func (s *Server) health(w http.ResponseWriter, _ *http.Request) {
 
 func (s *Server) createSession(w http.ResponseWriter, r *http.Request) {
 	presented := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
-	matched, ok := s.matchCredential(presented)
+	matched, ok, err := s.matchCredential(r.Context(), presented)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "validate token")
+		return
+	}
 	if !ok {
 		writeError(w, http.StatusUnauthorized, "invalid token")
 		return
@@ -352,21 +447,12 @@ func (s *Server) createSession(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (s *Server) matchCredential(presented string) (credential, bool) {
+func (s *Server) matchCredential(ctx context.Context, presented string) (credential, bool, error) {
 	if presented == "" {
-		return credential{}, false
+		return credential{}, false, nil
 	}
 	presentedHash := sha256.Sum256([]byte(presented))
-	var matched credential
-	found := 0
-	for _, candidate := range s.credentials {
-		equal := subtle.ConstantTimeCompare(presentedHash[:], candidate.fingerprint[:])
-		if equal == 1 {
-			matched = candidate
-		}
-		found |= equal
-	}
-	return matched, found == 1
+	return s.store.credentialByFingerprint(ctx, presentedHash[:])
 }
 
 func (s *Server) deleteSession(w http.ResponseWriter, r *http.Request) {
@@ -399,7 +485,7 @@ func (s *Server) requireSession(next http.Handler) http.Handler {
 			return
 		}
 		hash := sha256.Sum256([]byte(cookie.Value))
-		ownerID, valid, err := s.store.sessionOwner(r.Context(), hash[:], time.Now())
+		value, valid, err := s.store.sessionPrincipal(r.Context(), hash[:], time.Now())
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, "validate session")
 			return
@@ -408,14 +494,28 @@ func (s *Server) requireSession(next http.Handler) http.Handler {
 			writeError(w, http.StatusUnauthorized, "session expired")
 			return
 		}
-		contextWithOwner := context.WithValue(r.Context(), ownerContextKey{}, ownerID)
-		next.ServeHTTP(w, r.WithContext(contextWithOwner))
+		contextWithPrincipal := context.WithValue(r.Context(), principalContextKey{}, value)
+		next.ServeHTTP(w, r.WithContext(contextWithPrincipal))
 	})
 }
 
 func authenticatedOwner(r *http.Request) string {
-	ownerID, _ := r.Context().Value(ownerContextKey{}).(string)
-	return ownerID
+	return authenticatedPrincipal(r).OwnerID
+}
+
+func authenticatedPrincipal(r *http.Request) principal {
+	value, _ := r.Context().Value(principalContextKey{}).(principal)
+	return value
+}
+
+func (s *Server) requireAdmin(next http.Handler) http.Handler {
+	return s.requireSession(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !authenticatedPrincipal(r).IsAdmin {
+			writeError(w, http.StatusForbidden, "administrator required")
+			return
+		}
+		next.ServeHTTP(w, r)
+	}))
 }
 
 func (s *Server) uploadImage(w http.ResponseWriter, r *http.Request) {
@@ -464,9 +564,15 @@ func (s *Server) uploadImage(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
-	if err := s.store.insertImage(r.Context(), record); err != nil {
+	created, err := s.store.insertImageWithinQuota(r.Context(), record)
+	if err != nil {
 		_ = s.processor.removeFiles(record.OwnerID, record.ID, record.Extension)
 		writeError(w, http.StatusInternalServerError, "store image metadata")
+		return
+	}
+	if !created {
+		_ = s.processor.removeFiles(record.OwnerID, record.ID, record.Extension)
+		writeError(w, http.StatusRequestEntityTooLarge, "storage quota exceeded")
 		return
 	}
 
@@ -555,7 +661,69 @@ func (s *Server) listImages(w http.ResponseWriter, r *http.Request) {
 	for _, record := range records {
 		images = append(images, record.response())
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"images": images})
+	account, found, err := s.store.account(r.Context(), authenticatedOwner(r))
+	if err != nil || !found {
+		writeError(w, http.StatusInternalServerError, "load account")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"images": images, "account": account.response()})
+}
+
+func (s *Server) listUsers(w http.ResponseWriter, r *http.Request) {
+	records, err := s.store.listAccounts(r.Context())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "list users")
+		return
+	}
+	users := make([]accountResponse, 0, len(records))
+	for _, record := range records {
+		users = append(users, record.response())
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"users": users})
+}
+
+func (s *Server) createUser(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, 16<<10)
+	var request struct {
+		SpaceID string `json:"space_id"`
+	}
+	decoder := json.NewDecoder(r.Body)
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&request); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid user request")
+		return
+	}
+	request.SpaceID = strings.TrimSpace(request.SpaceID)
+	if !validOwnerID(request.SpaceID) {
+		writeError(w, http.StatusBadRequest, "space_id must use 1-64 letters, numbers, underscores, or hyphens")
+		return
+	}
+
+	raw := make([]byte, 32)
+	if _, err := rand.Read(raw); err != nil {
+		writeError(w, http.StatusInternalServerError, "create user token")
+		return
+	}
+	token := hex.EncodeToString(raw)
+	fingerprint := sha256.Sum256([]byte(token))
+	created, err := s.store.createAccount(
+		r.Context(), request.SpaceID, fingerprint[:], s.cfg.DefaultQuotaBytes, s.cfg.DefaultRetentionDays,
+	)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "create user")
+		return
+	}
+	if !created {
+		writeError(w, http.StatusConflict, "space_id already exists")
+		return
+	}
+	account := accountRecord{
+		SpaceID: request.SpaceID, QuotaBytes: s.cfg.DefaultQuotaBytes,
+		RetentionDays: s.cfg.DefaultRetentionDays, Enabled: true,
+		CreatedAtMilli: time.Now().UTC().UnixMilli(),
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	writeJSON(w, http.StatusCreated, map[string]any{"user": account.response(), "token": token})
 }
 
 func (s *Server) rangeStart(value string, now time.Time) (int64, error) {
@@ -686,8 +854,11 @@ func (s *Server) serveFile(w http.ResponseWriter, r *http.Request, path, mediaTy
 
 func (s *Server) securityHeaders(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; worker-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'")
 		w.Header().Set("X-Content-Type-Options", "nosniff")
+		w.Header().Set("X-Frame-Options", "DENY")
 		w.Header().Set("Referrer-Policy", "no-referrer")
+		w.Header().Set("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
 		next.ServeHTTP(w, r)
 	})
 }
