@@ -38,6 +38,7 @@ export type UploadState = "queued" | "optimizing" | "uploading" | "processing" |
 export interface UploadTask {
   id: string;
   name: string;
+  uploadedAt: string;
   progress: number;
   state: UploadState;
   image?: ImageItem;
