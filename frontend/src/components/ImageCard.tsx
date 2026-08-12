@@ -67,20 +67,16 @@ export function ImageCard({ image, selected, selectionMode, onOpen, onCopy, onDe
       onClick={activate}
       onKeyDown={keyDown}
     >
-      <div className="image-card__media" style={{ aspectRatio: `${image.width} / ${image.height}` }}>
+      <div className="image-card__media">
         <img src={image.thumbnail_url} alt="" loading="lazy" draggable={false} />
-        {selectionMode ? <span className="selection-mark"><CheckIcon /></span> : null}
+        {selected ? <span className="selection-mark"><CheckIcon /></span> : null}
         {image.animated ? <span className="animation-mark">GIF</span> : null}
-      </div>
-      <div className="image-card__actions" onClick={(event) => event.stopPropagation()} onPointerDown={(event) => event.stopPropagation()}>
-        {selectionMode ? (
-          <span className="selection-line" aria-hidden="true" />
-        ) : (
-          <>
+        {!selectionMode ? (
+          <div className="image-card__actions" onClick={(event) => event.stopPropagation()} onPointerDown={(event) => event.stopPropagation()}>
             <button className="icon-button" type="button" aria-label="复制图片链接" onClick={onCopy}><CopyIcon /></button>
             <button className="icon-button icon-button--danger" type="button" aria-label="永久删除图片" onClick={onDelete}><TrashIcon /></button>
-          </>
-        )}
+          </div>
+        ) : null}
       </div>
     </article>
   );

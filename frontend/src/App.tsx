@@ -6,7 +6,7 @@ import { ImageCard } from "./components/ImageCard";
 import { ImagePreview } from "./components/ImagePreview";
 import { AdminPanel } from "./components/AdminPanel";
 import { TokenPanel } from "./components/TokenPanel";
-import { UploadTray } from "./components/UploadTray";
+import { GlobalUploadProgress } from "./components/GlobalUploadProgress";
 import { CloseIcon, ImageIcon, KeyIcon, LogoutIcon, TrashIcon, UsersIcon } from "./icons";
 import type { AccountInfo, GalleryRange, ImageItem, UploadTask } from "./types";
 
@@ -14,18 +14,64 @@ type AuthState = "checking" | "required" | "authenticated";
 type Toast = { id: number; message: string; error: boolean };
 
 const RANGE_OPTIONS: ReadonlyArray<{ value: GalleryRange; label: string }> = [
-  { value: "today", label: "今天" },
   { value: "7d", label: "7 天" },
-  { value: "30d", label: "30 天" },
   { value: "all", label: "全部" },
 ];
 
 const MAX_PASTE_FILES = 20;
 const MAX_FILE_BYTES = 25 * 1024 * 1024;
+const TIMELINE_TIME_ZONE = "Asia/Shanghai";
+const TIMELINE_DATE_KEY = new Intl.DateTimeFormat("en-CA", {
+  timeZone: TIMELINE_TIME_ZONE,
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+});
+const TIMELINE_MONTH_DAY_LABEL = new Intl.DateTimeFormat("zh-CN", {
+  timeZone: TIMELINE_TIME_ZONE,
+  month: "numeric",
+  day: "numeric",
+});
+const TIMELINE_WEEKDAY_LABEL = new Intl.DateTimeFormat("zh-CN", {
+  timeZone: TIMELINE_TIME_ZONE,
+  weekday: "short",
+});
+
+interface TimelineGroup {
+  key: string;
+  label: string;
+  images: ImageItem[];
+}
+
+function timelineDateLabel(createdAt: Date): string {
+  const parts = TIMELINE_MONTH_DAY_LABEL.formatToParts(createdAt);
+  const month = parts.find((part) => part.type === "month")?.value ?? "";
+  const day = parts.find((part) => part.type === "day")?.value ?? "";
+  return `${month}月${day}日 ${TIMELINE_WEEKDAY_LABEL.format(createdAt)}`;
+}
+
+function timelineGroups(images: ImageItem[]): TimelineGroup[] {
+  const groups = new Map<string, TimelineGroup>();
+  for (const image of images) {
+    const createdAt = new Date(image.created_at);
+    const key = TIMELINE_DATE_KEY.format(createdAt);
+    let group = groups.get(key);
+    if (!group) {
+      group = {
+        key,
+        label: timelineDateLabel(createdAt),
+        images: [],
+      };
+      groups.set(key, group);
+    }
+    group.images.push(image);
+  }
+  return Array.from(groups.values());
+}
 
 export default function App() {
   const [auth, setAuth] = useState<AuthState>("checking");
-  const [range, setRange] = useState<GalleryRange>("today");
+  const [range, setRange] = useState<GalleryRange>("7d");
   const [images, setImages] = useState<ImageItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [galleryError, setGalleryError] = useState("");
@@ -39,6 +85,7 @@ export default function App() {
   const uploadQueue = useRef<Promise<void>>(Promise.resolve());
   const taskSequence = useRef(0);
   const toastTimer = useRef<number | undefined>(undefined);
+  const groupedImages = timelineGroups(images);
 
   const notify = useCallback((message: string, error = false) => {
     if (toastTimer.current !== undefined) window.clearTimeout(toastTimer.current);
@@ -100,10 +147,12 @@ export default function App() {
     setUploadTasks((current) => {
       const task = current.find((item) => item.id === id);
       if (!task) return current;
-      const next = [{ ...task, ...patch }, ...current.filter((item) => item.id !== id)];
-      const hasActiveTask = next.some((item) => item.state !== "done" && item.state !== "error");
-      return hasActiveTask ? next : next.slice(0, 5);
+      return current.map((item) => item.id === id ? { ...task, ...patch } : item);
     });
+  }, []);
+
+  const finishTask = useCallback((id: string) => {
+    setUploadTasks((current) => current.filter((item) => item.id !== id));
   }, []);
 
   const enqueueFiles = useCallback((incoming: File[]) => {
@@ -117,25 +166,22 @@ export default function App() {
 
     const jobs = files.map((file) => {
       const id = `upload-${Date.now()}-${taskSequence.current++}`;
-      return { id, file, uploadedAt: new Date().toISOString() };
+      return { id, file };
     });
-    setUploadTasks((current) => {
-      const next = [
-        ...jobs.map(({ id, file, uploadedAt }): UploadTask => file.size > MAX_FILE_BYTES
-          ? { id, name: file.name || "剪贴板图片", uploadedAt, progress: 100, state: "error", error: "文件超过 25 MiB" }
-          : { id, name: file.name || "剪贴板图片", uploadedAt, progress: 0, state: "queued" }),
-        ...current,
-      ];
-      const hasActiveTask = next.some((item) => item.state !== "done" && item.state !== "error");
-      return hasActiveTask ? next : next.slice(0, 5);
-    });
-
     const uploadable = jobs.filter(({ file }) => file.size <= MAX_FILE_BYTES);
+    const rejectedCount = jobs.length - uploadable.length;
+    if (rejectedCount > 0) notify(rejectedCount === 1 ? "文件超过 25 MiB" : `${rejectedCount} 张图片超过 25 MiB`, true);
     if (uploadable.length === 0) return;
+    setUploadTasks((current) => [
+      ...current,
+      ...uploadable.map(({ id }): UploadTask => ({ id, progress: 0, state: "queued" })),
+    ]);
+
     uploadQueue.current = uploadQueue.current.then(async () => {
       const successful: ImageItem[] = [];
+      const failures: string[] = [];
       for (const { id, file } of uploadable) {
-        updateTask(id, { state: "optimizing", progress: 0, error: undefined });
+        updateTask(id, { state: "optimizing", progress: 0 });
         try {
           const prepared = await prepareImageForUpload(file);
           updateTask(id, { state: "uploading" });
@@ -144,20 +190,31 @@ export default function App() {
             (progress) => updateTask(id, { progress }),
             () => updateTask(id, { state: "processing", progress: 100 }),
           );
-          updateTask(id, { state: "done", progress: 100, image, uploadedAt: image.created_at });
           setImages((current) => [image, ...current.filter((item) => item.id !== image.id)]);
           successful.push(image);
         } catch (reason) {
           const message = reason instanceof Error ? reason.message : "上传失败";
-          updateTask(id, { state: "error", progress: 100, error: message });
+          failures.push(message);
           if (reason instanceof APIError && reason.status === 401) {
             expireSession();
             break;
           }
+        } finally {
+          finishTask(id);
         }
       }
 
-      if (files.length === 1 && successful.length === 1) {
+      const batchIDs = new Set(uploadable.map(({ id }) => id));
+      setUploadTasks((current) => current.filter((task) => !batchIDs.has(task.id)));
+
+      if (failures.length > 0) {
+        const message = failures.length === 1 && successful.length === 0 && rejectedCount === 0
+          ? failures[0]
+          : `${successful.length} 张上传完成，${failures.length + rejectedCount} 张失败`;
+        notify(message, true);
+      } else if (rejectedCount > 0) {
+        if (successful.length > 0) notify(`${successful.length} 张上传完成，${rejectedCount} 张失败`, true);
+      } else if (files.length === 1 && successful.length === 1) {
         try {
           await copyText(absoluteImageURL(successful[0].url));
           notify("链接已复制");
@@ -168,7 +225,7 @@ export default function App() {
         notify(`${successful.length} 张图片上传完成`);
       }
     });
-  }, [auth, expireSession, notify, updateTask]);
+  }, [auth, expireSession, finishTask, notify, updateTask]);
 
   useEffect(() => {
     const handlePaste = (event: ClipboardEvent) => {
@@ -238,15 +295,25 @@ export default function App() {
 
   return (
     <div className="app-shell">
+      <GlobalUploadProgress tasks={uploadTasks} />
       <header className="topbar">
         <div className="brand"><ImageIcon /><span>图床</span></div>
-        <nav className="range-switch" aria-label="时间范围">
-          {RANGE_OPTIONS.map((option) => (
-            <button key={option.value} type="button" className={range === option.value ? "is-active" : ""} onClick={() => setRange(option.value)}>
-              {option.label}
-            </button>
-          ))}
-        </nav>
+        {selected.size > 0 ? (
+          <div className="selection-controls" role="toolbar" aria-label="批量操作">
+            <strong aria-label={`已选择 ${selected.size} 张`}>{selected.size}</strong>
+            <button type="button" onClick={() => setSelected(new Set(images.map((image) => image.id)))}>全选</button>
+            <button className="icon-button icon-button--danger" type="button" aria-label="永久删除选中图片" onClick={() => void removeImages(Array.from(selected))}><TrashIcon /></button>
+            <button className="icon-button" type="button" aria-label="退出多选" onClick={() => setSelected(new Set())}><CloseIcon /></button>
+          </div>
+        ) : (
+          <nav className="range-switch" aria-label="时间范围">
+            {RANGE_OPTIONS.map((option) => (
+              <button key={option.value} type="button" className={range === option.value ? "is-active" : ""} onClick={() => setRange(option.value)}>
+                {option.label}
+              </button>
+            ))}
+          </nav>
+        )}
         <div className="topbar__actions">
           {account?.is_admin ? <button className="icon-button" type="button" aria-label="用户管理" onClick={() => setAdminOpen(true)}><UsersIcon /></button> : null}
           <button className="icon-button" type="button" aria-label="设置 Token" onClick={() => setSettingsOpen(true)}><KeyIcon /></button>
@@ -267,35 +334,35 @@ export default function App() {
           <div className="empty-gallery"><ImageIcon /><p>粘贴第一张图片</p></div>
         ) : null}
         {images.length > 0 ? (
-          <section className={`waterfall${loading ? " waterfall--loading" : ""}`} aria-label="图库">
-            {images.map((image) => (
-              <ImageCard
-                key={image.id}
-                image={image}
-                selected={selected.has(image.id)}
-                selectionMode={selected.size > 0}
-                onOpen={() => setPreview(image)}
-                onCopy={() => void copyImage(image)}
-                onDelete={() => void removeImages([image.id])}
-                onLongSelect={() => setSelected((current) => new Set(current).add(image.id))}
-                onToggleSelect={() => toggleSelected(image.id)}
-              />
+          <section className={`image-timeline${loading ? " image-timeline--loading" : ""}`} aria-label="图库">
+            {groupedImages.map((group) => (
+              <div className="timeline-group" key={group.key}>
+                <header className="timeline-group__label">
+                  <strong>{group.label}</strong>
+                  <span>{group.images.length} 张</span>
+                </header>
+                <div className="image-grid">
+                  {group.images.map((image) => (
+                    <ImageCard
+                      key={image.id}
+                      image={image}
+                      selected={selected.has(image.id)}
+                      selectionMode={selected.size > 0}
+                      onOpen={() => setPreview(image)}
+                      onCopy={() => void copyImage(image)}
+                      onDelete={() => void removeImages([image.id])}
+                      onLongSelect={() => setSelected((current) => new Set(current).add(image.id))}
+                      onToggleSelect={() => toggleSelected(image.id)}
+                    />
+                  ))}
+                </div>
+              </div>
             ))}
           </section>
         ) : null}
         {images.length === 100 ? <p className="list-limit">当前显示最近 100 张</p> : null}
       </main>
 
-      {selected.size > 0 ? (
-        <div className="selection-toolbar" role="toolbar" aria-label="批量操作">
-          <strong>{selected.size}</strong>
-          <button type="button" onClick={() => setSelected(new Set(images.map((image) => image.id)))}>全选</button>
-          <button className="selection-toolbar__danger" type="button" aria-label="永久删除选中图片" onClick={() => void removeImages(Array.from(selected))}><TrashIcon /></button>
-          <button className="icon-button" type="button" aria-label="退出多选" onClick={() => setSelected(new Set())}><CloseIcon /></button>
-        </div>
-      ) : null}
-
-      <UploadTray tasks={uploadTasks} onClear={() => setUploadTasks([])} />
       {preview ? <ImagePreview image={preview} onClose={() => setPreview(null)} onCopy={() => void copyImage(preview)} onDelete={() => void removeImages([preview.id])} /> : null}
       {settingsOpen ? <TokenPanel modal onClose={() => setSettingsOpen(false)} onAuthenticate={authenticate} /> : null}
       {adminOpen ? <AdminPanel onClose={() => setAdminOpen(false)} onSessionExpired={expireSession} onNotify={notify} /> : null}
