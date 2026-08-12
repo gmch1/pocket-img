@@ -33,14 +33,10 @@ export interface CreatedUser {
   token: string;
 }
 
-export type UploadState = "queued" | "optimizing" | "uploading" | "processing" | "done" | "error";
+export type UploadState = "queued" | "optimizing" | "uploading" | "processing";
 
 export interface UploadTask {
   id: string;
-  name: string;
-  uploadedAt: string;
   progress: number;
   state: UploadState;
-  image?: ImageItem;
-  error?: string;
 }
