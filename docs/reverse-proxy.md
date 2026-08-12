@@ -14,6 +14,7 @@ PocketIMG 只处理 HTTP 请求，不内置域名、DDNS、证书申请或 TLS �
 
 - TLS 只在外部代理终止。
 - 必须保留浏览器请求的原始 `Host`。后端 Origin 校验不信任客户端提供的 `X-Forwarded-Host`。
+- 必须覆盖写入 `X-PocketIMG-Client-IP` 为边缘实际看到的客户端 IP，不能透传客户端同名请求头。后端只在直连对端为回环地址时使用它限制无效 Token 登录；图片与上传额度按所属空间计算。
 - HTTP 入口应永久重定向到 HTTPS，并由边缘设置 HSTS。
 - 请求体上限至少为 28 MiB，以容纳 25 MiB 图片和 multipart 开销。
 - 上游读写/响应超时应高于应用的 180/240 秒配置，建议不低于 300 秒。
@@ -32,3 +33,4 @@ PocketIMG 只处理 HTTP 请求，不内置域名、DDNS、证书申请或 TLS �
 4. 伪造 `Origin` 或只伪造 `X-Forwarded-Host` 的写请求返回 `403`。
 5. 单个接近 25 MiB 的慢速上传不会被代理提前断开。
 6. 隧道或设备服务停止时返回可诊断的 `502/503`，恢复后无需修改 DNS。
+7. 同一来源连续触发登录限制时返回 `429` 和 `Retry-After`，伪造公开请求中的 `X-PocketIMG-Client-IP` 不会被原样转发。

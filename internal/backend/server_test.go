@@ -41,7 +41,12 @@ func newTestBackend(t *testing.T) *testBackend {
 
 func newTestBackendWithTokens(t *testing.T, dataDir string, tokens map[string]string) *testBackend {
 	t.Helper()
-	app, err := New(testConfig(dataDir, tokens))
+	return newTestBackendWithConfig(t, testConfig(dataDir, tokens))
+}
+
+func newTestBackendWithConfig(t *testing.T, cfg Config) *testBackend {
+	t.Helper()
+	app, err := New(cfg)
 	if err != nil {
 		t.Fatal(err)
 	}

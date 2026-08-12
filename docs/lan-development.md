@@ -65,5 +65,5 @@ adb -s <adb-serial> shell \
 - 内网 HTTP 模式设置 `PIH_COOKIE_SECURE=false`，否则浏览器不会在普通 HTTP 请求中发送 Session Cookie。
 - Token 换 Cookie 不能加密链路；同一局域网内能够监听流量的设备仍可能窃取 Token 或 Session。
 - 后端不开放 CORS，内嵌前端与 API 同源。本仓库不提供网络代理配置。
-- 当前版本不实现请求频率限制；上传体积、解码像素、队列长度和单 worker 仍限制资源占用。
+- 后端按空间限制上传和图片读取频率，超限返回 `429` 与 `Retry-After`；上传体积、解码像素、队列长度和单 worker 仍共同限制资源占用。
 - React 前端已经内嵌完成。域名、HTTPS、DDNS 和反向代理由独立运维项目负责；启用 HTTPS 入口时恢复 `Secure` Cookie。

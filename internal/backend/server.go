@@ -46,6 +46,7 @@ type Server struct {
 	thumbnailCtx  context.Context
 	thumbnailStop context.CancelFunc
 	thumbnailWake chan struct{}
+	rateLimits    *rateLimiter
 	workerWG      sync.WaitGroup
 	thumbnailMu   sync.Mutex
 	closeOnce     sync.Once
@@ -90,6 +91,7 @@ func New(cfg Config) (*Server, error) {
 	if cfg.QueueDepth <= 0 {
 		cfg.QueueDepth = 8
 	}
+	cfg.RateLimits = cfg.RateLimits.withDefaults()
 	if !validOwnerID(cfg.AdminSpaceID) {
 		return nil, errors.New("a valid admin space id is required")
 	}
@@ -136,6 +138,7 @@ func New(cfg Config) (*Server, error) {
 		thumbnailCtx:  thumbnailCtx,
 		thumbnailStop: thumbnailStop,
 		thumbnailWake: make(chan struct{}, 1),
+		rateLimits:    newRateLimiter(cfg.RateLimits),
 	}
 	legacyImages, err := server.store.hasLegacyImages(context.Background())
 	if err != nil {
@@ -405,6 +408,12 @@ func (s *Server) health(w http.ResponseWriter, _ *http.Request) {
 }
 
 func (s *Server) createSession(w http.ResponseWriter, r *http.Request) {
+	now := time.Now()
+	source := requestSource(r)
+	if allowed, retryAfter := s.rateLimits.allowLoginSource(now, source); !allowed {
+		s.rateLimits.reject(w, now, "login_source", "", "", source, retryAfter)
+		return
+	}
 	presented := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
 	matched, ok, err := s.matchCredential(r.Context(), presented)
 	if err != nil {
@@ -415,6 +424,10 @@ func (s *Server) createSession(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusUnauthorized, "invalid token")
 		return
 	}
+	if allowed, retryAfter := s.rateLimits.allowLoginOwner(now, matched.ownerID); !allowed {
+		s.rateLimits.reject(w, now, "login_owner", matched.ownerID, "", source, retryAfter)
+		return
+	}
 
 	raw := make([]byte, 32)
 	if _, err := rand.Read(raw); err != nil {
@@ -423,7 +436,7 @@ func (s *Server) createSession(w http.ResponseWriter, r *http.Request) {
 	}
 	encoded := base64.RawURLEncoding.EncodeToString(raw)
 	hash := sha256.Sum256([]byte(encoded))
-	expires := time.Now().Add(s.cfg.SessionTTL)
+	expires := now.Add(s.cfg.SessionTTL)
 	var replacedHash []byte
 	if currentCookie, err := r.Cookie(sessionCookieName); err == nil && currentCookie.Value != "" {
 		currentHash := sha256.Sum256([]byte(currentCookie.Value))
@@ -520,6 +533,17 @@ func (s *Server) requireAdmin(next http.Handler) http.Handler {
 
 func (s *Server) uploadImage(w http.ResponseWriter, r *http.Request) {
 	ownerID := authenticatedOwner(r)
+	now := time.Now()
+	releaseUpload, acquired := s.rateLimits.acquireUpload(ownerID)
+	if !acquired {
+		s.rateLimits.reject(w, now, "upload_concurrency", ownerID, "", "", time.Second)
+		return
+	}
+	defer releaseUpload()
+	if allowed, retryAfter := s.rateLimits.allowUpload(now, ownerID); !allowed {
+		s.rateLimits.reject(w, now, "upload_hour", ownerID, "", "", retryAfter)
+		return
+	}
 	select {
 	case s.queueSlots <- struct{}{}:
 		defer func() { <-s.queueSlots }()
@@ -809,6 +833,11 @@ func (s *Server) serveFullImage(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
+	now := time.Now()
+	if allowed, retryAfter := s.rateLimits.allowOriginal(now, record.OwnerID); !allowed {
+		s.rateLimits.reject(w, now, "original_hour", record.OwnerID, id, "", retryAfter)
+		return
+	}
 	s.serveFile(w, r, s.processor.fullPath(record.OwnerID, id, extension), record.MediaType)
 }
 
@@ -830,6 +859,11 @@ func (s *Server) serveThumbnail(w http.ResponseWriter, r *http.Request) {
 	}
 	if !found {
 		http.NotFound(w, r)
+		return
+	}
+	now := time.Now()
+	if allowed, retryAfter := s.rateLimits.allowThumbnail(now, record.OwnerID, id); !allowed {
+		s.rateLimits.reject(w, now, "thumbnail", record.OwnerID, id, "", retryAfter)
 		return
 	}
 	s.serveFile(w, r, s.processor.thumbnailPath(record.OwnerID, id), "image/webp")

@@ -31,6 +31,54 @@ type Config struct {
 	WebPQuality          int
 	ThumbQuality         int
 	QueueDepth           int
+	RateLimits           RateLimitConfig
+}
+
+type RateLimitConfig struct {
+	LoginPerMinute             int
+	LoginBurst                 int
+	LoginGlobalPerMinute       int
+	LoginGlobalBurst           int
+	UploadPerHour              int
+	UploadConcurrentPerOwner   int
+	OriginalPerHour            int
+	ThumbnailPerImagePerMinute int
+	ThumbnailPerImagePerHour   int
+	ThumbnailPerOwnerPerHour   int
+}
+
+func (cfg RateLimitConfig) withDefaults() RateLimitConfig {
+	if cfg.LoginPerMinute <= 0 {
+		cfg.LoginPerMinute = 10
+	}
+	if cfg.LoginBurst <= 0 {
+		cfg.LoginBurst = 5
+	}
+	if cfg.LoginGlobalPerMinute <= 0 {
+		cfg.LoginGlobalPerMinute = 120
+	}
+	if cfg.LoginGlobalBurst <= 0 {
+		cfg.LoginGlobalBurst = 30
+	}
+	if cfg.UploadPerHour <= 0 {
+		cfg.UploadPerHour = 500
+	}
+	if cfg.UploadConcurrentPerOwner <= 0 {
+		cfg.UploadConcurrentPerOwner = 2
+	}
+	if cfg.OriginalPerHour <= 0 {
+		cfg.OriginalPerHour = 500
+	}
+	if cfg.ThumbnailPerImagePerMinute <= 0 {
+		cfg.ThumbnailPerImagePerMinute = 5
+	}
+	if cfg.ThumbnailPerImagePerHour <= 0 {
+		cfg.ThumbnailPerImagePerHour = 10
+	}
+	if cfg.ThumbnailPerOwnerPerHour <= 0 {
+		cfg.ThumbnailPerOwnerPerHour = 2000
+	}
+	return cfg
 }
 
 type imageRecord struct {
