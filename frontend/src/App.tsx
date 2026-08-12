@@ -123,7 +123,11 @@ export default function App() {
         try {
           const prepared = await prepareImageForUpload(file);
           updateTask(id, { state: "uploading" });
-          const image = await uploadImage(prepared, (progress) => updateTask(id, { progress }));
+          const image = await uploadImage(
+            prepared,
+            (progress) => updateTask(id, { progress }),
+            () => updateTask(id, { state: "processing", progress: 100 }),
+          );
           updateTask(id, { state: "done", progress: 100, image });
           setImages((current) => [image, ...current.filter((item) => item.id !== image.id)]);
           successful.push(image);
@@ -251,7 +255,10 @@ export default function App() {
         {galleryError ? (
           <div className="state-panel state-panel--error"><p>{galleryError}</p><button type="button" onClick={() => void refresh(range)}>重试</button></div>
         ) : null}
-        {!galleryError && loading ? <div className="gallery-loading"><span className="spinner" /></div> : null}
+        {!galleryError && loading && images.length === 0 ? <div className="gallery-loading"><span className="spinner" /></div> : null}
+        {!galleryError && loading && images.length > 0 ? (
+          <div className="gallery-refreshing" role="status" aria-label="正在刷新图库"><span className="spinner" /></div>
+        ) : null}
         {!galleryError && !loading && images.length === 0 ? (
           <div className="empty-gallery"><ImageIcon /><p>粘贴第一张图片</p></div>
         ) : null}

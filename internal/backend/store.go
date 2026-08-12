@@ -129,6 +129,40 @@ func (s *store) insertImage(ctx context.Context, record imageRecord) error {
 	return err
 }
 
+func (s *store) listPendingThumbnails(ctx context.Context) ([]imageRecord, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT owner_id, id, extension, media_type, width, height,
+		byte_size, thumbnail_size, animated, created_at_ms FROM images
+		WHERE thumbnail_size = 0 ORDER BY created_at_ms DESC, id DESC`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var records []imageRecord
+	for rows.Next() {
+		var record imageRecord
+		if err := rows.Scan(
+			&record.OwnerID, &record.ID, &record.Extension, &record.MediaType, &record.Width,
+			&record.Height, &record.ByteSize, &record.ThumbnailSize,
+			&record.Animated, &record.CreatedAtMilli,
+		); err != nil {
+			return nil, err
+		}
+		records = append(records, record)
+	}
+	return records, rows.Err()
+}
+
+func (s *store) setThumbnailSize(ctx context.Context, ownerID, id string, size int64) (bool, error) {
+	result, err := s.db.ExecContext(ctx, `UPDATE images SET thumbnail_size = ?
+		WHERE owner_id = ? AND id = ? AND thumbnail_size = 0`, size, ownerID, id)
+	if err != nil {
+		return false, err
+	}
+	updated, err := result.RowsAffected()
+	return updated == 1, err
+}
+
 func (s *store) listImages(ctx context.Context, ownerID string, sinceMilli int64, limit int) ([]imageRecord, error) {
 	query := `SELECT owner_id, id, extension, media_type, width, height, byte_size,
 		thumbnail_size, animated, created_at_ms FROM images WHERE owner_id = ?`

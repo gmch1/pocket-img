@@ -12,7 +12,7 @@ export interface ImageItem {
   thumbnail_url: string;
 }
 
-export type UploadState = "queued" | "optimizing" | "uploading" | "done" | "error";
+export type UploadState = "queued" | "optimizing" | "uploading" | "processing" | "done" | "error";
 
 export interface UploadTask {
   id: string;

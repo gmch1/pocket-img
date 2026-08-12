@@ -77,6 +77,8 @@ button:focus-visible, input:focus-visible, [role="button"]:focus-visible { outli
 .selection-mark svg { width: 15px; }
 .animation-mark { position: absolute; left: 9px; bottom: 9px; padding: 3px 6px; border-radius: 6px; color: #fff; background: rgba(20, 22, 20, 0.65); font-size: 10px; font-weight: 700; letter-spacing: 0.06em; backdrop-filter: blur(5px); }
 .empty-gallery, .state-panel, .gallery-loading { min-height: 50vh; display: grid; place-items: center; align-content: center; gap: 14px; color: var(--muted); text-align: center; }
+.gallery-refreshing { position: fixed; z-index: 19; top: 80px; left: 50%; width: 34px; height: 34px; display: grid; place-items: center; border: 1px solid var(--line); border-radius: 11px; background: var(--surface-raised); box-shadow: var(--shadow); transform: translateX(-50%); pointer-events: none; }
+.gallery-refreshing .spinner { width: 16px; height: 16px; }
 .empty-gallery svg { width: 42px; opacity: 0.4; }
 .empty-gallery p, .state-panel p { margin: 0; }
 .state-panel button { padding: 8px 14px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface); cursor: pointer; }
@@ -103,6 +105,8 @@ button:focus-visible, input:focus-visible, [role="button"]:focus-visible { outli
 .progress-track { height: 3px; overflow: hidden; border-radius: 3px; background: var(--soft); }
 .progress-track i { display: block; height: 100%; border-radius: inherit; background: var(--accent); transition: width 0.15s linear; }
 .progress-track--error i { background: var(--danger); }
+.progress-track--processing i { width: 35% !important; animation: upload-processing 0.9s ease-in-out infinite; }
+@keyframes upload-processing { from { transform: translateX(-110%); } to { transform: translateX(310%); } }
 
 .preview-backdrop { z-index: 60; background: rgba(13, 15, 14, 0.86); }
 .preview-shell { position: relative; width: min(94vw, 1500px); height: min(90vh, 1000px); display: grid; place-items: center; }
@@ -131,6 +135,7 @@ button:focus-visible, input:focus-visible, [role="button"]:focus-visible { outli
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+  .progress-track--processing i { width: 100% !important; transform: none; }
 }
 
 @media (prefers-color-scheme: dark) {

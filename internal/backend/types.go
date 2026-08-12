@@ -41,6 +41,11 @@ type imageResponse struct {
 }
 
 func (record imageRecord) response() imageResponse {
+	url := "/i/" + record.ID + "." + record.Extension
+	thumbnailURL := url
+	if record.ThumbnailSize > 0 {
+		thumbnailURL = "/t/" + record.ID + ".webp"
+	}
 	return imageResponse{
 		ID:            record.ID,
 		Width:         record.Width,
@@ -49,7 +54,7 @@ func (record imageRecord) response() imageResponse {
 		ThumbnailSize: record.ThumbnailSize,
 		Animated:      record.Animated,
 		CreatedAt:     time.UnixMilli(record.CreatedAtMilli).UTC().Format(time.RFC3339Nano),
-		URL:           "/i/" + record.ID + "." + record.Extension,
-		ThumbnailURL:  "/t/" + record.ID + ".webp",
+		URL:           url,
+		ThumbnailURL:  thumbnailURL,
 	}
 }

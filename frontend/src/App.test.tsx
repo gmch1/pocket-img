@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import App from "./App";
 import { APIError, createSession, listImages, uploadImage } from "./api";
@@ -35,7 +35,9 @@ const image: ImageItem = {
 
 describe("App", () => {
   beforeEach(() => {
+    vi.mocked(listImages).mockReset();
     vi.mocked(createSession).mockResolvedValue();
+    vi.mocked(copyText).mockReset();
     vi.mocked(copyText).mockResolvedValue();
     vi.mocked(prepareImageForUpload).mockImplementation(async (file) => file);
     vi.mocked(uploadImage).mockReset();
@@ -87,5 +89,50 @@ describe("App", () => {
     expect(screen.getByRole("button", { name: "永久删除图片" })).toBeTruthy();
     expect(screen.queryByText("复制图片链接")).toBeNull();
     expect(screen.queryByText("永久删除图片")).toBeNull();
+  });
+
+  test("keeps the current gallery in place while changing the date range", async () => {
+    let finishRefresh: ((images: ImageItem[]) => void) | undefined;
+    vi.mocked(listImages)
+      .mockResolvedValueOnce([image])
+      .mockImplementationOnce(() => new Promise((resolve) => { finishRefresh = resolve; }));
+
+    const { container } = render(<App />);
+    expect(await screen.findByRole("button", { name: "复制图片链接" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "7 天" }));
+
+    await waitFor(() => expect(listImages).toHaveBeenCalledTimes(2));
+    expect(container.querySelector(".gallery-loading")).toBeNull();
+    expect(screen.getByLabelText("正在刷新图库")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "复制图片链接" })).toBeTruthy();
+
+    await act(async () => finishRefresh?.([image]));
+    await waitFor(() => expect(screen.queryByLabelText("正在刷新图库")).toBeNull());
+  });
+
+  test("shows server processing instead of a premature 100 percent", async () => {
+    let finishUpload: ((image: ImageItem) => void) | undefined;
+    vi.mocked(listImages).mockResolvedValue([]);
+    vi.mocked(uploadImage).mockImplementation((_file, onProgress, onProcessing) => {
+      onProgress(99);
+      onProcessing?.();
+      return new Promise((resolve) => { finishUpload = resolve; });
+    });
+
+    render(<App />);
+    await screen.findByText("粘贴第一张图片");
+    const file = new File(["webp"], "clipboard.webp", { type: "image/webp" });
+    fireEvent.paste(window, {
+      clipboardData: {
+        items: [{ kind: "file", type: "image/webp", getAsFile: () => file }],
+      },
+    });
+
+    expect(await screen.findByText("处理中")).toBeTruthy();
+    expect(screen.queryByText("100%")).toBeNull();
+
+    await act(async () => finishUpload?.(image));
+    await waitFor(() => expect(screen.queryByText("处理中")).toBeNull());
+    expect(screen.getByText("✓")).toBeTruthy();
   });
 });

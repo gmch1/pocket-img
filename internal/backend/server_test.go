@@ -2,6 +2,7 @@ package backend
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"database/sql"
 	"encoding/json"
@@ -170,6 +171,23 @@ func (backend *testBackend) uploadClient(t *testing.T, client *http.Client, name
 	return result.Image
 }
 
+func (backend *testBackend) waitForThumbnail(t *testing.T, id string) imageResponse {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		record, found, err := backend.server.store.getImageByID(context.Background(), id)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if found && record.ThumbnailSize > 0 {
+			return record.response()
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatalf("thumbnail for %s was not generated", id)
+	return imageResponse{}
+}
+
 func TestStaticImageEndToEnd(t *testing.T) {
 	backend := newTestBackend(t)
 
@@ -191,6 +209,9 @@ func TestStaticImageEndToEnd(t *testing.T) {
 	if result.URL[len(result.URL)-5:] != ".webp" {
 		t.Fatalf("static image was not converted to webp: %s", result.URL)
 	}
+	if result.ThumbnailSize != 0 || result.ThumbnailURL != result.URL {
+		t.Fatalf("upload waited for the thumbnail: %#v", result)
+	}
 
 	publicResponse, err := http.Get(backend.http.URL + result.URL)
 	if err != nil {
@@ -209,7 +230,8 @@ func TestStaticImageEndToEnd(t *testing.T) {
 		t.Fatalf("full dimensions=%dx%d", fullConfig.Width, fullConfig.Height)
 	}
 
-	thumbnailResponse, err := http.Get(backend.http.URL + result.ThumbnailURL)
+	ready := backend.waitForThumbnail(t, result.ID)
+	thumbnailResponse, err := http.Get(backend.http.URL + ready.ThumbnailURL)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -271,6 +293,9 @@ func TestGIFIsPreservedAndGetsWebPThumbnail(t *testing.T) {
 	if !result.Animated || result.URL[len(result.URL)-4:] != ".gif" {
 		t.Fatalf("unexpected gif metadata: %#v", result)
 	}
+	if result.ThumbnailSize != 0 || result.ThumbnailURL != result.URL {
+		t.Fatalf("gif upload waited for the thumbnail: %#v", result)
+	}
 
 	publicResponse, err := http.Get(backend.http.URL + result.URL)
 	if err != nil {
@@ -285,7 +310,8 @@ func TestGIFIsPreservedAndGetsWebPThumbnail(t *testing.T) {
 		t.Fatal("gif bytes changed during storage")
 	}
 
-	thumbnailResponse, err := http.Get(backend.http.URL + result.ThumbnailURL)
+	ready := backend.waitForThumbnail(t, result.ID)
+	thumbnailResponse, err := http.Get(backend.http.URL + ready.ThumbnailURL)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -304,6 +330,9 @@ func TestStaticWebPIsValidatedAndStoredWithoutReencoding(t *testing.T) {
 	if result.Animated || result.Width != 640 || result.Height != 360 {
 		t.Fatalf("unexpected webp metadata: %#v", result)
 	}
+	if result.ThumbnailSize != 0 || result.ThumbnailURL != result.URL {
+		t.Fatalf("webp upload waited for the thumbnail: %#v", result)
+	}
 
 	publicResponse, err := http.Get(backend.http.URL + result.URL)
 	if err != nil {
@@ -318,7 +347,8 @@ func TestStaticWebPIsValidatedAndStoredWithoutReencoding(t *testing.T) {
 		t.Fatal("safe static webp was unexpectedly re-encoded")
 	}
 
-	thumbnailResponse, err := http.Get(backend.http.URL + result.ThumbnailURL)
+	ready := backend.waitForThumbnail(t, result.ID)
+	thumbnailResponse, err := http.Get(backend.http.URL + ready.ThumbnailURL)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -327,6 +357,54 @@ func TestStaticWebPIsValidatedAndStoredWithoutReencoding(t *testing.T) {
 	if err != nil {
 		t.Fatalf("decode webp thumbnail: %v", err)
 	}
+}
+
+func TestPendingThumbnailIsRecoveredOnStartup(t *testing.T) {
+	dataDir := t.TempDir()
+	cfg := testConfig(dataDir, map[string]string{"alice": testToken})
+	if err := os.MkdirAll(filepath.Join(dataDir, "tmp"), 0o750); err != nil {
+		t.Fatal(err)
+	}
+	tempPath := filepath.Join(dataDir, "tmp", "pending.webp")
+	if err := os.WriteFile(tempPath, makeWebP(t, 800, 600), 0o640); err != nil {
+		t.Fatal(err)
+	}
+	record, err := newProcessor(cfg).process(tempPath, "alice")
+	if err != nil {
+		t.Fatal(err)
+	}
+	database, err := openStore(dataDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := database.insertImage(context.Background(), record); err != nil {
+		database.close()
+		t.Fatal(err)
+	}
+	if err := database.close(); err != nil {
+		t.Fatal(err)
+	}
+
+	app, err := New(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer app.Close()
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		stored, found, err := app.store.getImageByID(context.Background(), record.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if found && stored.ThumbnailSize > 0 {
+			if _, err := os.Stat(app.processor.thumbnailPath("alice", record.ID)); err != nil {
+				t.Fatalf("recovered thumbnail is missing: %v", err)
+			}
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatal("pending thumbnail was not recovered after startup")
 }
 
 func TestSpacesAreIsolatedButPublicImagesRemainPublic(t *testing.T) {

@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"mime/multipart"
 	"net/http"
 	"net/url"
@@ -20,6 +21,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"phone-image-host/internal/webui"
@@ -35,14 +37,21 @@ type credential struct {
 type ownerContextKey struct{}
 
 type Server struct {
-	cfg          Config
-	store        *store
-	processor    *processor
-	handler      http.Handler
-	queueSlots   chan struct{}
-	processSlots chan struct{}
-	credentials  []credential
-	location     *time.Location
+	cfg           Config
+	store         *store
+	processor     *processor
+	handler       http.Handler
+	queueSlots    chan struct{}
+	processSlots  chan struct{}
+	credentials   []credential
+	location      *time.Location
+	thumbnailCtx  context.Context
+	thumbnailStop context.CancelFunc
+	thumbnailWake chan struct{}
+	thumbnailWG   sync.WaitGroup
+	thumbnailMu   sync.Mutex
+	closeOnce     sync.Once
+	closeErr      error
 }
 
 func New(cfg Config) (*Server, error) {
@@ -96,14 +105,18 @@ func New(cfg Config) (*Server, error) {
 		return nil, err
 	}
 
+	thumbnailCtx, thumbnailStop := context.WithCancel(context.Background())
 	server := &Server{
-		cfg:          cfg,
-		store:        database,
-		processor:    newProcessor(cfg),
-		queueSlots:   make(chan struct{}, cfg.QueueDepth),
-		processSlots: make(chan struct{}, 1),
-		credentials:  credentials,
-		location:     location,
+		cfg:           cfg,
+		store:         database,
+		processor:     newProcessor(cfg),
+		queueSlots:    make(chan struct{}, cfg.QueueDepth),
+		processSlots:  make(chan struct{}, 1),
+		credentials:   credentials,
+		location:      location,
+		thumbnailCtx:  thumbnailCtx,
+		thumbnailStop: thumbnailStop,
+		thumbnailWake: make(chan struct{}, 1),
 	}
 	legacyImages, err := server.store.hasLegacyImages(context.Background())
 	if err != nil {
@@ -152,6 +165,8 @@ func New(cfg Config) (*Server, error) {
 		return nil, err
 	}
 	server.handler = server.routes()
+	server.thumbnailWG.Add(1)
+	go server.runThumbnailWorker()
 	return server, nil
 }
 
@@ -206,7 +221,77 @@ func (s *Server) Handler() http.Handler {
 }
 
 func (s *Server) Close() error {
-	return s.store.close()
+	s.closeOnce.Do(func() {
+		s.thumbnailStop()
+		s.thumbnailWG.Wait()
+		s.closeErr = s.store.close()
+	})
+	return s.closeErr
+}
+
+func (s *Server) wakeThumbnailWorker() {
+	select {
+	case s.thumbnailWake <- struct{}{}:
+	default:
+	}
+}
+
+func (s *Server) runThumbnailWorker() {
+	defer s.thumbnailWG.Done()
+	ticker := time.NewTicker(time.Minute)
+	defer ticker.Stop()
+
+	for {
+		s.processPendingThumbnails()
+		select {
+		case <-s.thumbnailCtx.Done():
+			return
+		case <-s.thumbnailWake:
+		case <-ticker.C:
+		}
+	}
+}
+
+func (s *Server) processPendingThumbnails() {
+	records, err := s.store.listPendingThumbnails(s.thumbnailCtx)
+	if err != nil {
+		if s.thumbnailCtx.Err() == nil {
+			log.Printf("thumbnail queue scan failed: %v", err)
+		}
+		return
+	}
+	for _, record := range records {
+		if s.thumbnailCtx.Err() != nil {
+			return
+		}
+		s.processThumbnail(record)
+	}
+}
+
+func (s *Server) processThumbnail(record imageRecord) {
+	s.thumbnailMu.Lock()
+	defer s.thumbnailMu.Unlock()
+	if s.thumbnailCtx.Err() != nil {
+		return
+	}
+
+	size, err := s.processor.generateThumbnail(record)
+	debug.FreeOSMemory()
+	if err != nil {
+		log.Printf("thumbnail generation failed for %s: %v", record.ID, err)
+		return
+	}
+	updated, err := s.store.setThumbnailSize(s.thumbnailCtx, record.OwnerID, record.ID, size)
+	if err != nil {
+		_ = os.Remove(s.processor.thumbnailPath(record.OwnerID, record.ID))
+		if s.thumbnailCtx.Err() == nil {
+			log.Printf("thumbnail metadata update failed for %s: %v", record.ID, err)
+		}
+		return
+	}
+	if !updated {
+		_ = os.Remove(s.processor.thumbnailPath(record.OwnerID, record.ID))
+	}
 }
 
 func (s *Server) routes() http.Handler {
@@ -385,6 +470,7 @@ func (s *Server) uploadImage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	s.wakeThumbnailWorker()
 	writeJSON(w, http.StatusCreated, map[string]any{"image": record.response()})
 }
 
@@ -518,6 +604,8 @@ func (s *Server) deleteImages(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ownerID := authenticatedOwner(r)
+	s.thumbnailMu.Lock()
+	defer s.thumbnailMu.Unlock()
 	records, err := s.store.getImages(r.Context(), ownerID, ids)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "load images")
