@@ -186,7 +186,7 @@ data/
 - 单个引导空间自动成为管理员；配置多个引导空间时必须通过 `PIH_ADMIN_SPACE_ID` 指定管理员。Android App 自动把当前主空间传给后端。
 - 旧版单 Token 数据库升级且只配置一个空间时，启动过程自动补充 `owner_id` 并把旧文件移动到该空间目录。旧库直接切换到多个空间时，应保留一个名为 `default` 的空间用于接管历史图片。
 - 目标产物不依赖设备上的 Node、npm、SQLite CLI、libwebp 动态库或图片转换命令。
-- 已 Root 设备可通过 Magisk `service.d` 或 Linux chroot 的进程守护方式启动；普通 ARM64 Android 设备可使用管理 App 的前台服务手动启停内嵌 Go 后端。
+- 已 Root 设备可通过 Magisk `service.d` 或 Linux chroot 的进程守护方式启动；普通 ARM64 Android 设备可使用管理 App 的前台服务手动启停内嵌 Go 后端。Android 壳还可选让同一 Go 子进程维护受限 SSH 反向隧道，设备密钥位于 App 私有目录，远端和本机端点均限制为回环地址。
 - 当前开发阶段由手机监听 `0.0.0.0:8080` 提供可信局域网 HTTP，显式设置 `PIH_COOKIE_SECURE=false`，不包含外部入口配置。
 - React 前端已经内嵌并在局域网入口完成验收；接入外部 HTTPS 入口时，把 `PIH_COOKIE_SECURE` 恢复为默认值 `true`。
 - v1 不实现请求频率限制，继续用上传大小、像素上限、有界队列和单 worker 控制资源消耗。

@@ -15,6 +15,7 @@ import (
 	_ "time/tzdata"
 
 	"phone-image-host/internal/backend"
+	"phone-image-host/internal/tunnel"
 )
 
 func main() {
@@ -61,8 +62,8 @@ func main() {
 		MaxHeaderBytes:    64 << 10,
 	}
 
-	stop := make(chan os.Signal, 1)
-	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
+	runContext, stopSignals := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stopSignals()
 
 	go func() {
 		log.Printf("backend listening on http://%s (data=%s, spaces=%d)", server.Addr, cfg.DataDir, len(cfg.Tokens))
@@ -71,7 +72,22 @@ func main() {
 		}
 	}()
 
-	<-stop
+	if envBool("PIH_TUNNEL_ENABLED", false) {
+		tunnelConfig := tunnel.Config{
+			ServerAddr:       os.Getenv("PIH_TUNNEL_SERVER"),
+			User:             os.Getenv("PIH_TUNNEL_USER"),
+			RemoteAddr:       os.Getenv("PIH_TUNNEL_REMOTE_ADDR"),
+			LocalAddr:        os.Getenv("PIH_TUNNEL_LOCAL_ADDR"),
+			PrivateKeyPath:   os.Getenv("PIH_TUNNEL_PRIVATE_KEY"),
+			PublicKeyPath:    os.Getenv("PIH_TUNNEL_PUBLIC_KEY"),
+			StatusPath:       os.Getenv("PIH_TUNNEL_STATUS_FILE"),
+			HostKeySHA256:    os.Getenv("PIH_TUNNEL_HOST_KEY_SHA256"),
+			DeviceKeyComment: os.Getenv("PIH_TUNNEL_KEY_COMMENT"),
+		}
+		go tunnel.Run(runContext, tunnelConfig)
+	}
+
+	<-runContext.Done()
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	if err := server.Shutdown(ctx); err != nil {

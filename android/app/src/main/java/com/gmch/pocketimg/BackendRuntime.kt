@@ -7,7 +7,17 @@ import android.system.OsConstants
 import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
+import java.time.Instant
 import java.util.concurrent.TimeUnit
+import org.json.JSONObject
+
+data class TunnelSnapshot(
+    val enabled: Boolean,
+    val state: String,
+    val message: String,
+    val connectedAtMillis: Long?,
+    val publicKey: String?,
+)
 
 data class BackendSnapshot(
     val running: Boolean,
@@ -18,6 +28,7 @@ data class BackendSnapshot(
     val dataBytes: Long,
     val freeBytes: Long,
     val logTail: String,
+    val tunnel: TunnelSnapshot,
 )
 
 object BackendRuntime {
@@ -38,6 +49,8 @@ object BackendRuntime {
 
         ServiceSettings.ensureToken(context)
         val accessMode = ServiceSettings.accessMode(context)
+        val tunnel = ServiceSettings.tunnelSettings(context)
+        tunnel.validationError()?.let { error(it) }
         rotateLogIfNeeded(ServiceSettings.logFile(context))
         val executable = File(context.applicationInfo.nativeLibraryDir, "libpocketimg.so")
         check(executable.isFile && executable.canExecute()) { "APK 内 Go 服务不可执行" }
@@ -59,10 +72,22 @@ object BackendRuntime {
                 environment()["PIH_TOKENS_FILE"] = ServiceSettings.tokenFile(context).absolutePath
                 environment()["PIH_ADMIN_SPACE_ID"] = ServiceSettings.spaceId(context)
                 environment()["PIH_DATA_DIR"] = ServiceSettings.dataDir(context).absolutePath
-                environment()["PIH_ADDR"] = "0.0.0.0:$port"
+                environment()["PIH_ADDR"] = if (tunnel.enabled && tunnel.localOnly) "127.0.0.1:$port" else "0.0.0.0:$port"
                 environment()["PIH_COOKIE_SECURE"] = accessMode.cookieSecure.toString()
                 environment()["PIH_READ_TIMEOUT"] = accessMode.readTimeout
                 environment()["PIH_WRITE_TIMEOUT"] = accessMode.writeTimeout
+                environment()["PIH_TUNNEL_ENABLED"] = tunnel.enabled.toString()
+                if (tunnel.enabled) {
+                    environment()["PIH_TUNNEL_SERVER"] = tunnel.serverAddress()
+                    environment()["PIH_TUNNEL_USER"] = tunnel.user
+                    environment()["PIH_TUNNEL_REMOTE_ADDR"] = "127.0.0.1:${tunnel.remotePort}"
+                    environment()["PIH_TUNNEL_LOCAL_ADDR"] = "127.0.0.1:$port"
+                    environment()["PIH_TUNNEL_PRIVATE_KEY"] = ServiceSettings.tunnelPrivateKeyFile(context).absolutePath
+                    environment()["PIH_TUNNEL_PUBLIC_KEY"] = ServiceSettings.tunnelPublicKeyFile(context).absolutePath
+                    environment()["PIH_TUNNEL_STATUS_FILE"] = ServiceSettings.tunnelStatusFile(context).absolutePath
+                    environment()["PIH_TUNNEL_HOST_KEY_SHA256"] = tunnel.hostKeyFingerprint
+                    environment()["PIH_TUNNEL_KEY_COMMENT"] = "pocketimg-android"
+                }
             }
             .start()
         child = process
@@ -126,6 +151,7 @@ object BackendRuntime {
             dataBytes = dataBytes(dataDir),
             freeBytes = dataDir.usableSpace,
             logTail = tail(ServiceSettings.logFile(context), 12_000),
+            tunnel = tunnelSnapshot(context, healthy && pid != null),
         )
     }
 
@@ -227,6 +253,31 @@ object BackendRuntime {
         if (log.length() <= 2L * 1024 * 1024) return
         File(log.parentFile, "server.log.1").delete()
         log.renameTo(File(log.parentFile, "server.log.1"))
+    }
+
+    private fun tunnelSnapshot(context: Context, backendRunning: Boolean): TunnelSnapshot {
+        val settings = ServiceSettings.tunnelSettings(context)
+        if (!settings.enabled) {
+            return TunnelSnapshot(false, "disabled", "", null, ServiceSettings.tunnelPublicKey(context))
+        }
+        if (!backendRunning) {
+            return TunnelSnapshot(true, "stopped", "", null, ServiceSettings.tunnelPublicKey(context))
+        }
+        return runCatching {
+            val status = JSONObject(ServiceSettings.tunnelStatusFile(context).readText())
+            val connectedAt = status.optString("connected_at")
+                .takeIf(String::isNotBlank)
+                ?.let { Instant.parse(it).toEpochMilli() }
+            TunnelSnapshot(
+                enabled = true,
+                state = status.optString("state", "connecting"),
+                message = status.optString("message"),
+                connectedAtMillis = connectedAt,
+                publicKey = ServiceSettings.tunnelPublicKey(context),
+            )
+        }.getOrElse {
+            TunnelSnapshot(true, "connecting", "", null, ServiceSettings.tunnelPublicKey(context))
+        }
     }
 
     private fun File.readTextOrNull(): String? = runCatching { readText() }.getOrNull()

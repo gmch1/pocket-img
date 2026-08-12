@@ -30,4 +30,31 @@ class ServiceSettingsTest {
         assertEquals("180s", AccessMode.EXTERNAL_HTTPS.readTimeout)
         assertEquals("240s", AccessMode.EXTERNAL_HTTPS.writeTimeout)
     }
+
+    @Test
+    fun tunnelConfigurationRequiresPinnedHttpsAndRestrictedFields() {
+        val valid = TunnelSettings(
+            enabled = true,
+            host = "ssh.example.com",
+            port = 22,
+            user = "pocketimg-phone",
+            remotePort = 18081,
+            hostKeyFingerprint = "SHA256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+            publicUrl = "https://img.example.com",
+            localOnly = true,
+        )
+        assertEquals(null, valid.validationError())
+        assertEquals("ssh.example.com:22", valid.serverAddress())
+        assertTrue(ServiceSettings.isValidPublicUrl("https://img.example.com"))
+        assertFalse(ServiceSettings.isValidPublicUrl("http://img.example.com"))
+        assertFalse(ServiceSettings.isValidPublicUrl("https://user@img.example.com"))
+        assertFalse(valid.copy(hostKeyFingerprint = "").validationError() == null)
+        assertFalse(valid.copy(user = "bad user").validationError() == null)
+    }
+
+    @Test
+    fun disabledTunnelMayKeepIncompleteDraftFields() {
+        val draft = TunnelSettings(false, "", 22, "", 18081, "", "", true)
+        assertEquals(null, draft.validationError())
+    }
 }
