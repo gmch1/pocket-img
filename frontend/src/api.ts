@@ -61,14 +61,19 @@ export async function deleteImages(ids: string[]): Promise<number> {
   return body.deleted;
 }
 
-export function uploadImage(file: File, onProgress: (progress: number) => void): Promise<ImageItem> {
+export function uploadImage(
+  file: File,
+  onProgress: (progress: number) => void,
+  onProcessing?: () => void,
+): Promise<ImageItem> {
   return new Promise((resolve, reject) => {
     const request = new XMLHttpRequest();
     request.open("POST", "/api/images");
     request.withCredentials = true;
     request.upload.addEventListener("progress", (event) => {
-      if (event.lengthComputable) onProgress(Math.round((event.loaded / event.total) * 100));
+      if (event.lengthComputable) onProgress(Math.min(99, Math.round((event.loaded / event.total) * 100)));
     });
+    request.upload.addEventListener("load", () => onProcessing?.());
     request.addEventListener("load", () => {
       let body: { image?: ImageItem; error?: string } = {};
       try {

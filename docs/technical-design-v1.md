@@ -67,10 +67,10 @@ Go process
 
 ### 3.3 图片处理队列
 
-- 默认图片转换 worker 数量为 `1`，允许配置但不建议在手机上超过 `2`。
-- 队列必须有固定长度；队列已满时返回 `503`，不能无限积压内存对象。
-- HTTP 上传先流式写入临时目录，再把文件路径加入处理队列。
-- worker 同一时间只解码一张图片，完成编码、落盘和元数据提交后再处理下一张。
+- HTTP 上传并发使用固定长度的有界槽位；槽位已满时返回 `503`，不能无限积压内存对象。
+- 上传先流式写入临时目录。安全静态 WebP 和动图完成校验后直接提交全尺寸文件与元数据；需要净化或格式转换的输入仍通过单槽位同步处理。
+- 元数据以 `thumbnail_size = 0` 表示待生成缩略图；提交后唤醒单独的缩略图 worker，上传响应不等待该 worker。
+- 缩略图 worker 同一时间只解码一张图片，并在服务启动及周期扫描时补做未完成任务。
 - 解码前读取格式、宽高和动画属性，先检查文件字节数和总像素数。
 - 失败任务删除全部临时文件，不写入正式元数据。
 - 默认解码像素上限为 20 MP；这是根据目标设备压测从预研初值 40 MP 收紧后的结果。
@@ -97,29 +97,25 @@ Go process
 temporary upload
   → header/decode-config validation
   → pixel-limit check
-  → decode once
   ├── safe static WebP → validated full-size passthrough
-  ├── PNG/JPEG/metadata WebP → full-size WebP quality 82
-  └── 640px thumbnail WebP quality 75
-  → fsync/atomic rename
-  → SQLite transaction
-  → remove temporary source
+  └── PNG/JPEG/metadata WebP → decode → full-size WebP quality 82
+  → fsync/atomic rename → SQLite pending-thumbnail row → HTTP 201
+  → background decode → 640px thumbnail WebP quality 75
+  → atomic rename → update thumbnail size
 ```
 
 - PNG、JPEG 和静态 WebP 都进入静态图片管线，客户端预压缩不能绕过后端校验。
 - 全尺寸输出保持输入宽高，不做放大或缩小。
 - 缩略图保持宽高比，长边不超过 640 px。
-- 解码后的像素缓冲尽量在全尺寸编码和缩略图生成之间复用。
-- 无动画且仅包含标准图像/Alpha 块的 WebP 在成功解码后直接作为全尺寸文件；包含 ICC、EXIF、XMP 或未知块时重编码净化。
+- 无动画且仅包含标准图像/Alpha 块的 WebP 在完成头部和容器结构校验后直接作为全尺寸文件；包含 ICC、EXIF、XMP 或未知块时重编码净化。
 
 ### 4.2 动图
 
 ```text
 temporary GIF / animated WebP
   → format and pixel validation
-  ├── original animation atomic rename
-  └── decode first frame → 640px WebP thumbnail
-  → SQLite transaction
+  → original animation atomic rename → SQLite pending-thumbnail row → HTTP 201
+  → background decode first frame → 640px WebP thumbnail
 ```
 
 - 动图正式文件保持上传字节不变。
@@ -129,10 +125,10 @@ temporary GIF / animated WebP
 ### 4.3 原子性
 
 - 临时文件、正式文件和 SQLite 位于同一数据分区，保证重命名可原子完成。
-- 先生成并同步两个正式候选文件，再提交 SQLite 事务。
-- 数据库提交失败时删除候选文件。
-- 进程启动时扫描并清理超过安全时限的孤立临时文件。
-- 永久删除先在数据库中标记删除，再删除文件，最后删除元数据；异常恢复时重试未完成的文件清理。
+- 先同步并原子提交全尺寸文件，再写入待生成缩略图的 SQLite 记录；数据库提交失败时删除全尺寸文件。
+- 缩略图先写入临时候选文件，再原子重命名并更新 `thumbnail_size`；服务进程异常退出时，数据库中的零值记录会在下次启动补做。
+- 待生成记录的 API 响应把 `thumbnail_url` 暂时指向已落盘的全尺寸公开 URL，避免出现不可访问的图片卡片。
+- 永久删除与缩略图提交使用同一互斥区，保证删除完成后后台 worker 不会重新留下缩略图。
 
 ## 5. SQLite 设计原则
 

@@ -86,18 +86,11 @@ func (p *processor) process(tempPath, ownerID string) (imageRecord, error) {
 		mediaType = "image/gif"
 	}
 
-	imageValue, err := decodeFirstFrame(tempPath, format)
-	if err != nil {
-		return imageRecord{}, fmt.Errorf("decode image: %w", err)
-	}
-
 	fullCandidate := filepath.Join(p.dataDir, "tmp", id+".full."+fullExtension)
-	thumbCandidate := filepath.Join(p.dataDir, "tmp", id+".thumb.webp")
 	cleanupCandidates := true
 	defer func() {
 		if cleanupCandidates {
 			_ = os.Remove(fullCandidate)
-			_ = os.Remove(thumbCandidate)
 		}
 	}()
 
@@ -105,38 +98,26 @@ func (p *processor) process(tempPath, ownerID string) (imageRecord, error) {
 		if err := renameOrCopy(tempPath, fullCandidate); err != nil {
 			return imageRecord{}, fmt.Errorf("preserve webp or animation: %w", err)
 		}
-	} else if err := writeWebP(fullCandidate, imageValue, p.webpQuality); err != nil {
-		return imageRecord{}, fmt.Errorf("encode full webp: %w", err)
-	}
-
-	thumbnail := resizeDown(imageValue, p.thumbnailMax)
-	if err := writeWebP(thumbCandidate, thumbnail, p.thumbQuality); err != nil {
-		return imageRecord{}, fmt.Errorf("encode thumbnail: %w", err)
+	} else {
+		imageValue, err := decodeFirstFrame(tempPath, format)
+		if err != nil {
+			return imageRecord{}, fmt.Errorf("decode image: %w", err)
+		}
+		if err := writeWebP(fullCandidate, imageValue, p.webpQuality); err != nil {
+			return imageRecord{}, fmt.Errorf("encode full webp: %w", err)
+		}
 	}
 
 	fullPath := p.fullPath(ownerID, id, fullExtension)
-	thumbPath := p.thumbnailPath(ownerID, id)
 	if err := os.MkdirAll(filepath.Dir(fullPath), 0o750); err != nil {
-		return imageRecord{}, err
-	}
-	if err := os.MkdirAll(filepath.Dir(thumbPath), 0o750); err != nil {
 		return imageRecord{}, err
 	}
 	if err := os.Rename(fullCandidate, fullPath); err != nil {
 		return imageRecord{}, fmt.Errorf("commit full image: %w", err)
 	}
-	if err := os.Rename(thumbCandidate, thumbPath); err != nil {
-		_ = os.Remove(fullPath)
-		return imageRecord{}, fmt.Errorf("commit thumbnail: %w", err)
-	}
 	cleanupCandidates = false
 
 	fullInfo, err := os.Stat(fullPath)
-	if err != nil {
-		p.removeFiles(ownerID, id, fullExtension)
-		return imageRecord{}, err
-	}
-	thumbInfo, err := os.Stat(thumbPath)
 	if err != nil {
 		p.removeFiles(ownerID, id, fullExtension)
 		return imageRecord{}, err
@@ -150,10 +131,40 @@ func (p *processor) process(tempPath, ownerID string) (imageRecord, error) {
 		Width:          config.Width,
 		Height:         config.Height,
 		ByteSize:       fullInfo.Size(),
-		ThumbnailSize:  thumbInfo.Size(),
+		ThumbnailSize:  0,
 		Animated:       animated,
 		CreatedAtMilli: time.Now().UTC().UnixMilli(),
 	}, nil
+}
+
+func (p *processor) generateThumbnail(record imageRecord) (int64, error) {
+	imageValue, err := decodeFirstFrame(
+		p.fullPath(record.OwnerID, record.ID, record.Extension),
+		record.Extension,
+	)
+	if err != nil {
+		return 0, fmt.Errorf("decode image for thumbnail: %w", err)
+	}
+
+	candidate := filepath.Join(p.dataDir, "tmp", record.ID+".thumb.webp")
+	_ = os.Remove(candidate)
+	defer os.Remove(candidate)
+	if err := writeWebP(candidate, resizeDown(imageValue, p.thumbnailMax), p.thumbQuality); err != nil {
+		return 0, fmt.Errorf("encode thumbnail: %w", err)
+	}
+
+	thumbnailPath := p.thumbnailPath(record.OwnerID, record.ID)
+	if err := os.MkdirAll(filepath.Dir(thumbnailPath), 0o750); err != nil {
+		return 0, err
+	}
+	if err := os.Rename(candidate, thumbnailPath); err != nil {
+		return 0, fmt.Errorf("commit thumbnail: %w", err)
+	}
+	info, err := os.Stat(thumbnailPath)
+	if err != nil {
+		return 0, err
+	}
+	return info.Size(), nil
 }
 
 func decodeConfig(path string) (image.Config, string, error) {
