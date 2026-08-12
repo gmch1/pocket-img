@@ -97,7 +97,13 @@ export default function App() {
   }, [range, refresh]);
 
   const updateTask = useCallback((id: string, patch: Partial<UploadTask>) => {
-    setUploadTasks((current) => current.map((task) => task.id === id ? { ...task, ...patch } : task));
+    setUploadTasks((current) => {
+      const task = current.find((item) => item.id === id);
+      if (!task) return current;
+      const next = [{ ...task, ...patch }, ...current.filter((item) => item.id !== id)];
+      const hasActiveTask = next.some((item) => item.state !== "done" && item.state !== "error");
+      return hasActiveTask ? next : next.slice(0, 5);
+    });
   }, []);
 
   const enqueueFiles = useCallback((incoming: File[]) => {
@@ -111,14 +117,18 @@ export default function App() {
 
     const jobs = files.map((file) => {
       const id = `upload-${Date.now()}-${taskSequence.current++}`;
-      return { id, file };
+      return { id, file, uploadedAt: new Date().toISOString() };
     });
-    setUploadTasks((current) => [
-      ...current,
-      ...jobs.map(({ id, file }): UploadTask => file.size > MAX_FILE_BYTES
-        ? { id, name: file.name || "剪贴板图片", progress: 100, state: "error", error: "文件超过 25 MiB" }
-        : { id, name: file.name || "剪贴板图片", progress: 0, state: "queued" }),
-    ]);
+    setUploadTasks((current) => {
+      const next = [
+        ...jobs.map(({ id, file, uploadedAt }): UploadTask => file.size > MAX_FILE_BYTES
+          ? { id, name: file.name || "剪贴板图片", uploadedAt, progress: 100, state: "error", error: "文件超过 25 MiB" }
+          : { id, name: file.name || "剪贴板图片", uploadedAt, progress: 0, state: "queued" }),
+        ...current,
+      ];
+      const hasActiveTask = next.some((item) => item.state !== "done" && item.state !== "error");
+      return hasActiveTask ? next : next.slice(0, 5);
+    });
 
     const uploadable = jobs.filter(({ file }) => file.size <= MAX_FILE_BYTES);
     if (uploadable.length === 0) return;
@@ -134,7 +144,7 @@ export default function App() {
             (progress) => updateTask(id, { progress }),
             () => updateTask(id, { state: "processing", progress: 100 }),
           );
-          updateTask(id, { state: "done", progress: 100, image });
+          updateTask(id, { state: "done", progress: 100, image, uploadedAt: image.created_at });
           setImages((current) => [image, ...current.filter((item) => item.id !== image.id)]);
           successful.push(image);
         } catch (reason) {
@@ -219,19 +229,6 @@ export default function App() {
     }
   }
 
-  async function copyAllUploads() {
-    const links = uploadTasks
-      .filter((task): task is UploadTask & { image: ImageItem } => task.state === "done" && task.image !== undefined)
-      .map((task) => absoluteImageURL(task.image.url));
-    if (links.length === 0) return;
-    try {
-      await copyText(links.join("\n"));
-      notify(`已复制 ${links.length} 个链接`);
-    } catch (reason) {
-      notify(reason instanceof Error ? reason.message : "复制失败", true);
-    }
-  }
-
   if (auth === "checking") {
     return <main className="loading-screen"><span className="spinner" aria-label="正在加载" /></main>;
   }
@@ -298,7 +295,7 @@ export default function App() {
         </div>
       ) : null}
 
-      <UploadTray tasks={uploadTasks} onCopyAll={() => void copyAllUploads()} onClear={() => setUploadTasks([])} />
+      <UploadTray tasks={uploadTasks} onClear={() => setUploadTasks([])} />
       {preview ? <ImagePreview image={preview} onClose={() => setPreview(null)} onCopy={() => void copyImage(preview)} onDelete={() => void removeImages([preview.id])} /> : null}
       {settingsOpen ? <TokenPanel modal onClose={() => setSettingsOpen(false)} onAuthenticate={authenticate} /> : null}
       {adminOpen ? <AdminPanel onClose={() => setAdminOpen(false)} onSessionExpired={expireSession} onNotify={notify} /> : null}
