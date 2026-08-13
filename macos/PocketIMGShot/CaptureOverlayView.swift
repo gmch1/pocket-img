@@ -796,20 +796,25 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
         editor.isBordered = false
         editor.isBezeled = false
         editor.drawsBackground = false
-        editor.textColor = .systemRed
+        editor.textColor = NSColor.white.withAlphaComponent(0.94)
         editor.font = font
         editor.focusRingType = .none
-        editor.placeholderString = "输入文字"
+        editor.placeholderAttributedString = NSAttributedString(
+            string: "输入文字",
+            attributes: [
+                .foregroundColor: NSColor.white.withAlphaComponent(0.42),
+            ]
+        )
         editor.delegate = self
         editor.cell?.isScrollable = true
         editor.cell?.wraps = false
         editor.wantsLayer = true
-        editor.layer?.backgroundColor = NSColor(calibratedWhite: 0.06, alpha: 0.82).cgColor
-        editor.layer?.cornerRadius = height / 2
+        editor.layer?.backgroundColor = NSColor(calibratedWhite: 0.10, alpha: 0.94).cgColor
+        editor.layer?.cornerRadius = 5
         editor.layer?.cornerCurve = .continuous
         editor.layer?.borderWidth = 1
-        editor.layer?.borderColor = NSColor.systemRed.withAlphaComponent(0.72).cgColor
-        editor.layer?.masksToBounds = true
+        editor.layer?.borderColor = NSColor.white.withAlphaComponent(0.20).cgColor
+        editor.layer?.masksToBounds = false
 
         addSubview(editor)
         textEditor = editor
@@ -818,9 +823,10 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
         window?.makeFirstResponder(editor)
         editor.selectText(nil)
         if let fieldEditor = editor.currentEditor() as? NSTextView {
-            fieldEditor.insertionPointColor = .systemRed
+            fieldEditor.insertionPointColor = .controlAccentColor
             fieldEditor.backgroundColor = .clear
         }
+        updateTextEditorFocus(true)
     }
 
     private func commitTextEditing() {
@@ -871,6 +877,26 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
             return true
         }
         return false
+    }
+
+    func controlTextDidBeginEditing(_ notification: Notification) {
+        updateTextEditorFocus(true)
+    }
+
+    func controlTextDidEndEditing(_ notification: Notification) {
+        updateTextEditorFocus(false)
+    }
+
+    private func updateTextEditorFocus(_ focused: Bool) {
+        guard let layer = textEditor?.layer else { return }
+        layer.borderColor = focused
+            ? NSColor.controlAccentColor.withAlphaComponent(0.92).cgColor
+            : NSColor.white.withAlphaComponent(0.20).cgColor
+        layer.borderWidth = focused ? 1.5 : 1
+        layer.shadowColor = NSColor.controlAccentColor.cgColor
+        layer.shadowOpacity = focused ? 0.20 : 0
+        layer.shadowRadius = focused ? 5 : 0
+        layer.shadowOffset = .zero
     }
 
     private func toolbarAction(at point: CGPoint) -> ToolbarAction? {
