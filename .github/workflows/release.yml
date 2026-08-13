@@ -168,6 +168,11 @@ jobs:
           binary="${app}/Contents/MacOS/PocketIMGShot"
           test -d "${app}"
           codesign --verify --deep --strict "${app}"
+          entitlements="$(codesign -d --entitlements :- "${app}" 2>/dev/null || true)"
+          if grep -Eq 'com\.apple\.security\.app-sandbox|keychain-access-groups' <<< "${entitlements}"; then
+            echo "Unexpected sandbox or keychain entitlement in macOS release" >&2
+            exit 1
+          fi
           architectures="$(lipo -archs "${binary}")"
           [[ "${architectures}" == *arm64* ]]
           [[ "${architectures}" == *x86_64* ]]
