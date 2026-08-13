@@ -131,6 +131,17 @@ struct Annotation: Equatable, Sendable {
             return !(text?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)
         }
     }
+
+    func translatedBy(x: CGFloat, y: CGFloat) -> Annotation {
+        Annotation(
+            tool: tool,
+            start: CGPoint(x: start.x + x, y: start.y + y),
+            end: CGPoint(x: end.x + x, y: end.y + y),
+            text: text,
+            styleSize: styleSize,
+            color: color
+        )
+    }
 }
 
 struct UploadPayload: Sendable {
@@ -183,6 +194,25 @@ enum CaptureGeometry {
             width: selection.width,
             height: selection.height
         )
+    }
+
+    static func movedSelection(
+        _ selection: CGRect,
+        from dragStart: CGPoint,
+        to point: CGPoint,
+        within bounds: CGRect
+    ) -> CGRect {
+        let requestedX = (point.x - dragStart.x).rounded()
+        let requestedY = (point.y - dragStart.y).rounded()
+        let offsetX = min(
+            max(requestedX, bounds.minX - selection.minX),
+            bounds.maxX - selection.maxX
+        )
+        let offsetY = min(
+            max(requestedY, bounds.minY - selection.minY),
+            bounds.maxY - selection.maxY
+        )
+        return selection.offsetBy(dx: offsetX, dy: offsetY)
     }
 }
 

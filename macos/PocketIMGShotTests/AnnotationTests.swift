@@ -57,6 +57,48 @@ final class AnnotationTests: XCTestCase {
         )
     }
 
+    func testMovesSelectionWithoutChangingSizeAndClampsToScreen() {
+        let original = CGRect(x: 100, y: 80, width: 300, height: 200)
+
+        XCTAssertEqual(
+            CaptureGeometry.movedSelection(
+                original,
+                from: CGPoint(x: 150, y: 120),
+                to: CGPoint(x: 210, y: 160),
+                within: CGRect(x: 0, y: 0, width: 800, height: 600)
+            ),
+            CGRect(x: 160, y: 120, width: 300, height: 200)
+        )
+        XCTAssertEqual(
+            CaptureGeometry.movedSelection(
+                original,
+                from: CGPoint(x: 150, y: 120),
+                to: CGPoint(x: -500, y: -500),
+                within: CGRect(x: 0, y: 0, width: 800, height: 600)
+            ),
+            CGRect(x: 0, y: 0, width: 300, height: 200)
+        )
+    }
+
+    func testAnnotationsFollowMovedSelection() {
+        let annotation = Annotation(
+            tool: .text,
+            start: CGPoint(x: 120, y: 90),
+            end: CGPoint(x: 120, y: 90),
+            text: "说明",
+            styleSize: 20,
+            color: .red
+        )
+
+        let moved = annotation.translatedBy(x: 40, y: -15)
+
+        XCTAssertEqual(moved.start, CGPoint(x: 160, y: 75))
+        XCTAssertEqual(moved.end, CGPoint(x: 160, y: 75))
+        XCTAssertEqual(moved.text, annotation.text)
+        XCTAssertEqual(moved.styleSize, annotation.styleSize)
+        XCTAssertEqual(moved.color, annotation.color)
+    }
+
     func testAnnotationStyleSizesHaveToolDefaultsAndCanBeCustomized() {
         let rectangle = Annotation(
             tool: .rectangle,
