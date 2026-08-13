@@ -97,7 +97,7 @@ enum SettingsError: LocalizedError {
 
 @MainActor
 final class AppSettings: ObservableObject {
-    private static let currentSchemaVersion = 2
+    private static let currentSchemaVersion = 3
 
     @Published var serverAddress: String
     @Published var token: String
@@ -122,13 +122,29 @@ final class AppSettings: ObservableObject {
                 && storedHotKey.modifiers == 0
                 && storedHotKey.keyLabel.uppercased() == "F2"
             let resolvedHotKey = shouldMigrateLegacyF2 ? HotKey.default : storedHotKey
-            let resolvedAnnotationStyle = (stored.annotationStyle ?? .default).normalized
+            let storedAnnotationStyle = stored.annotationStyle
+            let shouldMigrateDefaultLineWidths = stored.schemaVersion == 2
+                && storedAnnotationStyle?.rectangleLineWidth == 3
+                && storedAnnotationStyle?.arrowLineWidth == 3
+            let resolvedAnnotationStyle: AnnotationStylePreferences
+            if shouldMigrateDefaultLineWidths, let storedAnnotationStyle {
+                resolvedAnnotationStyle = AnnotationStylePreferences(
+                    rectangleLineWidth: AnnotationStylePreferences.default.rectangleLineWidth,
+                    arrowLineWidth: AnnotationStylePreferences.default.arrowLineWidth,
+                    textFontSize: storedAnnotationStyle.textFontSize,
+                    color: storedAnnotationStyle.resolvedColor
+                ).normalized
+            } else {
+                resolvedAnnotationStyle = (storedAnnotationStyle ?? .default).normalized
+            }
             serverAddress = stored.serverAddress
             token = stored.token
             hotKey = resolvedHotKey
             annotationStyle = resolvedAnnotationStyle
 
-            if stored.schemaVersion != Self.currentSchemaVersion || shouldMigrateLegacyF2 {
+            if stored.schemaVersion != Self.currentSchemaVersion
+                || shouldMigrateLegacyF2
+                || shouldMigrateDefaultLineWidths {
                 try? store.save(StoredSettings(
                     schemaVersion: Self.currentSchemaVersion,
                     serverAddress: stored.serverAddress,

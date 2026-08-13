@@ -82,8 +82,51 @@ final class ConfigurationTests: XCTestCase {
         let storedObject = try XCTUnwrap(
             JSONSerialization.jsonObject(with: Data(contentsOf: settingsURL)) as? [String: Any]
         )
-        XCTAssertEqual(storedObject["schemaVersion"] as? Int, 2)
+        XCTAssertEqual(storedObject["schemaVersion"] as? Int, 3)
         XCTAssertEqual(storedObject["hotKeyLabel"] as? String, "F1")
+    }
+
+    @MainActor
+    func testMigratesOnlyUntouchedLegacyDefaultLineWidths() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("PocketIMGShotStyleMigrationTests-\(UUID().uuidString)", isDirectory: true)
+        let settingsURL = directory.appendingPathComponent("settings.json")
+        let customSettingsURL = directory.appendingPathComponent("custom-settings.json")
+        defer { try? FileManager.default.removeItem(at: directory) }
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let legacyJSON = """
+        {
+          "schemaVersion": 2,
+          "serverAddress": "https://img.example.com",
+          "token": "style-token",
+          "hotKeyCode": 122,
+          "hotKeyModifiers": 0,
+          "hotKeyLabel": "F1",
+          "annotationStyle": {
+            "rectangleLineWidth": 3,
+            "arrowLineWidth": 3,
+            "textFontSize": 28,
+            "color": "blue"
+          }
+        }
+        """
+        try XCTUnwrap(legacyJSON.data(using: .utf8)).write(to: settingsURL)
+
+        let migrated = AppSettings(settingsURL: settingsURL)
+
+        XCTAssertEqual(migrated.serverAddress, "https://img.example.com")
+        XCTAssertEqual(migrated.token, "style-token")
+        XCTAssertEqual(migrated.annotationStyle.rectangleLineWidth, 2)
+        XCTAssertEqual(migrated.annotationStyle.arrowLineWidth, 2)
+        XCTAssertEqual(migrated.annotationStyle.textFontSize, 28)
+        XCTAssertEqual(migrated.annotationStyle.resolvedColor, .blue)
+
+        let customizedJSON = legacyJSON
+            .replacingOccurrences(of: "\"rectangleLineWidth\": 3", with: "\"rectangleLineWidth\": 4")
+        try XCTUnwrap(customizedJSON.data(using: .utf8)).write(to: customSettingsURL)
+        let customized = AppSettings(settingsURL: customSettingsURL)
+        XCTAssertEqual(customized.annotationStyle.rectangleLineWidth, 4)
+        XCTAssertEqual(customized.annotationStyle.arrowLineWidth, 3)
     }
 
     @MainActor

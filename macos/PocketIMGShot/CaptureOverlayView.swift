@@ -160,8 +160,8 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
     private var textEditorColor: AnnotationColor?
     private var hoverPoint: CGPoint?
     private var pressedToolbarAction: ToolbarAction?
-    private var rectangleLineWidth: CGFloat = 3
-    private var arrowLineWidth: CGFloat = 3
+    private var rectangleLineWidth: CGFloat = 2
+    private var arrowLineWidth: CGFloat = 2
     private var textFontSize: CGFloat = 20
     private var annotationColor: AnnotationColor = .default
     private var colorPaletteVisible = false
@@ -930,7 +930,13 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
         )
         let frame = CGRect(x: x, y: y, width: width, height: height)
         let editor = NSTextField(frame: frame)
-        editor.cell = VerticallyCenteredTextFieldCell(textCell: "")
+        let cell = VerticallyCenteredTextFieldCell(textCell: "")
+        cell.isEditable = true
+        cell.isSelectable = true
+        editor.cell = cell
+        editor.isEditable = true
+        editor.isSelectable = true
+        editor.isEnabled = true
         editor.isBordered = false
         editor.isBezeled = false
         editor.drawsBackground = false
