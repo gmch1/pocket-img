@@ -68,22 +68,59 @@ final class AnnotationTests: XCTestCase {
             start: .zero,
             end: .zero,
             text: "说明",
-            styleSize: 32
+            styleSize: 32,
+            color: .blue
         )
 
         XCTAssertEqual(rectangle.resolvedStyleSize, 3)
+        XCTAssertEqual(rectangle.color, .red)
         XCTAssertEqual(text.resolvedStyleSize, 32)
+        XCTAssertEqual(text.color, .blue)
     }
 
     func testAnnotationStylePreferencesClampUnsafeValues() {
         let style = AnnotationStylePreferences(
             rectangleLineWidth: -4,
             arrowLineWidth: 30,
-            textFontSize: 100
+            textFontSize: 100,
+            color: .purple
         ).normalized
 
         XCTAssertEqual(style.rectangleLineWidth, 1)
         XCTAssertEqual(style.arrowLineWidth, 12)
         XCTAssertEqual(style.textFontSize, 72)
+        XCTAssertEqual(style.resolvedColor, .purple)
+    }
+
+    func testAnnotationStyleDecodesLegacyJSONWithoutColor() throws {
+        let legacy = """
+        {
+          "rectangleLineWidth": 4,
+          "arrowLineWidth": 5,
+          "textFontSize": 24
+        }
+        """
+
+        let style = try JSONDecoder().decode(
+            AnnotationStylePreferences.self,
+            from: try XCTUnwrap(legacy.data(using: .utf8))
+        )
+
+        XCTAssertEqual(style.resolvedColor, .red)
+        XCTAssertEqual(style.normalized.color, .red)
+    }
+
+    @MainActor
+    func testTextFieldCellCentersPlaceholderAndEditorRect() {
+        let cell = VerticallyCenteredTextFieldCell(textCell: "输入文字")
+        cell.font = NSFont.systemFont(ofSize: 20, weight: .semibold)
+        let bounds = CGRect(x: 0, y: 0, width: 200, height: 32)
+
+        let textRect = cell.drawingRect(forBounds: bounds)
+
+        XCTAssertEqual(textRect.midY, bounds.midY, accuracy: 0.01)
+        XCTAssertLessThan(textRect.height, bounds.height)
+        XCTAssertGreaterThan(textRect.minX, bounds.minX)
+        XCTAssertLessThan(textRect.maxX, bounds.maxX)
     }
 }

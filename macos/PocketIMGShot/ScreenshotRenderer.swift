@@ -66,7 +66,6 @@ enum ScreenshotRenderer {
 
         let annotationScaleX = CGFloat(outputWidth) / selection.width
         let annotationScaleY = CGFloat(outputHeight) / selection.height
-        context.setStrokeColor(CGColor(red: 1, green: 0.12, blue: 0.1, alpha: 1))
         context.setLineCap(.round)
         context.setLineJoin(.round)
         for annotation in annotations {
@@ -123,9 +122,11 @@ enum ScreenshotRenderer {
 
         switch annotation.tool {
         case .rectangle:
+            context.setStrokeColor(annotation.color.cgColor)
             context.setLineWidth(max(1, annotation.resolvedStyleSize * min(scaleX, scaleY)))
             context.stroke(CGRect.between(outputPoint(annotation.start), outputPoint(annotation.end)))
         case .arrow:
+            context.setStrokeColor(annotation.color.cgColor)
             context.setLineWidth(max(1, annotation.resolvedStyleSize * min(scaleX, scaleY)))
             let start = outputPoint(annotation.start)
             let end = outputPoint(annotation.end)
@@ -162,8 +163,7 @@ enum ScreenshotRenderer {
                     value as CFString,
                     [
                         kCTFontAttributeName: font,
-                        kCTForegroundColorAttributeName:
-                            CGColor(red: 1, green: 0.12, blue: 0.1, alpha: 1),
+                        kCTForegroundColorAttributeName: annotation.color.cgColor,
                         kCTStrokeColorAttributeName: CGColor(gray: 0, alpha: 0.58),
                         kCTStrokeWidthAttributeName: -3,
                     ] as CFDictionary

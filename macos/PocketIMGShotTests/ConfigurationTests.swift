@@ -41,7 +41,8 @@ final class ConfigurationTests: XCTestCase {
         settings.updateAnnotationStyle(AnnotationStylePreferences(
             rectangleLineWidth: 5.5,
             arrowLineWidth: 7,
-            textFontSize: 28
+            textFontSize: 28,
+            color: .blue
         ))
         try settings.save()
 
