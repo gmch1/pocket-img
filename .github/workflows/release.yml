@@ -216,7 +216,7 @@ jobs:
             --sign "${MACOS_SIGNING_IDENTITY}" \
             --keychain "${MACOS_KEYCHAIN_PATH}" \
             --options runtime \
-            --requirements "${stable_requirement}" \
+            --requirements "=${stable_requirement}" \
             --timestamp=none \
             "${app}"
           codesign --verify --deep --strict "${app}"
