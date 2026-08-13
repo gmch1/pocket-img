@@ -22,6 +22,12 @@ final class ScreenshotRendererTests: XCTestCase {
                     start: CGPoint(x: 400, y: 900),
                     end: CGPoint(x: 1500, y: 300)
                 ),
+                Annotation(
+                    tool: .text,
+                    start: CGPoint(x: 600, y: 280),
+                    end: CGPoint(x: 600, y: 280),
+                    text: "截图说明"
+                ),
             ]
         )
 

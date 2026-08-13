@@ -1,4 +1,5 @@
 import CoreGraphics
+import CoreText
 import Foundation
 import ImageIO
 import UniformTypeIdentifiers
@@ -135,6 +136,33 @@ enum ScreenshotRenderer {
             context.addLine(to: end)
             context.addLine(to: second)
             context.strokePath()
+        case .text:
+            guard let value = annotation.text?.trimmingCharacters(in: .whitespacesAndNewlines),
+                  !value.isEmpty else {
+                return
+            }
+            let fontSize = max(20, 20 * min(scaleX, scaleY))
+            guard let font = CTFontCreateUIFontForLanguage(.system, fontSize, nil),
+                  let attributed = CFAttributedStringCreate(
+                    nil,
+                    value as CFString,
+                    [
+                        kCTFontAttributeName: font,
+                        kCTForegroundColorAttributeName:
+                            CGColor(red: 1, green: 0.12, blue: 0.1, alpha: 1),
+                        kCTStrokeColorAttributeName: CGColor(gray: 0, alpha: 0.58),
+                        kCTStrokeWidthAttributeName: -3,
+                    ] as CFDictionary
+                  ) else {
+                return
+            }
+            let line = CTLineCreateWithAttributedString(attributed)
+            let origin = outputPoint(annotation.start)
+            context.saveGState()
+            context.textMatrix = .identity
+            context.textPosition = CGPoint(x: origin.x, y: origin.y - fontSize)
+            CTLineDraw(line, context)
+            context.restoreGState()
         }
     }
 
