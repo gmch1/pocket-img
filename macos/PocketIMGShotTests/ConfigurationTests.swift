@@ -25,19 +25,31 @@ final class ConfigurationTests: XCTestCase {
 
     @MainActor
     func testSettingsPersistAcrossAppInstancesWithoutKeychain() throws {
-        let suiteName = "PocketIMGShotTests.\(UUID().uuidString)"
-        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
-        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let firstSuite = "PocketIMGShotTests.first.\(UUID().uuidString)"
+        let secondSuite = "PocketIMGShotTests.second.\(UUID().uuidString)"
+        let firstDefaults = try XCTUnwrap(UserDefaults(suiteName: firstSuite))
+        let secondDefaults = try XCTUnwrap(UserDefaults(suiteName: secondSuite))
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("PocketIMGShotTests-\(UUID().uuidString)", isDirectory: true)
+        let settingsURL = directory.appendingPathComponent("settings.json")
+        defer {
+            firstDefaults.removePersistentDomain(forName: firstSuite)
+            secondDefaults.removePersistentDomain(forName: secondSuite)
+            try? FileManager.default.removeItem(at: directory)
+        }
 
-        let settings = AppSettings(defaults: defaults)
+        let settings = AppSettings(defaults: firstDefaults, settingsURL: settingsURL)
         settings.serverAddress = "https://img.example.com/"
         settings.token = "test-token"
         settings.hotKey = HotKey(keyCode: 3, modifiers: 256, keyLabel: "F")
         try settings.save()
 
-        let restored = AppSettings(defaults: defaults)
+        let restored = AppSettings(defaults: secondDefaults, settingsURL: settingsURL)
         XCTAssertEqual(restored.serverAddress, "https://img.example.com")
         XCTAssertEqual(restored.token, "test-token")
         XCTAssertEqual(restored.hotKey, settings.hotKey)
+        let attributes = try FileManager.default.attributesOfItem(atPath: settingsURL.path)
+        let permissions = try XCTUnwrap(attributes[.posixPermissions] as? NSNumber)
+        XCTAssertEqual(permissions.intValue & 0o777, 0o600)
     }
 }

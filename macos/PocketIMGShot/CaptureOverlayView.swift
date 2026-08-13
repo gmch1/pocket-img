@@ -6,6 +6,7 @@ protocol CaptureOverlayViewDelegate: AnyObject {
     func captureOverlayDidStartSelection(_ overlay: CaptureOverlayView)
     func captureOverlayDidCancel(_ overlay: CaptureOverlayView)
     func captureOverlay(_ overlay: CaptureOverlayView, didFinish payload: UploadPayload)
+    func captureOverlay(_ overlay: CaptureOverlayView, didFailWith error: Error)
 }
 
 @MainActor
@@ -326,135 +327,38 @@ final class CaptureOverlayView: NSView {
 
     private func finishAndUpload() {
         guard mode == .editing, !isFinishing else { return }
+        guard let screenshot, let selection else {
+            delegate?.captureOverlay(self, didFailWith: CaptureError.imageEncodingFailed)
+            return
+        }
         isFinishing = true
-        do {
-            let payload = try renderPayload()
-            delegate?.captureOverlay(self, didFinish: payload)
-        } catch {
-            isFinishing = false
-            NSSound.beep()
-        }
-    }
-
-    private func renderPayload() throws -> UploadPayload {
-        guard let screenshot, let selection else { throw CaptureError.imageEncodingFailed }
-        let scaleX = CGFloat(screenshot.width) / bounds.width
-        let scaleY = CGFloat(screenshot.height) / bounds.height
-        var pixelRect = CGRect(
-            x: floor(selection.minX * scaleX),
-            y: floor(selection.minY * scaleY),
-            width: ceil(selection.width * scaleX),
-            height: ceil(selection.height * scaleY)
-        )
-        pixelRect = pixelRect.intersection(CGRect(
-            x: 0,
-            y: 0,
-            width: CGFloat(screenshot.width),
-            height: CGFloat(screenshot.height)
-        ))
-        guard pixelRect.width > 0, pixelRect.height > 0,
-              let cropped = screenshot.cropping(to: pixelRect) else {
-            throw CaptureError.imageEncodingFailed
-        }
-
-        let maxPixels: CGFloat = 19_000_000
-        let sourcePixels = CGFloat(cropped.width * cropped.height)
-        let outputScale = min(1, sqrt(maxPixels / max(sourcePixels, 1)))
-        let outputWidth = max(1, Int(CGFloat(cropped.width) * outputScale))
-        let outputHeight = max(1, Int(CGFloat(cropped.height) * outputScale))
-        guard let representation = NSBitmapImageRep(
-            bitmapDataPlanes: nil,
-            pixelsWide: outputWidth,
-            pixelsHigh: outputHeight,
-            bitsPerSample: 8,
-            samplesPerPixel: 4,
-            hasAlpha: true,
-            isPlanar: false,
-            colorSpaceName: .deviceRGB,
-            bitmapFormat: [],
-            bytesPerRow: 0,
-            bitsPerPixel: 0
-        ), let context = NSGraphicsContext(bitmapImageRep: representation) else {
-            throw CaptureError.imageEncodingFailed
-        }
-
-        NSGraphicsContext.saveGraphicsState()
-        NSGraphicsContext.current = context
-        context.imageInterpolation = .high
-        let outputRect = NSRect(
-            x: 0,
-            y: 0,
-            width: CGFloat(outputWidth),
-            height: CGFloat(outputHeight)
-        )
-        NSImage(cgImage: cropped, size: outputRect.size).draw(
-            in: outputRect,
-            from: .zero,
-            operation: .copy,
-            fraction: 1,
-            respectFlipped: false,
-            hints: nil
+        let viewBounds = bounds
+        let annotations = annotations
+        DiagnosticLog.record(
+            "render started selection=\(Int(selection.width))x\(Int(selection.height)) " +
+            "source=\(screenshot.width)x\(screenshot.height)"
         )
 
-        let annotationScaleX = CGFloat(outputWidth) / selection.width
-        let annotationScaleY = CGFloat(outputHeight) / selection.height
-        for annotation in annotations {
-            drawRenderedAnnotation(
-                annotation,
-                selection: selection,
-                scaleX: annotationScaleX,
-                scaleY: annotationScaleY,
-                outputHeight: CGFloat(outputHeight)
-            )
+        Task { [weak self] in
+            do {
+                let payload = try await Task.detached(priority: .userInitiated) {
+                    try ScreenshotRenderer.render(
+                        screenshot: screenshot,
+                        viewBounds: viewBounds,
+                        selection: selection,
+                        annotations: annotations
+                    )
+                }.value
+                DiagnosticLog.record("render finished bytes=\(payload.data.count)")
+                guard let self else { return }
+                self.delegate?.captureOverlay(self, didFinish: payload)
+            } catch {
+                DiagnosticLog.record(error, phase: "render")
+                guard let self else { return }
+                self.isFinishing = false
+                self.delegate?.captureOverlay(self, didFailWith: error)
+            }
         }
-        context.flushGraphics()
-        NSGraphicsContext.restoreGraphicsState()
-
-        if let png = representation.representation(using: .png, properties: [:]), png.count <= 24 * 1024 * 1024 {
-            return UploadPayload(data: png, fileName: "screenshot.png", contentType: "image/png")
-        }
-        guard let jpeg = representation.representation(
-            using: .jpeg,
-            properties: [.compressionFactor: 0.88]
-        ), jpeg.count <= 24 * 1024 * 1024 else {
-            throw CaptureError.imageEncodingFailed
-        }
-        return UploadPayload(data: jpeg, fileName: "screenshot.jpg", contentType: "image/jpeg")
-    }
-
-    private func drawRenderedAnnotation(
-        _ annotation: Annotation,
-        selection: CGRect,
-        scaleX: CGFloat,
-        scaleY: CGFloat,
-        outputHeight: CGFloat
-    ) {
-        func outputPoint(_ point: CGPoint) -> CGPoint {
-            CGPoint(
-                x: (point.x - selection.minX) * scaleX,
-                y: outputHeight - (point.y - selection.minY) * scaleY
-            )
-        }
-
-        NSColor.systemRed.setStroke()
-        let path = NSBezierPath()
-        path.lineWidth = max(3, 3 * min(scaleX, scaleY))
-        path.lineCapStyle = .round
-        path.lineJoinStyle = .round
-        switch annotation.tool {
-        case .rectangle:
-            let first = outputPoint(annotation.start)
-            let second = outputPoint(annotation.end)
-            path.appendRect(CGRect.between(first, second))
-        case .arrow:
-            appendArrow(
-                to: path,
-                from: outputPoint(annotation.start),
-                to: outputPoint(annotation.end),
-                headLength: max(14, 14 * min(scaleX, scaleY))
-            )
-        }
-        path.stroke()
     }
 
     private func appendArrow(

@@ -13,15 +13,18 @@ final class CaptureCoordinator: NSObject, CaptureOverlayViewDelegate {
     private var windows: [CaptureWindow] = []
     private var onUpload: ((UploadPayload) -> Void)?
     private var onCancel: (() -> Void)?
+    private var onError: ((Error) -> Void)?
     private var finished = false
 
     func begin(
         onUpload: @escaping (UploadPayload) -> Void,
-        onCancel: @escaping () -> Void
+        onCancel: @escaping () -> Void,
+        onError: @escaping (Error) -> Void
     ) async throws {
         cancel(notify: false)
         self.onUpload = onUpload
         self.onCancel = onCancel
+        self.onError = onError
         finished = false
 
         let displays = try await captureDisplays()
@@ -69,10 +72,12 @@ final class CaptureCoordinator: NSObject, CaptureOverlayViewDelegate {
         if notify { onCancel?() }
         onUpload = nil
         onCancel = nil
+        onError = nil
     }
 
     func captureOverlayDidStartSelection(_ overlay: CaptureOverlayView) {
         for window in windows where window.contentView !== overlay {
+            (window.contentView as? CaptureOverlayView)?.screenshot = nil
             window.orderOut(nil)
         }
         overlay.window?.makeKeyAndOrderFront(nil)
@@ -90,7 +95,19 @@ final class CaptureCoordinator: NSObject, CaptureOverlayViewDelegate {
         let completion = onUpload
         onUpload = nil
         onCancel = nil
+        onError = nil
         completion?(payload)
+    }
+
+    func captureOverlay(_ overlay: CaptureOverlayView, didFailWith error: Error) {
+        guard !finished else { return }
+        finished = true
+        closeWindows()
+        let completion = onError
+        onUpload = nil
+        onCancel = nil
+        onError = nil
+        completion?(error)
     }
 
     private func closeWindows() {

@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.4.3 - 2026-08-13
+
+### Fixed
+
+- 将点击上传后的选区裁剪、红框/箭头合成和 PNG/JPEG 编码从 AppKit 全局绘图上下文迁移到独立 Core Graphics/ImageIO 渲染器，避免无法被 Swift `do/catch` 捕获的绘图异常。
+- 大尺寸渲染改到后台任务；开始选区后立即释放其他显示器截图，降低 Retina、多屏场景的内存峰值。
+- 服务地址、Token 与快捷键固定写入 `~/Library/Application Support/PocketIMGShot/settings.json`（目录 `0700`、文件 `0600`），不再依赖 `UserDefaults` 域或 App 签名身份。
+- 截图生成与上传失败现在显示错误窗口，并将不含 Token/URL 的阶段日志写入 `~/Library/Logs/PocketIMGShot.log`。
+
 ## 0.4.2 - 2026-08-13
 
 ### Fixed

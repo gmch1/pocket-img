@@ -48,7 +48,7 @@ actor PocketIMGClient {
     }
 
     private func authenticate() async throws {
-        var request = URLRequest(url: endpoint("/api/auth/session"))
+        var request = URLRequest(url: try endpoint("/api/auth/session"))
         request.httpMethod = "POST"
         request.setValue("Bearer \(configuration.token)", forHTTPHeaderField: "Authorization")
         let (data, rawResponse) = try await session.data(for: request)
@@ -63,7 +63,7 @@ actor PocketIMGClient {
 
     private func performUpload(_ payload: UploadPayload) async throws -> HTTPResult {
         let boundary = "PocketIMGShot-\(UUID().uuidString)"
-        var request = URLRequest(url: endpoint("/api/images"))
+        var request = URLRequest(url: try endpoint("/api/images"))
         request.httpMethod = "POST"
         request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
@@ -82,8 +82,11 @@ actor PocketIMGClient {
         return HTTPResult(statusCode: response.statusCode, data: data)
     }
 
-    private func endpoint(_ path: String) -> URL {
-        URL(string: path, relativeTo: configuration.baseURL)!.absoluteURL
+    private func endpoint(_ path: String) throws -> URL {
+        guard let url = URL(string: path, relativeTo: configuration.baseURL)?.absoluteURL else {
+            throw PocketIMGClientError.invalidResponse
+        }
+        return url
     }
 
     private func apiError(status: Int, data: Data) -> PocketIMGClientError {

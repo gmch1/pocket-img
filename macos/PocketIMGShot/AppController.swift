@@ -23,6 +23,8 @@ final class AppController: ObservableObject {
     private init() {}
 
     func start() {
+        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "unknown"
+        DiagnosticLog.record("app started version=\(version)")
         registerHotKey()
     }
 
@@ -66,7 +68,7 @@ final class AppController: ObservableObject {
     func startCapture() {
         guard !isCapturing, !isUploading else { return }
         do {
-            _ = try settings.serviceConfiguration()
+            try settings.save()
         } catch {
             showError(title: "请先配置 PocketIMG", message: error.localizedDescription)
             openSettings()
@@ -95,6 +97,15 @@ final class AppController: ObservableObject {
                     onCancel: { [weak self] in
                         self?.isCapturing = false
                         self?.statusMessage = ""
+                    },
+                    onError: { [weak self] error in
+                        guard let self else { return }
+                        self.isCapturing = false
+                        self.statusMessage = "截图生成失败"
+                        self.showError(
+                            title: "无法生成截图",
+                            message: error.localizedDescription + "\n\n诊断日志：~/Library/Logs/PocketIMGShot.log"
+                        )
                     }
                 )
                 statusMessage = "拖拽选择截图区域"
@@ -107,6 +118,7 @@ final class AppController: ObservableObject {
     }
 
     private func upload(_ payload: UploadPayload) {
+        DiagnosticLog.record("upload started bytes=\(payload.data.count) type=\(payload.contentType)")
         pendingUpload = payload
         isUploading = true
         statusMessage = "正在上传…"
@@ -129,9 +141,11 @@ final class AppController: ObservableObject {
                 pendingUpload = nil
                 isUploading = false
                 statusMessage = "链接已复制"
+                DiagnosticLog.record("upload finished")
                 toast.show("上传完成，链接已复制")
                 clearStatusLater()
             } catch {
+                DiagnosticLog.record(error, phase: "upload")
                 isUploading = false
                 statusMessage = "上传失败"
                 toast.dismiss()
@@ -144,7 +158,7 @@ final class AppController: ObservableObject {
         let alert = NSAlert()
         alert.alertStyle = .warning
         alert.messageText = "截图上传失败"
-        alert.informativeText = error.localizedDescription
+        alert.informativeText = error.localizedDescription + "\n\n诊断日志：~/Library/Logs/PocketIMGShot.log"
         alert.addButton(withTitle: "重试")
         alert.addButton(withTitle: "取消")
         NSApplication.shared.activate(ignoringOtherApps: true)

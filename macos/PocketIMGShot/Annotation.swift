@@ -1,12 +1,12 @@
 import CoreGraphics
 import Foundation
 
-enum AnnotationTool: Equatable {
+enum AnnotationTool: Equatable, Sendable {
     case rectangle
     case arrow
 }
 
-struct Annotation: Equatable {
+struct Annotation: Equatable, Sendable {
     let tool: AnnotationTool
     let start: CGPoint
     let end: CGPoint
