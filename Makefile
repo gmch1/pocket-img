@@ -1,4 +1,4 @@
-.PHONY: frontend-install frontend-test frontend-build test build build-arm64 android-test android-debug android-release macos-test macos-build
+.PHONY: frontend-install frontend-test frontend-build test build build-amd64 build-arm64 android-test android-debug android-release macos-test macos-build
 
 GO ?= go
 NPM ?= npm
@@ -16,9 +16,11 @@ frontend-build:
 test: frontend-test frontend-build
 	GOTOOLCHAIN=auto $(GO) test -tags=nodynamic ./...
 
-build: frontend-build
+build: build-amd64
+
+build-amd64: frontend-build
 	mkdir -p dist
-	GOTOOLCHAIN=auto CGO_ENABLED=0 $(GO) build $(GO_BUILD_FLAGS) -o dist/phone-image-host-linux-amd64 ./cmd/server
+	GOTOOLCHAIN=auto CGO_ENABLED=0 GOOS=linux GOARCH=amd64 $(GO) build $(GO_BUILD_FLAGS) -o dist/phone-image-host-linux-amd64 ./cmd/server
 
 build-arm64: frontend-build
 	mkdir -p dist

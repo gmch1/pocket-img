@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- GitHub Release 增加无动态库依赖的 Linux x86_64 后端单文件及 SHA-256 校验文件；产物已内嵌网页前端，不依赖 Android 管理壳。
+- Release 流程会校验 ELF 架构、动态库依赖并实际启动后端访问 `/healthz`，再发布 Linux amd64 产物。
+
 ## 0.4.14 - 2026-08-13
 
 ### Fixed

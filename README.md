@@ -1,8 +1,8 @@
 # PocketIMG
 
-面向单实例、自托管场景的轻量图床，计划部署在一台大容量 Android 设备上。
+面向单实例、自托管场景的轻量图床，可作为 Linux x86_64 / ARM64 单文件服务运行，也可部署在大容量 Android 设备上。
 
-当前已完成可用的 React 前端、后端关键链路和多 Token 空间隔离。前端支持 Token 换会话、粘贴上传、浏览器 Worker 预压缩、全局上传进度、7 天/全部筛选、按日期倒序的缩略图时间线、公开链接复制、图片预览、长按多选和永久删除；主空间管理员还可以直接创建新用户 Token。仓库另含原生 macOS 截图客户端，支持区域截图、红框/箭头标注、上传并自动复制公开链接。每个用户默认最多占用 10 GiB，并默认在 90 天后自动永久清理图片。构建结果直接嵌入 Go 服务。仓库中的服务可以构建为无动态库依赖的 Linux ARM64 单文件，也可以随无需 Root 的 Android 管理 App 运行；App 可选维护一个受严格限制的 SSH 反向隧道，把手机回环 HTTP 服务加密接入外部 HTTPS 边缘节点。项目已在目标 Android 13 / Linux 4.14 设备上通过 PC 浏览器到真机的端到端验证。它仍未覆盖游标滚动分页、Android 数据导出等全部生产能力。
+当前已完成可用的 React 前端、后端关键链路和多 Token 空间隔离。前端支持 Token 换会话、粘贴上传、浏览器 Worker 预压缩、全局上传进度、7 天/全部筛选、按日期倒序的缩略图时间线、公开链接复制、图片预览、长按多选和永久删除；主空间管理员还可以直接创建新用户 Token。仓库另含原生 macOS 截图客户端，支持区域截图、红框/箭头标注、上传并自动复制公开链接。每个用户默认最多占用 10 GiB，并默认在 90 天后自动永久清理图片。构建结果直接嵌入 Go 服务。仓库中的服务可以构建为无动态库依赖的 Linux x86_64 / ARM64 单文件，也可以随无需 Root 的 Android 管理 App 运行；App 可选维护一个受严格限制的 SSH 反向隧道，把手机回环 HTTP 服务加密接入外部 HTTPS 边缘节点。项目已在目标 Android 13 / Linux 4.14 设备上通过 PC 浏览器到真机的端到端验证。它仍未覆盖游标滚动分页、Android 数据导出等全部生产能力。
 
 后端按稳定空间 ID 执行内存限流：每空间每小时 500 次上传尝试、500 次公开原图响应，单张缩略图每分钟 5 次且每小时 10 次，全部缩略图每小时 2000 次。上传同时最多 2 个；Token 登录另有来源、全局和空间级令牌桶。超限只返回 `429` 与 `Retry-After`，前端不展示额度，Token 轮换也不会重置计数。
 
@@ -10,6 +10,7 @@
 - [v1 技术设计](docs/technical-design-v1.md)
 - [后端链路预研报告](docs/backend-spike.md)
 - [前端实现与开发](docs/frontend.md)
+- [Linux x86_64 后端部署](docs/linux-amd64.md)
 - [内网 HTTP 开发部署](docs/lan-development.md)
 - [Android 管理 App](docs/android-app.md)
 - [macOS 截图上传客户端](docs/macos-shot.md)
@@ -53,6 +54,7 @@ PIH_COOKIE_SECURE=false \
 
 ```bash
 make test
+make build-amd64
 make build-arm64
 make android-debug
 ```
