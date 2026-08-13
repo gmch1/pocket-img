@@ -1,6 +1,52 @@
 import Combine
 import Foundation
 
+private struct StoredSettings: Codable {
+    let serverAddress: String
+    let token: String
+    let hotKeyCode: UInt32
+    let hotKeyModifiers: UInt
+    let hotKeyLabel: String
+}
+
+private struct SettingsStore {
+    let fileURL: URL
+
+    static var defaultURL: URL {
+        let base = FileManager.default.urls(
+            for: .applicationSupportDirectory,
+            in: .userDomainMask
+        ).first ?? FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/Application Support", isDirectory: true)
+        return base
+            .appendingPathComponent("PocketIMGShot", isDirectory: true)
+            .appendingPathComponent("settings.json", isDirectory: false)
+    }
+
+    func load() throws -> StoredSettings? {
+        guard FileManager.default.fileExists(atPath: fileURL.path) else { return nil }
+        return try JSONDecoder().decode(StoredSettings.self, from: Data(contentsOf: fileURL))
+    }
+
+    func save(_ value: StoredSettings) throws {
+        let directory = fileURL.deletingLastPathComponent()
+        try FileManager.default.createDirectory(
+            at: directory,
+            withIntermediateDirectories: true,
+            attributes: [.posixPermissions: 0o700]
+        )
+        try FileManager.default.setAttributes(
+            [.posixPermissions: 0o700],
+            ofItemAtPath: directory.path
+        )
+        try JSONEncoder().encode(value).write(to: fileURL, options: [.atomic])
+        try FileManager.default.setAttributes(
+            [.posixPermissions: 0o600],
+            ofItemAtPath: fileURL.path
+        )
+    }
+}
+
 struct ServiceConfiguration: Equatable, Sendable {
     let baseURL: URL
     let token: String
@@ -62,19 +108,32 @@ final class AppSettings: ObservableObject {
     @Published var hotKeyRegistrationError = ""
 
     private let defaults: UserDefaults
-    init(defaults: UserDefaults = .standard) {
-        self.defaults = defaults
-        serverAddress = defaults.string(forKey: Keys.serverAddress) ?? ""
-        token = defaults.string(forKey: Keys.token) ?? ""
+    private let store: SettingsStore
 
-        if defaults.object(forKey: Keys.hotKeyCode) != nil {
+    init(defaults: UserDefaults = .standard, settingsURL: URL? = nil) {
+        self.defaults = defaults
+        store = SettingsStore(fileURL: settingsURL ?? SettingsStore.defaultURL)
+
+        if let stored = try? store.load() {
+            serverAddress = stored.serverAddress
+            token = stored.token
             hotKey = HotKey(
-                keyCode: UInt32(defaults.integer(forKey: Keys.hotKeyCode)),
-                modifiers: (defaults.object(forKey: Keys.hotKeyModifiers) as? NSNumber)?.uintValue ?? 0,
-                keyLabel: defaults.string(forKey: Keys.hotKeyLabel) ?? "F2"
+                keyCode: stored.hotKeyCode,
+                modifiers: stored.hotKeyModifiers,
+                keyLabel: stored.hotKeyLabel
             )
         } else {
-            hotKey = .default
+            serverAddress = defaults.string(forKey: Keys.serverAddress) ?? ""
+            token = defaults.string(forKey: Keys.token) ?? ""
+            if defaults.object(forKey: Keys.hotKeyCode) != nil {
+                hotKey = HotKey(
+                    keyCode: UInt32(defaults.integer(forKey: Keys.hotKeyCode)),
+                    modifiers: (defaults.object(forKey: Keys.hotKeyModifiers) as? NSNumber)?.uintValue ?? 0,
+                    keyLabel: defaults.string(forKey: Keys.hotKeyLabel) ?? "F2"
+                )
+            } else {
+                hotKey = .default
+            }
         }
     }
 
@@ -85,6 +144,13 @@ final class AppSettings: ObservableObject {
         defaults.set(Int(hotKey.keyCode), forKey: Keys.hotKeyCode)
         defaults.set(NSNumber(value: hotKey.modifiers), forKey: Keys.hotKeyModifiers)
         defaults.set(hotKey.keyLabel, forKey: Keys.hotKeyLabel)
+        try store.save(StoredSettings(
+            serverAddress: configuration.baseURL.absoluteString,
+            token: configuration.token,
+            hotKeyCode: hotKey.keyCode,
+            hotKeyModifiers: hotKey.modifiers,
+            hotKeyLabel: hotKey.keyLabel
+        ))
         serverAddress = configuration.baseURL.absoluteString
         token = configuration.token
     }

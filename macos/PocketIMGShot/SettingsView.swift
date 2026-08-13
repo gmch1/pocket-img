@@ -17,7 +17,7 @@ struct SettingsView: View {
                     .textFieldStyle(.roundedBorder)
                 SecureField("Token", text: $settings.token)
                     .textFieldStyle(.roundedBorder)
-                Text("设置保存在当前 macOS 用户的本机偏好中，不访问钥匙串；替换 App 后仍会保留。局域网调试可以使用 HTTP 地址。")
+                Text("设置写入 ~/Library/Application Support/PocketIMGShot/settings.json，不访问钥匙串；替换 App 后仍会保留。局域网调试可以使用 HTTP 地址。")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

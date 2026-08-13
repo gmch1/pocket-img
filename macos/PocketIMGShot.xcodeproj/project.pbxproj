@@ -18,13 +18,16 @@
 		B0000000000000000000000A /* CaptureOverlayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0000000000000000000000A /* CaptureOverlayView.swift */; };
 		B0000000000000000000000B /* PocketIMGClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0000000000000000000000B /* PocketIMGClient.swift */; };
 		B0000000000000000000000C /* ToastPresenter.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0000000000000000000000C /* ToastPresenter.swift */; };
+		B0000000000000000000000D /* ScreenshotRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0000000000000000000000E /* ScreenshotRenderer.swift */; };
+		B0000000000000000000000E /* DiagnosticLog.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0000000000000000000000F /* DiagnosticLog.swift */; };
 		B00000000000000000000101 /* AnnotationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000101 /* AnnotationTests.swift */; };
 		B00000000000000000000102 /* ConfigurationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000102 /* ConfigurationTests.swift */; };
+		B00000000000000000000103 /* ScreenshotRendererTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000103 /* ScreenshotRendererTests.swift */; };
 		B00000000000000000000201 /* AppKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = F00000000000000000000201 /* AppKit.framework */; };
 		B00000000000000000000202 /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = F00000000000000000000202 /* SwiftUI.framework */; };
 		B00000000000000000000203 /* ScreenCaptureKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = F00000000000000000000203 /* ScreenCaptureKit.framework */; };
-		B00000000000000000000204 /* Security.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = F00000000000000000000204 /* Security.framework */; };
 		B00000000000000000000205 /* Carbon.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = F00000000000000000000205 /* Carbon.framework */; };
+		B00000000000000000000206 /* ImageIO.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = F00000000000000000000206 /* ImageIO.framework */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -50,13 +53,16 @@
 		F0000000000000000000000B /* PocketIMGClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PocketIMGClient.swift; sourceTree = "<group>"; };
 		F0000000000000000000000C /* ToastPresenter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ToastPresenter.swift; sourceTree = "<group>"; };
 		F0000000000000000000000D /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		F0000000000000000000000E /* ScreenshotRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenshotRenderer.swift; sourceTree = "<group>"; };
+		F0000000000000000000000F /* DiagnosticLog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiagnosticLog.swift; sourceTree = "<group>"; };
 		F00000000000000000000101 /* AnnotationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnnotationTests.swift; sourceTree = "<group>"; };
 		F00000000000000000000102 /* ConfigurationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfigurationTests.swift; sourceTree = "<group>"; };
+		F00000000000000000000103 /* ScreenshotRendererTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenshotRendererTests.swift; sourceTree = "<group>"; };
 		F00000000000000000000201 /* AppKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AppKit.framework; path = System/Library/Frameworks/AppKit.framework; sourceTree = SDKROOT; };
 		F00000000000000000000202 /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
 		F00000000000000000000203 /* ScreenCaptureKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = ScreenCaptureKit.framework; path = System/Library/Frameworks/ScreenCaptureKit.framework; sourceTree = SDKROOT; };
-		F00000000000000000000204 /* Security.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Security.framework; path = System/Library/Frameworks/Security.framework; sourceTree = SDKROOT; };
 		F00000000000000000000205 /* Carbon.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Carbon.framework; path = System/Library/Frameworks/Carbon.framework; sourceTree = SDKROOT; };
+		F00000000000000000000206 /* ImageIO.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = ImageIO.framework; path = System/Library/Frameworks/ImageIO.framework; sourceTree = SDKROOT; };
 		F00000000000000000000301 /* PocketIMGShot.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = PocketIMGShot.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		F00000000000000000000302 /* PocketIMGShotTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = PocketIMGShotTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -69,8 +75,8 @@
 				B00000000000000000000201 /* AppKit.framework in Frameworks */,
 				B00000000000000000000202 /* SwiftUI.framework in Frameworks */,
 				B00000000000000000000203 /* ScreenCaptureKit.framework in Frameworks */,
-				B00000000000000000000204 /* Security.framework in Frameworks */,
 				B00000000000000000000205 /* Carbon.framework in Frameworks */,
+				B00000000000000000000206 /* ImageIO.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -108,6 +114,8 @@
 				F0000000000000000000000A /* CaptureOverlayView.swift */,
 				F0000000000000000000000B /* PocketIMGClient.swift */,
 				F0000000000000000000000C /* ToastPresenter.swift */,
+				F0000000000000000000000E /* ScreenshotRenderer.swift */,
+				F0000000000000000000000F /* DiagnosticLog.swift */,
 				F0000000000000000000000D /* Info.plist */,
 			);
 			path = PocketIMGShot;
@@ -118,6 +126,7 @@
 			children = (
 				F00000000000000000000101 /* AnnotationTests.swift */,
 				F00000000000000000000102 /* ConfigurationTests.swift */,
+				F00000000000000000000103 /* ScreenshotRendererTests.swift */,
 			);
 			path = PocketIMGShotTests;
 			sourceTree = "<group>";
@@ -128,8 +137,8 @@
 				F00000000000000000000201 /* AppKit.framework */,
 				F00000000000000000000202 /* SwiftUI.framework */,
 				F00000000000000000000203 /* ScreenCaptureKit.framework */,
-				F00000000000000000000204 /* Security.framework */,
 				F00000000000000000000205 /* Carbon.framework */,
+				F00000000000000000000206 /* ImageIO.framework */,
 			);
 			name = Frameworks;
 			sourceTree = "<group>";
@@ -252,6 +261,8 @@
 				B0000000000000000000000A /* CaptureOverlayView.swift in Sources */,
 				B0000000000000000000000B /* PocketIMGClient.swift in Sources */,
 				B0000000000000000000000C /* ToastPresenter.swift in Sources */,
+				B0000000000000000000000D /* ScreenshotRenderer.swift in Sources */,
+				B0000000000000000000000E /* DiagnosticLog.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -261,6 +272,7 @@
 			files = (
 				B00000000000000000000101 /* AnnotationTests.swift in Sources */,
 				B00000000000000000000102 /* ConfigurationTests.swift in Sources */,
+				B00000000000000000000103 /* ScreenshotRendererTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -317,12 +329,12 @@
 				CODE_SIGN_IDENTITY = "-";
 				CODE_SIGN_STYLE = Manual;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 3;
+				CURRENT_PROJECT_VERSION = 4;
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = PocketIMGShot/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/../Frameworks";
-				MARKETING_VERSION = 0.4.2;
+				MARKETING_VERSION = 0.4.3;
 				PRODUCT_BUNDLE_IDENTIFIER = com.gmch.pocketimg.shot;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -336,12 +348,12 @@
 				CODE_SIGN_IDENTITY = "-";
 				CODE_SIGN_STYLE = Manual;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 3;
+				CURRENT_PROJECT_VERSION = 4;
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = PocketIMGShot/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/../Frameworks";
-				MARKETING_VERSION = 0.4.2;
+				MARKETING_VERSION = 0.4.3;
 				PRODUCT_BUNDLE_IDENTIFIER = com.gmch.pocketimg.shot;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
