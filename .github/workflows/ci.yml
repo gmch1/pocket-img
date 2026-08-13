@@ -1,0 +1,102 @@
+name: Continuous Integration
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pocketimg-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend-web:
+    name: Backend and web
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Test and build web app
+        working-directory: frontend
+        run: |
+          npm ci
+          npm test
+          npm run build
+
+      - name: Test Go backend
+        run: go test -tags=nodynamic ./...
+
+  macos:
+    name: macOS client
+    runs-on: macos-15
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Show Xcode environment
+        run: |
+          sw_vers
+          xcodebuild -version
+
+      - name: Test macOS client
+        run: >-
+          xcodebuild
+          -project macos/PocketIMGShot.xcodeproj
+          -scheme PocketIMGShot
+          -configuration Debug
+          -destination 'platform=macOS'
+          -derivedDataPath "${RUNNER_TEMP}/PocketIMGShotTests"
+          test
+
+      - name: Build universal macOS client
+        run: >-
+          xcodebuild
+          -project macos/PocketIMGShot.xcodeproj
+          -scheme PocketIMGShot
+          -configuration Release
+          -derivedDataPath "${RUNNER_TEMP}/PocketIMGShotBuild"
+          ARCHS='arm64 x86_64'
+          ONLY_ACTIVE_ARCH=NO
+          CODE_SIGNING_ALLOWED=NO
+          build
+
+      - name: Verify app icon resources
+        shell: bash
+        run: |
+          app="${RUNNER_TEMP}/PocketIMGShotBuild/Build/Products/Release/PocketIMGShot.app"
+          info_plist="${app}/Contents/Info.plist"
+          resources="${app}/Contents/Resources"
+          test -f "${info_plist}"
+
+          icon_name="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIconName' "${info_plist}" 2>/dev/null || true)"
+          icon_file="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIconFile' "${info_plist}" 2>/dev/null || true)"
+          if [[ "${icon_name}" != "AppIcon" && "${icon_file}" != AppIcon* ]]; then
+            echo "Built application does not declare the AppIcon asset" >&2
+            exit 1
+          fi
+
+          if ! find "${resources}" -maxdepth 1 -type f \( -name 'AppIcon*.icns' -o -name 'Assets.car' \) -print -quit | grep -q .; then
+            echo "Built application is missing compiled app icon resources" >&2
+            exit 1
+          fi
