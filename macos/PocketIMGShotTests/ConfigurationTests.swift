@@ -45,6 +45,25 @@ final class ConfigurationTests: XCTestCase {
     }
 
     @MainActor
+    func testUploadIsAvailableOnlyWithACompleteBackendConfiguration() {
+        let settings = AppSettings(
+            settingsURL: FileManager.default.temporaryDirectory
+                .appendingPathComponent("PocketIMGShotUploadState-\(UUID().uuidString).json")
+        )
+
+        XCTAssertFalse(settings.hasUploadConfiguration)
+
+        settings.serverAddress = "https://img.example.com"
+        XCTAssertFalse(settings.hasUploadConfiguration)
+
+        settings.token = "test-token"
+        XCTAssertTrue(settings.hasUploadConfiguration)
+
+        settings.serverAddress = "not-a-url"
+        XCTAssertFalse(settings.hasUploadConfiguration)
+    }
+
+    @MainActor
     func testSettingsPersistAcrossAppInstancesWithoutKeychain() throws {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent("PocketIMGShotTests-\(UUID().uuidString)", isDirectory: true)
