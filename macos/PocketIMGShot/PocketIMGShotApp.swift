@@ -38,12 +38,17 @@ struct PocketIMGShotApp: App {
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
+    private let automaticTerminationReason = "PocketIMG Shot must remain available from the menu bar"
+
     func applicationDidFinishLaunching(_ notification: Notification) {
+        ProcessInfo.processInfo.disableAutomaticTermination(automaticTerminationReason)
         AppController.shared.start()
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        DiagnosticLog.record("app will terminate")
         AppController.shared.stop()
+        ProcessInfo.processInfo.enableAutomaticTermination(automaticTerminationReason)
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
