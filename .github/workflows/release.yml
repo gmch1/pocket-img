@@ -1,4 +1,4 @@
-name: Release Android APK
+name: Release PocketIMG
 
 on:
   push:
@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Release tag, for example v0.1.0"
+        description: "Release tag, for example v0.4.0"
         required: true
         type: string
 
@@ -19,13 +19,36 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  release:
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - name: Resolve release version
+        id: version
+        shell: bash
+        env:
+          DISPATCH_VERSION: ${{ inputs.version }}
+        run: |
+          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+            release_tag="${GITHUB_REF_NAME}"
+          else
+            release_tag="${DISPATCH_VERSION}"
+          fi
+          if [[ ! "${release_tag}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]]; then
+            echo "Release tag must look like v0.4.0" >&2
+            exit 1
+          fi
+          echo "tag=${release_tag}" >> "${GITHUB_OUTPUT}"
+          echo "version=${release_tag#v}" >> "${GITHUB_OUTPUT}"
+
+  android:
+    needs: prepare
     runs-on: ubuntu-latest
     steps:
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          fetch-depth: 0
 
       - name: Set up Java
         uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
@@ -46,23 +69,6 @@ jobs:
           node-version: "24"
           cache: npm
           cache-dependency-path: frontend/package-lock.json
-
-      - name: Resolve release version
-        shell: bash
-        env:
-          DISPATCH_VERSION: ${{ inputs.version }}
-        run: |
-          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
-            release_tag="${GITHUB_REF_NAME}"
-          else
-            release_tag="${DISPATCH_VERSION}"
-          fi
-          if [[ ! "${release_tag}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]]; then
-            echo "Release tag must look like v0.1.0" >&2
-            exit 1
-          fi
-          echo "RELEASE_TAG=${release_tag}" >> "${GITHUB_ENV}"
-          echo "RELEASE_VERSION=${release_tag#v}" >> "${GITHUB_ENV}"
 
       - name: Build and test web app
         working-directory: frontend
@@ -95,29 +101,111 @@ jobs:
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
           PIH_ANDROID_VERSION_CODE: ${{ github.run_number }}
-          PIH_ANDROID_VERSION_NAME: ${{ env.RELEASE_VERSION }}
+          PIH_ANDROID_VERSION_NAME: ${{ needs.prepare.outputs.version }}
         run: ./gradlew testDebugUnitTest assembleRelease --no-daemon
 
-      - name: Prepare release files
+      - name: Prepare Android release files
         shell: bash
+        env:
+          RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
         run: |
           install -d release
           cp android/app/build/outputs/apk/release/app-release.apk "release/PocketIMG-${RELEASE_VERSION}-arm64.apk"
           cd release
           sha256sum "PocketIMG-${RELEASE_VERSION}-arm64.apk" > "PocketIMG-${RELEASE_VERSION}-arm64.apk.sha256"
 
-      - name: Upload workflow artifact
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+      - name: Upload Android artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0 # v7
         with:
-          name: PocketIMG-${{ env.RELEASE_VERSION }}-arm64
+          name: release-android
           path: release/*
           if-no-files-found: error
           compression-level: 0
+
+  macos:
+    needs: prepare
+    runs-on: macos-15
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Show Xcode environment
+        run: |
+          sw_vers
+          xcodebuild -version
+
+      - name: Test macOS client
+        run: >-
+          xcodebuild
+          -project macos/PocketIMGShot.xcodeproj
+          -scheme PocketIMGShot
+          -configuration Debug
+          -destination 'platform=macOS'
+          -derivedDataPath "${RUNNER_TEMP}/PocketIMGShotTests"
+          test
+
+      - name: Build universal macOS client
+        env:
+          RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
+        run: >-
+          xcodebuild
+          -project macos/PocketIMGShot.xcodeproj
+          -scheme PocketIMGShot
+          -configuration Release
+          -derivedDataPath "${RUNNER_TEMP}/PocketIMGShotBuild"
+          ARCHS='arm64 x86_64'
+          ONLY_ACTIVE_ARCH=NO
+          MARKETING_VERSION="${RELEASE_VERSION}"
+          CURRENT_PROJECT_VERSION="${GITHUB_RUN_NUMBER}"
+          build
+
+      - name: Verify and package macOS client
+        shell: bash
+        env:
+          RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          app="${RUNNER_TEMP}/PocketIMGShotBuild/Build/Products/Release/PocketIMGShot.app"
+          binary="${app}/Contents/MacOS/PocketIMGShot"
+          test -d "${app}"
+          codesign --verify --deep --strict "${app}"
+          architectures="$(lipo -archs "${binary}")"
+          [[ "${architectures}" == *arm64* ]]
+          [[ "${architectures}" == *x86_64* ]]
+          install -d release
+          archive="release/PocketIMGShot-${RELEASE_VERSION}-macos-universal.zip"
+          ditto -c -k --sequesterRsrc --keepParent "${app}" "${archive}"
+          shasum -a 256 "${archive}" > "${archive}.sha256"
+
+      - name: Upload macOS artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0 # v7
+        with:
+          name: release-macos
+          path: release/*
+          if-no-files-found: error
+          compression-level: 0
+
+  publish:
+    needs: [prepare, android, macos]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+
+      - name: Download release artifacts
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        with:
+          pattern: release-*
+          path: release
+          merge-multiple: true
 
       - name: Publish GitHub Release
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.prepare.outputs.tag }}
+          RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
         run: |
           if gh release view "${RELEASE_TAG}" >/dev/null 2>&1; then
             gh release upload "${RELEASE_TAG}" release/* --clobber
