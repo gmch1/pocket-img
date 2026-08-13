@@ -132,6 +132,24 @@ describe("App", () => {
     expect(listImages).toHaveBeenCalledTimes(2);
   });
 
+  test("shows a friendly gallery error and retries the request", async () => {
+    vi.mocked(listImages)
+      .mockResolvedValueOnce(gallery([]))
+      .mockRejectedValueOnce(new APIError(502, "请求失败 (502)"))
+      .mockResolvedValueOnce(gallery([]));
+
+    render(<App />);
+    await screen.findByText("粘贴第一张图片");
+    fireEvent.click(screen.getByRole("button", { name: "全部" }));
+    expect(await screen.findByRole("heading", { name: "暂时无法加载" })).toBeTruthy();
+    expect(screen.getByText("图库连接遇到问题，请稍后重试。")).toBeTruthy();
+    expect(screen.getByText("请求失败 (502)")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "重新加载" }));
+    expect(await screen.findByText("粘贴第一张图片")).toBeTruthy();
+    expect(listImages).toHaveBeenCalledTimes(3);
+  });
+
   test("lets an administrator create a user token", async () => {
     const account = gallery([], true).account;
     vi.mocked(listImages).mockResolvedValue(gallery([], true));

@@ -7,7 +7,7 @@ import { ImagePreview } from "./components/ImagePreview";
 import { AdminPanel } from "./components/AdminPanel";
 import { TokenPanel } from "./components/TokenPanel";
 import { GlobalUploadProgress } from "./components/GlobalUploadProgress";
-import { CloseIcon, ImageIcon, KeyIcon, LogoutIcon, TrashIcon, UsersIcon } from "./icons";
+import { AlertIcon, CloseIcon, ImageIcon, KeyIcon, LogoutIcon, TrashIcon, UsersIcon } from "./icons";
 import type { AccountInfo, GalleryRange, ImageItem, UploadTask } from "./types";
 
 type AuthState = "checking" | "required" | "authenticated";
@@ -349,7 +349,15 @@ export default function App() {
       <main className="gallery-shell">
         <div className="paste-line"><kbd>Ctrl</kbd><span>+</span><kbd>V</kbd><span>粘贴图片即可上传</span></div>
         {galleryError ? (
-          <div className="state-panel state-panel--error"><p>{galleryError}</p><button type="button" onClick={() => void refresh(range)}>重试</button></div>
+          <div className="state-panel state-panel--error" role="alert">
+            <span className="state-panel__mark"><AlertIcon /></span>
+            <div className="state-panel__copy">
+              <h1>暂时无法加载</h1>
+              <p>图库连接遇到问题，请稍后重试。</p>
+              <small>{galleryError}</small>
+            </div>
+            <button className="primary-button state-panel__retry" type="button" onClick={() => void refresh(range)}>重新加载</button>
+          </div>
         ) : null}
         {!galleryError && loading && images.length === 0 ? <div className="gallery-loading"><span className="spinner" /></div> : null}
         {!galleryError && loading && images.length > 0 ? (

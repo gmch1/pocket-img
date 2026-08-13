@@ -1,14 +1,23 @@
 package webui
 
 import (
+	"errors"
+	"io/fs"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"testing/fstest"
 )
 
+func fixtureHandler() http.Handler {
+	return newHandler(fstest.MapFS{
+		"index.html": &fstest.MapFile{Data: []byte(`<!doctype html><div id="root"></div>`)},
+	})
+}
+
 func TestHandlerServesIndexAndSPAFallback(t *testing.T) {
-	handler := Handler()
+	handler := fixtureHandler()
 	for _, requestPath := range []string{"/", "/gallery/deep-link"} {
 		request := httptest.NewRequest(http.MethodGet, requestPath, nil)
 		response := httptest.NewRecorder()
@@ -26,7 +35,7 @@ func TestHandlerServesIndexAndSPAFallback(t *testing.T) {
 }
 
 func TestHandlerDoesNotMaskReservedBackendPaths(t *testing.T) {
-	handler := Handler()
+	handler := fixtureHandler()
 	for _, requestPath := range []string{"/api/unknown", "/i/unknown.webp", "/t/unknown.webp"} {
 		request := httptest.NewRequest(http.MethodGet, requestPath, nil)
 		response := httptest.NewRecorder()
@@ -34,5 +43,18 @@ func TestHandlerDoesNotMaskReservedBackendPaths(t *testing.T) {
 		if response.Code != http.StatusNotFound {
 			t.Fatalf("path=%s status=%d", requestPath, response.Code)
 		}
+	}
+}
+
+func TestEmbeddedFrontendBuildWhenPresent(t *testing.T) {
+	content, err := fs.ReadFile(assets, "dist/index.html")
+	if err != nil {
+		if !errors.Is(err, fs.ErrNotExist) {
+			t.Fatalf("read embedded index: %v", err)
+		}
+		t.Skip("frontend build is not present; run make frontend-build")
+	}
+	if !strings.Contains(string(content), `id="root"`) {
+		t.Fatal("embedded frontend index is invalid")
 	}
 }
