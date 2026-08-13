@@ -1,5 +1,6 @@
 import AppKit
 import CoreGraphics
+import CoreImage
 
 enum CaptureAction: Sendable {
     case pin
@@ -40,8 +41,20 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
     }
 
     weak var delegate: CaptureOverlayViewDelegate?
+    var onAnnotationStyleChange: ((AnnotationStylePreferences) -> Void)?
+    var annotationStyle = AnnotationStylePreferences.default {
+        didSet {
+            let normalized = annotationStyle.normalized
+            rectangleLineWidth = normalized.rectangleLineWidth
+            arrowLineWidth = normalized.arrowLineWidth
+            textFontSize = normalized.textFontSize
+        }
+    }
     var screenshot: CGImage? {
-        didSet { needsDisplay = true }
+        didSet {
+            blurredScreenshot = screenshot.map(makeBlurredScreenshot)
+            needsDisplay = true
+        }
     }
 
     private enum Mode {
@@ -49,7 +62,7 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
         case editing
     }
 
-    private enum ToolbarAction: CaseIterable {
+    private enum ToolbarAction: CaseIterable, Equatable {
         case rectangle
         case arrow
         case text
@@ -67,9 +80,17 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
     private var selectedTool: AnnotationTool = .rectangle
     private var annotations: [Annotation] = []
     private var currentAnnotation: Annotation?
+    private var blurredScreenshot: NSImage?
     private var textEditor: NSTextField?
     private var textAnchor: CGPoint?
+    private var textEditorSize: CGFloat?
     private var hoverPoint: CGPoint?
+    private var pressedToolbarAction: ToolbarAction?
+    private var rectangleLineWidth: CGFloat = 3
+    private var arrowLineWidth: CGFloat = 3
+    private var textFontSize: CGFloat = 20
+    private var toolSizeHintVisible = false
+    private var toolSizeHintGeneration = 0
     private var isFinishing = false
 
     override var isFlipped: Bool { true }
@@ -92,7 +113,8 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
         case .editing:
             if let action = toolbarAction(at: point) {
                 commitTextEditing()
-                perform(action)
+                pressedToolbarAction = action
+                needsDisplay = true
                 return
             }
             guard selection?.contains(point) == true else { return }
@@ -102,7 +124,12 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
             }
             commitTextEditing()
             dragStart = point
-            currentAnnotation = Annotation(tool: selectedTool, start: point, end: point)
+            currentAnnotation = Annotation(
+                tool: selectedTool,
+                start: point,
+                end: point,
+                styleSize: currentToolSize
+            )
         }
         needsDisplay = true
     }
@@ -120,7 +147,12 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
                 x: min(max(point.x, selection.minX), selection.maxX),
                 y: min(max(point.y, selection.minY), selection.maxY)
             )
-            currentAnnotation = Annotation(tool: selectedTool, start: dragStart, end: endpoint)
+            currentAnnotation = Annotation(
+                tool: selectedTool,
+                start: dragStart,
+                end: endpoint,
+                styleSize: currentToolSize
+            )
         }
         needsDisplay = true
     }
@@ -128,6 +160,15 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
     override func mouseUp(with event: NSEvent) {
         defer { dragStart = nil }
         guard !isFinishing else { return }
+        let point = constrained(convert(event.locationInWindow, from: nil))
+        if let pressedToolbarAction {
+            self.pressedToolbarAction = nil
+            if toolbarAction(at: point) == pressedToolbarAction {
+                perform(pressedToolbarAction)
+            }
+            needsDisplay = true
+            return
+        }
 
         switch mode {
         case .selecting:
@@ -175,6 +216,53 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
         needsDisplay = true
     }
 
+    override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        let modifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+        if mode == .editing,
+           modifiers == .command,
+           event.charactersIgnoringModifiers?.lowercased() == "c" {
+            finish(.copy)
+            return true
+        }
+        return super.performKeyEquivalent(with: event)
+    }
+
+    override func scrollWheel(with event: NSEvent) {
+        guard mode == .editing, !isFinishing, abs(event.scrollingDeltaY) > 0.01 else {
+            super.scrollWheel(with: event)
+            return
+        }
+        let rawStep = event.hasPreciseScrollingDeltas
+            ? event.scrollingDeltaY / 8
+            : event.scrollingDeltaY
+        switch selectedTool {
+        case .rectangle:
+            rectangleLineWidth = roundedHalfStep(rectangleLineWidth + rawStep, range: 1...12)
+        case .arrow:
+            arrowLineWidth = roundedHalfStep(arrowLineWidth + rawStep, range: 1...12)
+        case .text:
+            textFontSize = roundedWholeStep(textFontSize + rawStep * 2, range: 12...72)
+            if let textEditor {
+                let font = annotationTextFont(size: textFontSize)
+                textEditor.font = font
+                textEditorSize = textFontSize
+                if let selection {
+                    var frame = textEditor.frame
+                    frame.size.height = textEditorHeight(for: font)
+                    frame.origin.y = max(
+                        selection.minY,
+                        min(frame.origin.y, selection.maxY - frame.height)
+                    )
+                    textEditor.frame = frame
+                    textAnchor = textAnchor(for: frame)
+                }
+            }
+        }
+        onAnnotationStyleChange?(currentAnnotationStyle)
+        showToolSizeHint()
+        needsDisplay = true
+    }
+
     override func mouseMoved(with event: NSEvent) {
         guard mode == .selecting, !isFinishing else { return }
         hoverPoint = constrained(convert(event.locationInWindow, from: nil))
@@ -188,23 +276,17 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
             return
         }
 
-        let image = NSImage(cgImage: screenshot, size: bounds.size)
-        let graphicsContext = NSGraphicsContext.current
-        let previousInterpolation = graphicsContext?.imageInterpolation
-        graphicsContext?.imageInterpolation = .none
-        image.draw(
-            in: bounds,
-            from: .zero,
-            operation: .copy,
-            fraction: 1,
-            respectFlipped: true,
-            hints: nil
-        )
-        if let previousInterpolation {
-            graphicsContext?.imageInterpolation = previousInterpolation
+        let originalImage = NSImage(cgImage: screenshot, size: bounds.size)
+        drawImage(blurredScreenshot ?? originalImage, interpolation: .high)
+
+        if let selection {
+            NSGraphicsContext.saveGraphicsState()
+            NSBezierPath(rect: selection).addClip()
+            drawImage(originalImage, interpolation: .none)
+            NSGraphicsContext.restoreGraphicsState()
         }
 
-        NSColor.black.withAlphaComponent(0.42).setFill()
+        NSColor.black.withAlphaComponent(0.28).setFill()
         if let selection {
             let shade = NSBezierPath(rect: bounds)
             shade.appendRect(selection)
@@ -219,6 +301,39 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
         if mode == .selecting, let hoverPoint {
             drawPixelInspector(at: hoverPoint, screenshot: screenshot)
         }
+    }
+
+    private func drawImage(_ image: NSImage, interpolation: NSImageInterpolation) {
+        let graphicsContext = NSGraphicsContext.current
+        let previousInterpolation = graphicsContext?.imageInterpolation
+        graphicsContext?.imageInterpolation = interpolation
+        image.draw(
+            in: bounds,
+            from: .zero,
+            operation: .copy,
+            fraction: 1,
+            respectFlipped: true,
+            hints: nil
+        )
+        if let previousInterpolation {
+            graphicsContext?.imageInterpolation = previousInterpolation
+        }
+    }
+
+    private func makeBlurredScreenshot(_ screenshot: CGImage) -> NSImage {
+        let source = CIImage(cgImage: screenshot)
+        let blurred = source
+            .clampedToExtent()
+            .applyingFilter(
+                "CIGaussianBlur",
+                parameters: [kCIInputRadiusKey: 14]
+            )
+            .cropped(to: source.extent)
+        let representation = NSCIImageRep(ciImage: blurred)
+        representation.size = bounds.size
+        let image = NSImage(size: bounds.size)
+        image.addRepresentation(representation)
+        return image
     }
 
     private func drawSelection(_ selection: CGRect) {
@@ -240,7 +355,10 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
         }
 
         drawSizeLabel(selection)
-        if mode == .editing { drawToolbar() }
+        if mode == .editing {
+            drawToolbar()
+            if toolSizeHintVisible { drawToolSizeHint() }
+        }
     }
 
     private func draw(_ annotation: Annotation, color: NSColor) {
@@ -261,11 +379,12 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
             return
         }
 
+        let lineWidth = annotation.resolvedStyleSize
         NSColor.black.withAlphaComponent(0.38).setStroke()
-        path.lineWidth = 5
+        path.lineWidth = lineWidth + 2
         path.stroke()
         color.setStroke()
-        path.lineWidth = 3
+        path.lineWidth = lineWidth
         path.stroke()
     }
 
@@ -274,7 +393,10 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
         value.draw(
             at: annotation.start,
             withAttributes: [
-                .font: NSFont.systemFont(ofSize: 20, weight: .semibold),
+                .font: NSFont.systemFont(
+                    ofSize: annotation.resolvedStyleSize,
+                    weight: .semibold
+                ),
                 .foregroundColor: color,
                 .strokeColor: NSColor.black.withAlphaComponent(0.58),
                 .strokeWidth: -3,
@@ -421,6 +543,51 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
             path.line(to: CGPoint(x: icon.midX + 4, y: icon.minY + 8))
         }
         path.stroke()
+    }
+
+    private func drawToolSizeHint() {
+        let actionIndex: Int
+        let suffix: String
+        switch selectedTool {
+        case .rectangle:
+            actionIndex = 0
+            suffix = "px"
+        case .arrow:
+            actionIndex = 1
+            suffix = "px"
+        case .text:
+            actionIndex = 2
+            suffix = "pt"
+        }
+        let size = currentToolSize
+        let value = size.rounded() == size
+            ? "\(Int(size)) \(suffix)"
+            : String(format: "%.1f %@", size, suffix)
+        let attributes: [NSAttributedString.Key: Any] = [
+            .font: NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .semibold),
+            .foregroundColor: NSColor.white,
+        ]
+        let textSize = value.size(withAttributes: attributes)
+        let badgeSize = CGSize(width: textSize.width + 14, height: textSize.height + 8)
+        let button = toolbarButtonFrame(index: actionIndex)
+        let toolbar = toolbarFrame()
+        let preferredY = toolbar.minY - badgeSize.height - 6
+        let y = preferredY >= bounds.minY + 6
+            ? preferredY
+            : toolbar.maxY + 6
+        let x = min(
+            max(button.midX - badgeSize.width / 2, bounds.minX + 6),
+            bounds.maxX - badgeSize.width - 6
+        )
+        let frame = CGRect(origin: CGPoint(x: x, y: y), size: badgeSize)
+        NSColor(calibratedWhite: 0.08, alpha: 0.94).setFill()
+        NSBezierPath(roundedRect: frame, xRadius: 6, yRadius: 6).fill()
+        NSColor.white.withAlphaComponent(0.16).setStroke()
+        NSBezierPath(roundedRect: frame, xRadius: 6, yRadius: 6).stroke()
+        value.draw(
+            at: CGPoint(x: frame.minX + 7, y: frame.minY + 4),
+            withAttributes: attributes
+        )
     }
 
     private func drawSizeLabel(_ selection: CGRect) {
@@ -641,8 +808,9 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
         guard let selection else { return }
         commitTextEditing()
 
-        let width = min(260, max(80, selection.width))
-        let height: CGFloat = 34
+        let font = annotationTextFont(size: textFontSize)
+        let width = min(280, selection.width)
+        let height = textEditorHeight(for: font)
         let x = min(
             max(point.x, selection.minX),
             max(selection.minX, selection.maxX - width)
@@ -655,38 +823,52 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
         let editor = NSTextField(frame: frame)
         editor.isBordered = false
         editor.isBezeled = false
-        editor.drawsBackground = true
-        editor.backgroundColor = NSColor(calibratedWhite: 0.08, alpha: 0.9)
+        editor.drawsBackground = false
         editor.textColor = .systemRed
-        editor.font = NSFont.systemFont(ofSize: 20, weight: .semibold)
+        editor.font = font
         editor.focusRingType = .none
-        editor.placeholderString = "输入文字，回车确认"
+        editor.placeholderString = "输入文字"
         editor.delegate = self
         editor.cell?.isScrollable = true
         editor.cell?.wraps = false
         editor.wantsLayer = true
-        editor.layer?.cornerRadius = 7
+        editor.layer?.backgroundColor = NSColor(calibratedWhite: 0.06, alpha: 0.82).cgColor
+        editor.layer?.cornerRadius = height / 2
+        editor.layer?.cornerCurve = .continuous
         editor.layer?.borderWidth = 1
-        editor.layer?.borderColor = NSColor.controlAccentColor.cgColor
+        editor.layer?.borderColor = NSColor.systemRed.withAlphaComponent(0.72).cgColor
         editor.layer?.masksToBounds = true
 
         addSubview(editor)
         textEditor = editor
-        textAnchor = CGPoint(x: frame.minX + 5, y: frame.minY + 6)
+        textAnchor = textAnchor(for: frame)
+        textEditorSize = textFontSize
         window?.makeFirstResponder(editor)
         editor.selectText(nil)
+        if let fieldEditor = editor.currentEditor() as? NSTextView {
+            fieldEditor.insertionPointColor = .systemRed
+            fieldEditor.backgroundColor = .clear
+        }
     }
 
     private func commitTextEditing() {
         guard let editor = textEditor else { return }
         let value = editor.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
         let anchor = textAnchor
+        let styleSize = textEditorSize
         textEditor = nil
         textAnchor = nil
+        textEditorSize = nil
         editor.delegate = nil
         editor.removeFromSuperview()
         if !value.isEmpty, let anchor {
-            annotations.append(Annotation(tool: .text, start: anchor, end: anchor, text: value))
+            annotations.append(Annotation(
+                tool: .text,
+                start: anchor,
+                end: anchor,
+                text: value,
+                styleSize: styleSize
+            ))
         }
         window?.makeFirstResponder(self)
         needsDisplay = true
@@ -696,6 +878,7 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
         guard let editor = textEditor else { return }
         textEditor = nil
         textAnchor = nil
+        textEditorSize = nil
         editor.delegate = nil
         editor.removeFromSuperview()
         window?.makeFirstResponder(self)
@@ -760,6 +943,9 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
         isFinishing = true
         let viewBounds = bounds
         let annotations = annotations
+        let placementFrame = window.map { captureWindow in
+            CaptureGeometry.screenFrame(for: selection, in: captureWindow.frame)
+        }
         DiagnosticLog.record(
             "render started action=\(action) selection=\(Int(selection.width))x\(Int(selection.height)) " +
             "source=\(screenshot.width)x\(screenshot.height)"
@@ -767,7 +953,7 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
 
         Task { [weak self] in
             do {
-                let payload = try await Task.detached(priority: .userInitiated) {
+                let rendered = try await Task.detached(priority: .userInitiated) {
                     try ScreenshotRenderer.render(
                         screenshot: screenshot,
                         viewBounds: viewBounds,
@@ -775,6 +961,7 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
                         annotations: annotations
                     )
                 }.value
+                let payload = placementFrame.map { rendered.placed(in: $0) } ?? rendered
                 DiagnosticLog.record("render finished bytes=\(payload.data.count)")
                 guard let self else { return }
                 self.delegate?.captureOverlay(self, didFinish: payload, action: action)
@@ -843,5 +1030,56 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
             x: min(max(point.x, bounds.minX), bounds.maxX),
             y: min(max(point.y, bounds.minY), bounds.maxY)
         )
+    }
+
+    private var currentToolSize: CGFloat {
+        switch selectedTool {
+        case .rectangle:
+            return rectangleLineWidth
+        case .arrow:
+            return arrowLineWidth
+        case .text:
+            return textFontSize
+        }
+    }
+
+    private var currentAnnotationStyle: AnnotationStylePreferences {
+        AnnotationStylePreferences(
+            rectangleLineWidth: rectangleLineWidth,
+            arrowLineWidth: arrowLineWidth,
+            textFontSize: textFontSize
+        )
+    }
+
+    private func roundedHalfStep(_ value: CGFloat, range: ClosedRange<CGFloat>) -> CGFloat {
+        min(max((value * 2).rounded() / 2, range.lowerBound), range.upperBound)
+    }
+
+    private func roundedWholeStep(_ value: CGFloat, range: ClosedRange<CGFloat>) -> CGFloat {
+        min(max(value.rounded(), range.lowerBound), range.upperBound)
+    }
+
+    private func showToolSizeHint() {
+        toolSizeHintGeneration += 1
+        let generation = toolSizeHintGeneration
+        toolSizeHintVisible = true
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .seconds(1.2))
+            guard let self, self.toolSizeHintGeneration == generation else { return }
+            self.toolSizeHintVisible = false
+            self.needsDisplay = true
+        }
+    }
+
+    private func annotationTextFont(size: CGFloat) -> NSFont {
+        NSFont.systemFont(ofSize: size, weight: .semibold)
+    }
+
+    private func textEditorHeight(for font: NSFont) -> CGFloat {
+        ceil(font.ascender - font.descender + font.leading) + 2
+    }
+
+    private func textAnchor(for editorFrame: CGRect) -> CGPoint {
+        CGPoint(x: editorFrame.minX + 4, y: editorFrame.minY + 1)
     }
 }

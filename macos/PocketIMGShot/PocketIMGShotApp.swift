@@ -20,9 +20,7 @@ struct PocketIMGShotApp: App {
             }
 
             Divider()
-            SettingsLink {
-                Text("设置…")
-            }
+            SettingsMenuButton(controller: controller)
             Button("退出 PocketIMG Shot") {
                 NSApplication.shared.terminate(nil)
             }
@@ -32,6 +30,19 @@ struct PocketIMGShotApp: App {
 
         Settings {
             SettingsView(controller: controller)
+        }
+    }
+}
+
+private struct SettingsMenuButton: View {
+    @ObservedObject var controller: AppController
+    @Environment(\.openSettings) private var openSettings
+
+    var body: some View {
+        Button("设置…") {
+            NSApplication.shared.activate(ignoringOtherApps: true)
+            openSettings()
+            controller.bringSettingsToFront()
         }
     }
 }

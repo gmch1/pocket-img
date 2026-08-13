@@ -6,45 +6,25 @@ final class PinnedImagePresenter: NSObject, NSWindowDelegate {
 
     func show(_ payload: UploadPayload) throws {
         guard let image = NSImage(data: payload.data),
-              payload.displaySize.width > 0,
-              payload.displaySize.height > 0 else {
+              let placementFrame = payload.placementFrame,
+              placementFrame.width > 0,
+              placementFrame.height > 0 else {
             throw PinnedImageError.invalidImage
         }
 
-        let mouse = NSEvent.mouseLocation
-        let screen = NSScreen.screens.first(where: { $0.frame.contains(mouse) }) ?? NSScreen.main
-        guard let visibleFrame = screen?.visibleFrame else {
+        let screen = NSScreen.screens.first(where: { $0.frame.intersects(placementFrame) }) ?? NSScreen.main
+        guard screen != nil else {
             throw PinnedImageError.noScreen
         }
-        let maximum = CGSize(width: visibleFrame.width * 0.78, height: visibleFrame.height * 0.78)
-        let scale = min(
-            1,
-            maximum.width / payload.displaySize.width,
-            maximum.height / payload.displaySize.height
-        )
-        let size = CGSize(
-            width: max(48, payload.displaySize.width * scale),
-            height: max(48, payload.displaySize.height * scale)
-        )
-        let origin = CGPoint(
-            x: min(
-                max(mouse.x - size.width / 2, visibleFrame.minX),
-                visibleFrame.maxX - size.width
-            ),
-            y: min(
-                max(mouse.y - size.height / 2, visibleFrame.minY),
-                visibleFrame.maxY - size.height
-            )
-        )
 
         let window = PinnedImageWindow(
-            contentRect: CGRect(origin: origin, size: size),
+            contentRect: placementFrame,
             styleMask: [.borderless, .resizable],
             backing: .buffered,
             defer: false,
             screen: screen
         )
-        let imageView = PinnedImageView(frame: CGRect(origin: .zero, size: size))
+        let imageView = PinnedImageView(frame: CGRect(origin: .zero, size: placementFrame.size))
         imageView.image = image
         imageView.imageScaling = .scaleAxesIndependently
         imageView.onClose = { [weak window] in window?.close() }
@@ -63,7 +43,7 @@ final class PinnedImagePresenter: NSObject, NSWindowDelegate {
         window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         window.isMovableByWindowBackground = true
         window.isReleasedWhenClosed = false
-        window.contentAspectRatio = payload.displaySize
+        window.contentAspectRatio = placementFrame.size
         window.minSize = CGSize(width: 48, height: 48)
         windows.append(window)
         window.orderFrontRegardless()

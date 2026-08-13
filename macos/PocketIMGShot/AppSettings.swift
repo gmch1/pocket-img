@@ -7,6 +7,7 @@ private struct StoredSettings: Codable {
     let hotKeyCode: UInt32
     let hotKeyModifiers: UInt
     let hotKeyLabel: String
+    let annotationStyle: AnnotationStylePreferences?
 }
 
 private struct SettingsStore {
@@ -98,8 +99,10 @@ final class AppSettings: ObservableObject {
     @Published var token: String
     @Published var hotKey: HotKey
     @Published var hotKeyRegistrationError = ""
+    private(set) var annotationStyle: AnnotationStylePreferences
 
     private let store: SettingsStore
+    private var annotationStyleSaveTask: Task<Void, Never>?
 
     init(settingsURL: URL? = nil) {
         store = SettingsStore(fileURL: settingsURL ?? SettingsStore.defaultURL)
@@ -112,10 +115,12 @@ final class AppSettings: ObservableObject {
                 modifiers: stored.hotKeyModifiers,
                 keyLabel: stored.hotKeyLabel
             )
+            annotationStyle = (stored.annotationStyle ?? .default).normalized
         } else {
             serverAddress = ""
             token = ""
             hotKey = .default
+            annotationStyle = .default
         }
     }
 
@@ -126,10 +131,43 @@ final class AppSettings: ObservableObject {
             token: configuration.token,
             hotKeyCode: hotKey.keyCode,
             hotKeyModifiers: hotKey.modifiers,
-            hotKeyLabel: hotKey.keyLabel
+            hotKeyLabel: hotKey.keyLabel,
+            annotationStyle: annotationStyle
         ))
         serverAddress = configuration.baseURL.absoluteString
         token = configuration.token
+    }
+
+    func updateAnnotationStyle(_ value: AnnotationStylePreferences) {
+        annotationStyle = value.normalized
+        annotationStyleSaveTask?.cancel()
+        annotationStyleSaveTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .milliseconds(350))
+            guard !Task.isCancelled else { return }
+            self?.persistAnnotationStyle()
+        }
+    }
+
+    func flushAnnotationStyle() {
+        annotationStyleSaveTask?.cancel()
+        annotationStyleSaveTask = nil
+        persistAnnotationStyle()
+    }
+
+    private func persistAnnotationStyle() {
+        do {
+            let stored = try store.load()
+            try store.save(StoredSettings(
+                serverAddress: stored?.serverAddress ?? serverAddress,
+                token: stored?.token ?? token,
+                hotKeyCode: stored?.hotKeyCode ?? hotKey.keyCode,
+                hotKeyModifiers: stored?.hotKeyModifiers ?? hotKey.modifiers,
+                hotKeyLabel: stored?.hotKeyLabel ?? hotKey.keyLabel,
+                annotationStyle: annotationStyle
+            ))
+        } catch {
+            DiagnosticLog.record(error, phase: "save annotation style")
+        }
     }
 
     func serviceConfiguration() throws -> ServiceConfiguration {
