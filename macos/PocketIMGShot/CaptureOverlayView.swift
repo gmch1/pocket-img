@@ -348,12 +348,17 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
                 if let selection {
                     var frame = textEditor.frame
                     frame.size.height = textEditorHeight(for: font)
+                    frame.size.width = textEditorWidth(
+                        for: textEditor.stringValue,
+                        font: font,
+                        maximum: selection.maxX - frame.minX
+                    )
                     frame.origin.y = max(
                         selection.minY,
                         min(frame.origin.y, selection.maxY - frame.height)
                     )
                     textEditor.frame = frame
-                    textAnchor = textAnchor(for: frame)
+                    textAnchor = textAnchor(for: frame, font: font)
                 }
             }
         }
@@ -948,7 +953,7 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
         commitTextEditing()
 
         let font = annotationTextFont(size: textFontSize)
-        let width = min(280, selection.width)
+        let width = textEditorWidth(for: "", font: font, maximum: selection.width)
         let height = textEditorHeight(for: font)
         let x = min(
             max(point.x, selection.minX),
@@ -977,16 +982,16 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
         editor.cell?.wraps = false
         editor.cell?.usesSingleLineMode = true
         editor.wantsLayer = true
-        editor.layer?.backgroundColor = NSColor.black.withAlphaComponent(0.18).cgColor
-        editor.layer?.cornerRadius = 5
+        editor.layer?.backgroundColor = NSColor.clear.cgColor
+        editor.layer?.cornerRadius = 4
         editor.layer?.cornerCurve = .continuous
         editor.layer?.borderWidth = 1
-        editor.layer?.borderColor = NSColor.white.withAlphaComponent(0.20).cgColor
+        editor.layer?.borderColor = NSColor.white.withAlphaComponent(0.14).cgColor
         editor.layer?.masksToBounds = false
 
         addSubview(editor)
         textEditor = editor
-        textAnchor = textAnchor(for: frame)
+        textAnchor = textAnchor(for: frame, font: font)
         textEditorSize = textFontSize
         textEditorColor = annotationColor
         window?.makeFirstResponder(editor)
@@ -1070,6 +1075,10 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
         updateTextEditorFocus(true)
     }
 
+    func controlTextDidChange(_ notification: Notification) {
+        resizeTextEditorToFit()
+    }
+
     func controlTextDidEndEditing(_ notification: Notification) {
         updateTextEditorFocus(false)
     }
@@ -1077,13 +1086,32 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
     private func updateTextEditorFocus(_ focused: Bool) {
         guard let layer = textEditor?.layer else { return }
         layer.borderColor = focused
-            ? NSColor.controlAccentColor.withAlphaComponent(0.92).cgColor
-            : NSColor.white.withAlphaComponent(0.20).cgColor
-        layer.borderWidth = focused ? 1.5 : 1
+            ? NSColor.controlAccentColor.withAlphaComponent(0.76).cgColor
+            : NSColor.white.withAlphaComponent(0.14).cgColor
+        layer.borderWidth = 1
         layer.shadowColor = NSColor.controlAccentColor.cgColor
-        layer.shadowOpacity = focused ? 0.20 : 0
-        layer.shadowRadius = focused ? 5 : 0
+        layer.shadowOpacity = focused ? 0.12 : 0
+        layer.shadowRadius = focused ? 3 : 0
         layer.shadowOffset = .zero
+    }
+
+    private func resizeTextEditorToFit() {
+        guard let editor = textEditor,
+              let selection,
+              let font = editor.font else { return }
+        var frame = editor.frame
+        frame.size.width = textEditorWidth(
+            for: editor.stringValue,
+            font: font,
+            maximum: selection.maxX - frame.minX
+        )
+        frame.size.height = textEditorHeight(for: font)
+        frame.origin.y = max(
+            selection.minY,
+            min(frame.origin.y, selection.maxY - frame.height)
+        )
+        editor.frame = frame
+        textAnchor = textAnchor(for: frame, font: font)
     }
 
     private func toolbarAction(at point: CGPoint) -> ToolbarAction? {
@@ -1316,10 +1344,20 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
     }
 
     private func textEditorHeight(for font: NSFont) -> CGFloat {
-        ceil(font.ascender - font.descender + font.leading) + 2
+        ceil(font.ascender - font.descender + font.leading) + 8
     }
 
-    private func textAnchor(for editorFrame: CGRect) -> CGPoint {
-        CGPoint(x: editorFrame.minX + 4, y: editorFrame.minY + 1)
+    private func textEditorWidth(for value: String, font: NSFont, maximum: CGFloat) -> CGFloat {
+        let displayedValue = value.isEmpty ? "输入文字" : value
+        let measuredWidth = ceil((displayedValue as NSString).size(withAttributes: [.font: font]).width)
+        return min(max(measuredWidth + 12, 48), max(0, maximum))
+    }
+
+    private func textAnchor(for editorFrame: CGRect, font: NSFont) -> CGPoint {
+        let lineHeight = ceil(font.ascender - font.descender + font.leading)
+        return CGPoint(
+            x: editorFrame.minX + 4,
+            y: editorFrame.midY - lineHeight / 2
+        )
     }
 }
