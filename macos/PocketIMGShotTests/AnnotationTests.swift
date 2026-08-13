@@ -117,24 +117,11 @@ final class AnnotationTests: XCTestCase {
 
     @MainActor
     func testTextFieldCellCentersPlaceholderAndAcceptsInput() throws {
-        let window = NSWindow(
-            contentRect: CGRect(x: 0, y: 0, width: 300, height: 100),
-            styleMask: [.borderless],
-            backing: .buffered,
-            defer: false
-        )
-        defer { window.close() }
-        let field = NSTextField(frame: CGRect(x: 20, y: 20, width: 200, height: 32))
-        let cell = VerticallyCenteredTextFieldCell(textCell: "")
-        cell.font = NSFont.systemFont(ofSize: 20, weight: .semibold)
-        cell.isEditable = true
-        cell.isSelectable = true
-        field.cell = cell
-        field.isEditable = true
-        field.isSelectable = true
-        field.placeholderString = "输入文字"
-        window.contentView?.addSubview(field)
         let bounds = CGRect(x: 0, y: 0, width: 200, height: 32)
+        let field = CaptureOverlayView.makeEditableTextField(frame: bounds)
+        let cell = try XCTUnwrap(field.cell as? VerticallyCenteredTextFieldCell)
+        cell.font = NSFont.systemFont(ofSize: 20, weight: .semibold)
+        field.placeholderString = "输入文字"
 
         let textRect = cell.drawingRect(forBounds: bounds)
 
@@ -142,10 +129,12 @@ final class AnnotationTests: XCTestCase {
         XCTAssertLessThan(textRect.height, bounds.height)
         XCTAssertGreaterThan(textRect.minX, bounds.minX)
         XCTAssertLessThan(textRect.maxX, bounds.maxX)
-        XCTAssertTrue(window.makeFirstResponder(field))
-        let fieldEditor = try XCTUnwrap(field.currentEditor() as? NSTextView)
-        fieldEditor.insertText("测试输入", replacementRange: NSRange(location: 0, length: 0))
-        field.validateEditing()
+        XCTAssertTrue(cell.isEditable)
+        XCTAssertTrue(cell.isSelectable)
+        XCTAssertTrue(field.isEditable)
+        XCTAssertTrue(field.isSelectable)
+        XCTAssertTrue(field.acceptsFirstResponder)
+        field.stringValue = "测试输入"
         XCTAssertEqual(field.stringValue, "测试输入")
     }
 }

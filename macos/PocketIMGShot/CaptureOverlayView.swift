@@ -929,14 +929,7 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
             max(selection.minY, selection.maxY - height)
         )
         let frame = CGRect(x: x, y: y, width: width, height: height)
-        let editor = NSTextField(frame: frame)
-        let cell = VerticallyCenteredTextFieldCell(textCell: "")
-        cell.isEditable = true
-        cell.isSelectable = true
-        editor.cell = cell
-        editor.isEditable = true
-        editor.isSelectable = true
-        editor.isEnabled = true
+        let editor = Self.makeEditableTextField(frame: frame)
         editor.isBordered = false
         editor.isBezeled = false
         editor.drawsBackground = false
@@ -973,6 +966,18 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
             fieldEditor.backgroundColor = .clear
         }
         updateTextEditorFocus(true)
+    }
+
+    static func makeEditableTextField(frame: CGRect) -> NSTextField {
+        let editor = NSTextField(frame: frame)
+        let cell = VerticallyCenteredTextFieldCell(textCell: "")
+        cell.isEditable = true
+        cell.isSelectable = true
+        editor.cell = cell
+        editor.isEditable = true
+        editor.isSelectable = true
+        editor.isEnabled = true
+        return editor
     }
 
     private func commitTextEditing() {
