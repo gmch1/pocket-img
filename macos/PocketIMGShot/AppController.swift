@@ -132,6 +132,7 @@ final class AppController: ObservableObject {
             do {
                 try await captureCoordinator.begin(
                     annotationStyle: settings.annotationStyle,
+                    uploadEnabled: settings.hasUploadConfiguration,
                     onAnnotationStyleChange: { [weak self] style in
                         self?.settings.updateAnnotationStyle(style)
                     },

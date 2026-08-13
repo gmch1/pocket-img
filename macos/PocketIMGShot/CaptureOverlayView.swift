@@ -129,6 +129,9 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
     var screenshot: CGImage? {
         didSet { needsDisplay = true }
     }
+    var uploadEnabled = true {
+        didSet { needsDisplay = true }
+    }
 
     private enum Mode {
         case selecting
@@ -145,7 +148,13 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
         case pin
         case copy
         case upload
+    }
 
+    private var toolbarActions: [ToolbarAction] {
+        if uploadEnabled {
+            return ToolbarAction.allCases
+        }
+        return ToolbarAction.allCases.filter { $0 != .upload }
     }
 
     private var mode: Mode = .selecting
@@ -288,7 +297,9 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
             return
         }
         if event.keyCode == 36 || event.keyCode == 76 {
-            finish(.upload)
+            if uploadEnabled {
+                finish(.upload)
+            }
             return
         }
         switch event.charactersIgnoringModifiers?.lowercased() {
@@ -495,7 +506,7 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
         separator.lineWidth = 1
         separator.stroke()
 
-        for (index, action) in ToolbarAction.allCases.enumerated() {
+        for (index, action) in toolbarActions.enumerated() {
             let button = toolbarButtonFrame(index: index)
             let selected = (action == .rectangle && selectedTool == .rectangle)
                 || (action == .arrow && selectedTool == .arrow)
@@ -1053,7 +1064,7 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
 
     private func toolbarAction(at point: CGPoint) -> ToolbarAction? {
         guard toolbarFrame().contains(point) else { return nil }
-        for (index, action) in ToolbarAction.allCases.enumerated()
+        for (index, action) in toolbarActions.enumerated()
             where toolbarButtonFrame(index: index).contains(point) {
             return action
         }
@@ -1083,13 +1094,16 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
         case .copy:
             finish(.copy)
         case .upload:
-            finish(.upload)
+            if uploadEnabled {
+                finish(.upload)
+            }
         }
         needsDisplay = true
     }
 
     private func finish(_ action: CaptureAction) {
         guard mode == .editing, !isFinishing else { return }
+        if case .upload = action, !uploadEnabled { return }
         commitTextEditing()
         guard let screenshot, let selection else {
             delegate?.captureOverlay(self, didFailWith: CaptureError.imageEncodingFailed)
@@ -1154,7 +1168,7 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
 
     private func toolbarFrame() -> CGRect {
         guard let selection else { return .zero }
-        let count = CGFloat(ToolbarAction.allCases.count)
+        let count = CGFloat(toolbarActions.count)
         let width = count * Appearance.toolbarButtonSize
             + (count - 1) * Appearance.toolbarSpacing
             + Appearance.toolbarGroupGap

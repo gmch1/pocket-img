@@ -18,6 +18,7 @@ final class CaptureCoordinator: NSObject, CaptureOverlayViewDelegate {
 
     func begin(
         annotationStyle: AnnotationStylePreferences,
+        uploadEnabled: Bool,
         onAnnotationStyleChange: @escaping (AnnotationStylePreferences) -> Void,
         onFinish: @escaping (UploadPayload, CaptureAction) -> Void,
         onCancel: @escaping () -> Void,
@@ -37,6 +38,7 @@ final class CaptureCoordinator: NSObject, CaptureOverlayViewDelegate {
         windows = displays.map { display in
             let view = CaptureOverlayView(frame: NSRect(origin: .zero, size: display.screen.frame.size))
             view.annotationStyle = annotationStyle
+            view.uploadEnabled = uploadEnabled
             view.onAnnotationStyleChange = onAnnotationStyleChange
             view.screenshot = display.image
             view.delegate = self

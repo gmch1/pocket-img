@@ -21,6 +21,7 @@
 		B0000000000000000000000D /* ScreenshotRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0000000000000000000000E /* ScreenshotRenderer.swift */; };
 		B0000000000000000000000E /* DiagnosticLog.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0000000000000000000000F /* DiagnosticLog.swift */; };
 		B0000000000000000000000F /* PinnedImagePresenter.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000010 /* PinnedImagePresenter.swift */; };
+		B00000000000000000000010 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000012 /* Assets.xcassets */; };
 		B00000000000000000000101 /* AnnotationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000101 /* AnnotationTests.swift */; };
 		B00000000000000000000102 /* ConfigurationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000102 /* ConfigurationTests.swift */; };
 		B00000000000000000000103 /* ScreenshotRendererTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000103 /* ScreenshotRendererTests.swift */; };
@@ -60,6 +61,7 @@
 		F0000000000000000000000F /* DiagnosticLog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiagnosticLog.swift; sourceTree = "<group>"; };
 		F00000000000000000000010 /* PinnedImagePresenter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PinnedImagePresenter.swift; sourceTree = "<group>"; };
 		F00000000000000000000011 /* PocketIMGShot.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = PocketIMGShot.entitlements; sourceTree = "<group>"; };
+		F00000000000000000000012 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		F00000000000000000000101 /* AnnotationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnnotationTests.swift; sourceTree = "<group>"; };
 		F00000000000000000000102 /* ConfigurationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfigurationTests.swift; sourceTree = "<group>"; };
 		F00000000000000000000103 /* ScreenshotRendererTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenshotRendererTests.swift; sourceTree = "<group>"; };
@@ -126,6 +128,7 @@
 				F0000000000000000000000F /* DiagnosticLog.swift */,
 				F00000000000000000000010 /* PinnedImagePresenter.swift */,
 				F00000000000000000000011 /* PocketIMGShot.entitlements */,
+				F00000000000000000000012 /* Assets.xcassets */,
 				F0000000000000000000000D /* Info.plist */,
 			);
 			path = PocketIMGShot;
@@ -250,6 +253,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				B00000000000000000000010 /* Assets.xcassets in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -344,6 +348,7 @@
 		E00000000000000000000201 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = PocketIMGShot/PocketIMGShot.entitlements;
 				CODE_SIGN_IDENTITY = "-";
 				CODE_SIGN_STYLE = Manual;
@@ -364,6 +369,7 @@
 		E00000000000000000000202 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = PocketIMGShot/PocketIMGShot.entitlements;
 				CODE_SIGN_IDENTITY = "-";
 				CODE_SIGN_STYLE = Manual;

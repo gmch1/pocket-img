@@ -237,4 +237,8 @@ final class AppSettings: ObservableObject {
         }
         return ServiceConfiguration(baseURL: url, token: normalizedToken)
     }
+
+    var hasUploadConfiguration: Bool {
+        (try? serviceConfiguration()) != nil
+    }
 }
