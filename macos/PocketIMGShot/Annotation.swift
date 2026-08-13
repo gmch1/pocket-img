@@ -20,7 +20,7 @@ enum AnnotationColor: String, CaseIterable, Codable, Equatable, Sendable {
     var components: (red: CGFloat, green: CGFloat, blue: CGFloat, alpha: CGFloat) {
         switch self {
         case .red:
-            return (1, 0.12, 0.10, 1)
+            return (1, 0, 0, 1)
         case .yellow:
             return (1, 0.82, 0.12, 1)
         case .green:
@@ -47,8 +47,8 @@ enum AnnotationColor: String, CaseIterable, Codable, Equatable, Sendable {
 
 struct AnnotationStylePreferences: Codable, Equatable, Sendable {
     static let `default` = AnnotationStylePreferences(
-        rectangleLineWidth: 3,
-        arrowLineWidth: 3,
+        rectangleLineWidth: 2,
+        arrowLineWidth: 2,
         textFontSize: 20,
         color: .default
     )
@@ -109,7 +109,7 @@ struct Annotation: Equatable, Sendable {
     }
 
     var resolvedStyleSize: CGFloat {
-        styleSize ?? (tool == .text ? 20 : 3)
+        styleSize ?? (tool == .text ? 20 : 2)
     }
 
     var rect: CGRect {
