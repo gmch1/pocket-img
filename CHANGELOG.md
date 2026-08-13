@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.4.5 - 2026-08-13
+
+### Changed
+
+- GitHub Release 改用固定的长期自签名证书，不再为每次构建生成新的 ad-hoc 代码身份；从后续版本开始，macOS 可以把覆盖安装识别为同一应用更新。
+- Release 工作流强制校验证书指纹、签名 Authority、Bundle ID 指定要求和非 ad-hoc 状态；签名 Secret 缺失或身份变化时拒绝发布。
+
+### Security
+
+- 私钥只保存在加密的本机备份和 GitHub Actions Secrets 中，仓库仅提交公开证书；应用继续不包含钥匙串访问代码或相关 entitlement。
+
 ## 0.4.4 - 2026-08-13
 
 ### Fixed

@@ -30,7 +30,7 @@ F2 → 拖拽选择区域 → 红框/箭头标注 → 点击最右侧上传按�
 open macos/PocketIMGShot.xcodeproj
 ```
 
-选择 `PocketIMGShot` scheme 后运行。工程默认使用本机 ad-hoc 签名，开发阶段无需配置发布证书。GitHub Release 中的 macOS 通用包也采用 ad-hoc 签名，首次启动需要在 Finder 中右键应用并选择“打开”。需要免提示分发或公证时，在 Xcode 的 Signing & Capabilities 中换成自己的 Developer ID 团队和签名。
+选择 `PocketIMGShot` scheme 后运行。工程的本地开发构建默认使用 ad-hoc 签名，开发阶段无需配置发布证书。GitHub Release 使用固定的 PocketIMG 自签名证书，首次启动仍需要在 Finder 中右键应用并选择“打开”。需要免提示分发或 Apple 公证时，仍需换成 Apple Developer Program 提供的 Developer ID Application 证书。
 
 也可以从仓库根目录运行：
 
@@ -41,7 +41,7 @@ make macos-build
 
 首次截图时，macOS 会要求“屏幕与系统音频录制”权限。这个名称是 macOS 对屏幕捕获权限类别的系统文案；客户端只在按下快捷键时获取一张静态画面，捕获配置明确关闭音频，也不会创建持续共享流。功能键行为受系统键盘设置影响；部分 Mac 键盘需要按 `Fn-F2` 才会发送标准 F2。
 
-当前 GitHub Release 使用 ad-hoc 签名。Bundle ID 固定为 `com.gmch.pocketimg.shot`，但 ad-hoc 签名的代码身份会随构建变化，因此 macOS 可能在替换新版本后再次要求屏幕录制授权。要让权限跨版本可靠复用，需要用同一份 Developer ID Application 证书持续签名，并对发布包完成 Apple 公证；版本号变化本身不会导致重新授权。
+从 `0.4.5` 开始，GitHub Release 固定使用同一份长期自签名证书，Bundle ID 保持为 `com.gmch.pocketimg.shot`。由 `0.4.4` 或更早的 ad-hoc 版本升级到 `0.4.5` 时，代码身份发生最后一次切换，macOS 仍可能要求重新授予一次屏幕录制权限；后续使用同一证书签名的版本应当复用这次授权。该证书不是 Apple Developer ID，因此不能消除首次启动时的 Gatekeeper 提示，也不能进行 Apple 公证。
 
 `0.4.3` 会在固定设置文件不存在时读取 `0.4.2` 的本机偏好，并在点击保存或开始截图前写入固定文件。如果旧设置已经丢失，需要最后重新填写一次；此后直接替换 `.app` 不会再清空配置。
 
