@@ -1,4 +1,4 @@
-.PHONY: frontend-install frontend-test frontend-build test build build-arm64 android-test android-debug android-release
+.PHONY: frontend-install frontend-test frontend-build test build build-arm64 android-test android-debug android-release macos-test macos-build
 
 GO ?= go
 NPM ?= npm
@@ -32,3 +32,9 @@ android-debug: frontend-build
 
 android-release: frontend-build
 	cd android && ./gradlew assembleRelease
+
+macos-test:
+	cd macos && xcodebuild -project PocketIMGShot.xcodeproj -scheme PocketIMGShot -configuration Debug test
+
+macos-build:
+	cd macos && xcodebuild -project PocketIMGShot.xcodeproj -scheme PocketIMGShot -configuration Release build

@@ -1,0 +1,423 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 56;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		B00000000000000000000001 /* PocketIMGShotApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000001 /* PocketIMGShotApp.swift */; };
+		B00000000000000000000002 /* AppController.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000002 /* AppController.swift */; };
+		B00000000000000000000003 /* AppSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000003 /* AppSettings.swift */; };
+		B00000000000000000000004 /* KeychainStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000004 /* KeychainStore.swift */; };
+		B00000000000000000000005 /* GlobalHotKey.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000005 /* GlobalHotKey.swift */; };
+		B00000000000000000000006 /* HotKeyRecorder.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000006 /* HotKeyRecorder.swift */; };
+		B00000000000000000000007 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000007 /* SettingsView.swift */; };
+		B00000000000000000000008 /* Annotation.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000008 /* Annotation.swift */; };
+		B00000000000000000000009 /* CaptureCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000009 /* CaptureCoordinator.swift */; };
+		B0000000000000000000000A /* CaptureOverlayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0000000000000000000000A /* CaptureOverlayView.swift */; };
+		B0000000000000000000000B /* PocketIMGClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0000000000000000000000B /* PocketIMGClient.swift */; };
+		B0000000000000000000000C /* ToastPresenter.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0000000000000000000000C /* ToastPresenter.swift */; };
+		B00000000000000000000101 /* AnnotationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000101 /* AnnotationTests.swift */; };
+		B00000000000000000000102 /* ConfigurationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000102 /* ConfigurationTests.swift */; };
+		B00000000000000000000201 /* AppKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = F00000000000000000000201 /* AppKit.framework */; };
+		B00000000000000000000202 /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = F00000000000000000000202 /* SwiftUI.framework */; };
+		B00000000000000000000203 /* ScreenCaptureKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = F00000000000000000000203 /* ScreenCaptureKit.framework */; };
+		B00000000000000000000204 /* Security.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = F00000000000000000000204 /* Security.framework */; };
+		B00000000000000000000205 /* Carbon.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = F00000000000000000000205 /* Carbon.framework */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		D00000000000000000000001 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = A00000000000000000000000 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = A00000000000000000000001;
+			remoteInfo = PocketIMGShot;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		F00000000000000000000001 /* PocketIMGShotApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PocketIMGShotApp.swift; sourceTree = "<group>"; };
+		F00000000000000000000002 /* AppController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppController.swift; sourceTree = "<group>"; };
+		F00000000000000000000003 /* AppSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppSettings.swift; sourceTree = "<group>"; };
+		F00000000000000000000004 /* KeychainStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainStore.swift; sourceTree = "<group>"; };
+		F00000000000000000000005 /* GlobalHotKey.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlobalHotKey.swift; sourceTree = "<group>"; };
+		F00000000000000000000006 /* HotKeyRecorder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotKeyRecorder.swift; sourceTree = "<group>"; };
+		F00000000000000000000007 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		F00000000000000000000008 /* Annotation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Annotation.swift; sourceTree = "<group>"; };
+		F00000000000000000000009 /* CaptureCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptureCoordinator.swift; sourceTree = "<group>"; };
+		F0000000000000000000000A /* CaptureOverlayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptureOverlayView.swift; sourceTree = "<group>"; };
+		F0000000000000000000000B /* PocketIMGClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PocketIMGClient.swift; sourceTree = "<group>"; };
+		F0000000000000000000000C /* ToastPresenter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ToastPresenter.swift; sourceTree = "<group>"; };
+		F0000000000000000000000D /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		F0000000000000000000000E /* PocketIMGShot.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = PocketIMGShot.entitlements; sourceTree = "<group>"; };
+		F00000000000000000000101 /* AnnotationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnnotationTests.swift; sourceTree = "<group>"; };
+		F00000000000000000000102 /* ConfigurationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfigurationTests.swift; sourceTree = "<group>"; };
+		F00000000000000000000201 /* AppKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AppKit.framework; path = System/Library/Frameworks/AppKit.framework; sourceTree = SDKROOT; };
+		F00000000000000000000202 /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
+		F00000000000000000000203 /* ScreenCaptureKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = ScreenCaptureKit.framework; path = System/Library/Frameworks/ScreenCaptureKit.framework; sourceTree = SDKROOT; };
+		F00000000000000000000204 /* Security.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Security.framework; path = System/Library/Frameworks/Security.framework; sourceTree = SDKROOT; };
+		F00000000000000000000205 /* Carbon.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Carbon.framework; path = System/Library/Frameworks/Carbon.framework; sourceTree = SDKROOT; };
+		F00000000000000000000301 /* PocketIMGShot.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = PocketIMGShot.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		F00000000000000000000302 /* PocketIMGShotTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = PocketIMGShotTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		C00000000000000000000002 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B00000000000000000000201 /* AppKit.framework in Frameworks */,
+				B00000000000000000000202 /* SwiftUI.framework in Frameworks */,
+				B00000000000000000000203 /* ScreenCaptureKit.framework in Frameworks */,
+				B00000000000000000000204 /* Security.framework in Frameworks */,
+				B00000000000000000000205 /* Carbon.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		C00000000000000000000102 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		G00000000000000000000000 = {
+			isa = PBXGroup;
+			children = (
+				G00000000000000000000001 /* PocketIMGShot */,
+				G00000000000000000000002 /* PocketIMGShotTests */,
+				G00000000000000000000003 /* Frameworks */,
+				G00000000000000000000004 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		G00000000000000000000001 /* PocketIMGShot */ = {
+			isa = PBXGroup;
+			children = (
+				F00000000000000000000001 /* PocketIMGShotApp.swift */,
+				F00000000000000000000002 /* AppController.swift */,
+				F00000000000000000000003 /* AppSettings.swift */,
+				F00000000000000000000004 /* KeychainStore.swift */,
+				F00000000000000000000005 /* GlobalHotKey.swift */,
+				F00000000000000000000006 /* HotKeyRecorder.swift */,
+				F00000000000000000000007 /* SettingsView.swift */,
+				F00000000000000000000008 /* Annotation.swift */,
+				F00000000000000000000009 /* CaptureCoordinator.swift */,
+				F0000000000000000000000A /* CaptureOverlayView.swift */,
+				F0000000000000000000000B /* PocketIMGClient.swift */,
+				F0000000000000000000000C /* ToastPresenter.swift */,
+				F0000000000000000000000D /* Info.plist */,
+				F0000000000000000000000E /* PocketIMGShot.entitlements */,
+			);
+			path = PocketIMGShot;
+			sourceTree = "<group>";
+		};
+		G00000000000000000000002 /* PocketIMGShotTests */ = {
+			isa = PBXGroup;
+			children = (
+				F00000000000000000000101 /* AnnotationTests.swift */,
+				F00000000000000000000102 /* ConfigurationTests.swift */,
+			);
+			path = PocketIMGShotTests;
+			sourceTree = "<group>";
+		};
+		G00000000000000000000003 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				F00000000000000000000201 /* AppKit.framework */,
+				F00000000000000000000202 /* SwiftUI.framework */,
+				F00000000000000000000203 /* ScreenCaptureKit.framework */,
+				F00000000000000000000204 /* Security.framework */,
+				F00000000000000000000205 /* Carbon.framework */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
+		G00000000000000000000004 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				F00000000000000000000301 /* PocketIMGShot.app */,
+				F00000000000000000000302 /* PocketIMGShotTests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		A00000000000000000000001 /* PocketIMGShot */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = E00000000000000000000001 /* Build configuration list for PBXNativeTarget "PocketIMGShot" */;
+			buildPhases = (
+				C00000000000000000000001 /* Sources */,
+				C00000000000000000000002 /* Frameworks */,
+				C00000000000000000000003 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = PocketIMGShot;
+			productName = PocketIMGShot;
+			productReference = F00000000000000000000301 /* PocketIMGShot.app */;
+			productType = "com.apple.product-type.application";
+		};
+		A00000000000000000000002 /* PocketIMGShotTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = E00000000000000000000002 /* Build configuration list for PBXNativeTarget "PocketIMGShotTests" */;
+			buildPhases = (
+				C00000000000000000000101 /* Sources */,
+				C00000000000000000000102 /* Frameworks */,
+				C00000000000000000000103 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				D00000000000000000000002 /* PBXTargetDependency */,
+			);
+			name = PocketIMGShotTests;
+			productName = PocketIMGShotTests;
+			productReference = F00000000000000000000302 /* PocketIMGShotTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		A00000000000000000000000 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 1600;
+				LastUpgradeCheck = 1600;
+				TargetAttributes = {
+					A00000000000000000000001 = {
+						CreatedOnToolsVersion = 16.0;
+					};
+					A00000000000000000000002 = {
+						CreatedOnToolsVersion = 16.0;
+						TestTargetID = A00000000000000000000001;
+					};
+				};
+			};
+			buildConfigurationList = E00000000000000000000000 /* Build configuration list for PBXProject "PocketIMGShot" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = G00000000000000000000000;
+			productRefGroup = G00000000000000000000004 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				A00000000000000000000001 /* PocketIMGShot */,
+				A00000000000000000000002 /* PocketIMGShotTests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		C00000000000000000000003 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		C00000000000000000000103 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		C00000000000000000000001 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B00000000000000000000001 /* PocketIMGShotApp.swift in Sources */,
+				B00000000000000000000002 /* AppController.swift in Sources */,
+				B00000000000000000000003 /* AppSettings.swift in Sources */,
+				B00000000000000000000004 /* KeychainStore.swift in Sources */,
+				B00000000000000000000005 /* GlobalHotKey.swift in Sources */,
+				B00000000000000000000006 /* HotKeyRecorder.swift in Sources */,
+				B00000000000000000000007 /* SettingsView.swift in Sources */,
+				B00000000000000000000008 /* Annotation.swift in Sources */,
+				B00000000000000000000009 /* CaptureCoordinator.swift in Sources */,
+				B0000000000000000000000A /* CaptureOverlayView.swift in Sources */,
+				B0000000000000000000000B /* PocketIMGClient.swift in Sources */,
+				B0000000000000000000000C /* ToastPresenter.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		C00000000000000000000101 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B00000000000000000000101 /* AnnotationTests.swift in Sources */,
+				B00000000000000000000102 /* ConfigurationTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		D00000000000000000000002 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = A00000000000000000000001 /* PocketIMGShot */;
+			targetProxy = D00000000000000000000001 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		E00000000000000000000101 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_TESTABILITY = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		E00000000000000000000102 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				SDKROOT = macosx;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+			};
+			name = Release;
+		};
+		E00000000000000000000201 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = PocketIMGShot/PocketIMGShot.entitlements;
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Manual;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_HARDENED_RUNTIME = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = PocketIMGShot/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/../Frameworks";
+				MARKETING_VERSION = 0.4.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.gmch.pocketimg.shot;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		E00000000000000000000202 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = PocketIMGShot/PocketIMGShot.entitlements;
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Manual;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_HARDENED_RUNTIME = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = PocketIMGShot/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/../Frameworks";
+				MARKETING_VERSION = 0.4.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.gmch.pocketimg.shot;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		E00000000000000000000301 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Manual;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/../Frameworks @loader_path/../Frameworks";
+				PRODUCT_BUNDLE_IDENTIFIER = com.gmch.pocketimg.shot.tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_VERSION = 5.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/PocketIMGShot.app/Contents/MacOS/PocketIMGShot";
+			};
+			name = Debug;
+		};
+		E00000000000000000000302 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Manual;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/../Frameworks @loader_path/../Frameworks";
+				PRODUCT_BUNDLE_IDENTIFIER = com.gmch.pocketimg.shot.tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_VERSION = 5.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/PocketIMGShot.app/Contents/MacOS/PocketIMGShot";
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		E00000000000000000000000 /* Build configuration list for PBXProject "PocketIMGShot" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				E00000000000000000000101 /* Debug */,
+				E00000000000000000000102 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		E00000000000000000000001 /* Build configuration list for PBXNativeTarget "PocketIMGShot" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				E00000000000000000000201 /* Debug */,
+				E00000000000000000000202 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		E00000000000000000000002 /* Build configuration list for PBXNativeTarget "PocketIMGShotTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				E00000000000000000000301 /* Debug */,
+				E00000000000000000000302 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = A00000000000000000000000 /* Project object */;
+}

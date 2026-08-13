@@ -12,4 +12,9 @@
 /android/**/build/
 /android/**/*.jks
 /android/**/*.keystore
+/macos/DerivedData/
+/macos/build/
+/macos/*.xcarchive/
+/macos/**/*.xcuserstate
+/macos/**/*.xcuserdata/
 /.idea/
