@@ -164,8 +164,6 @@ enum ScreenshotRenderer {
                     [
                         kCTFontAttributeName: font,
                         kCTForegroundColorAttributeName: annotation.color.cgColor,
-                        kCTStrokeColorAttributeName: CGColor(gray: 0, alpha: 0.58),
-                        kCTStrokeWidthAttributeName: -3,
                     ] as CFDictionary
                   ) else {
                 return

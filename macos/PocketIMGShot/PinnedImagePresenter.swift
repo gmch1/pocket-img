@@ -29,9 +29,11 @@ final class PinnedImagePresenter: NSObject, NSWindowDelegate {
         imageView.imageScaling = .scaleAxesIndependently
         imageView.onClose = { [weak window] in window?.close() }
         imageView.wantsLayer = true
-        imageView.layer?.cornerRadius = 6
-        imageView.layer?.borderWidth = 1
-        imageView.layer?.borderColor = NSColor.black.withAlphaComponent(0.32).cgColor
+        imageView.layer?.cornerRadius = 5
+        imageView.layer?.borderWidth = 1.5
+        imageView.layer?.borderColor = NSColor.controlAccentColor
+            .withAlphaComponent(0.82)
+            .cgColor
         imageView.layer?.masksToBounds = true
 
         window.contentView = imageView
