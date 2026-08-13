@@ -1,6 +1,82 @@
 import AppKit
 import CoreGraphics
 
+private extension AnnotationColor {
+    var nsColor: NSColor {
+        let components = components
+        return NSColor(
+            srgbRed: components.red,
+            green: components.green,
+            blue: components.blue,
+            alpha: components.alpha
+        )
+    }
+}
+
+final class VerticallyCenteredTextFieldCell: NSTextFieldCell {
+    private let horizontalPadding: CGFloat = 4
+
+    override func drawingRect(forBounds rect: NSRect) -> NSRect {
+        centeredTextRect(in: super.drawingRect(forBounds: rect))
+    }
+
+    override func edit(
+        withFrame rect: NSRect,
+        in controlView: NSView,
+        editor textObject: NSText,
+        delegate: Any?,
+        event: NSEvent?
+    ) {
+        super.edit(
+            withFrame: drawingRect(forBounds: rect),
+            in: controlView,
+            editor: textObject,
+            delegate: delegate,
+            event: event
+        )
+    }
+
+    override func select(
+        withFrame rect: NSRect,
+        in controlView: NSView,
+        editor textObject: NSText,
+        delegate: Any?,
+        start selectionStart: Int,
+        length selectionLength: Int
+    ) {
+        super.select(
+            withFrame: drawingRect(forBounds: rect),
+            in: controlView,
+            editor: textObject,
+            delegate: delegate,
+            start: selectionStart,
+            length: selectionLength
+        )
+    }
+
+    private func centeredTextRect(in rect: NSRect) -> NSRect {
+        let paddedWidth = max(0, rect.width - horizontalPadding * 2)
+        guard let font else {
+            return NSRect(
+                x: rect.minX + horizontalPadding,
+                y: rect.minY,
+                width: paddedWidth,
+                height: rect.height
+            )
+        }
+        let lineHeight = min(
+            rect.height,
+            ceil(font.ascender - font.descender + font.leading)
+        )
+        return NSRect(
+            x: rect.minX + horizontalPadding,
+            y: rect.midY - lineHeight / 2,
+            width: paddedWidth,
+            height: lineHeight
+        )
+    }
+}
+
 enum CaptureAction: Sendable {
     case pin
     case copy
@@ -47,6 +123,7 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
             rectangleLineWidth = normalized.rectangleLineWidth
             arrowLineWidth = normalized.arrowLineWidth
             textFontSize = normalized.textFontSize
+            annotationColor = normalized.resolvedColor
         }
     }
     var screenshot: CGImage? {
@@ -62,6 +139,7 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
         case rectangle
         case arrow
         case text
+        case color
         case undo
         case cancel
         case pin
@@ -79,11 +157,14 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
     private var textEditor: NSTextField?
     private var textAnchor: CGPoint?
     private var textEditorSize: CGFloat?
+    private var textEditorColor: AnnotationColor?
     private var hoverPoint: CGPoint?
     private var pressedToolbarAction: ToolbarAction?
     private var rectangleLineWidth: CGFloat = 3
     private var arrowLineWidth: CGFloat = 3
     private var textFontSize: CGFloat = 20
+    private var annotationColor: AnnotationColor = .default
+    private var colorPaletteVisible = false
     private var toolSizeHintVisible = false
     private var toolSizeHintGeneration = 0
     private var isFinishing = false
@@ -106,11 +187,19 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
             dragStart = point
             selection = CGRect(origin: point, size: .zero)
         case .editing:
+            if colorPaletteVisible, let color = paletteColor(at: point) {
+                commitTextEditing()
+                selectAnnotationColor(color)
+                return
+            }
             if let action = toolbarAction(at: point) {
                 commitTextEditing()
                 pressedToolbarAction = action
                 needsDisplay = true
                 return
+            }
+            if colorPaletteVisible, !colorPaletteFrame().contains(point) {
+                colorPaletteVisible = false
             }
             guard selection?.contains(point) == true else { return }
             if selectedTool == .text {
@@ -123,7 +212,8 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
                 tool: selectedTool,
                 start: point,
                 end: point,
-                styleSize: currentToolSize
+                styleSize: currentToolSize,
+                color: annotationColor
             )
         }
         needsDisplay = true
@@ -146,7 +236,8 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
                 tool: selectedTool,
                 start: dragStart,
                 end: endpoint,
-                styleSize: currentToolSize
+                styleSize: currentToolSize,
+                color: annotationColor
             )
         }
         needsDisplay = true
@@ -320,15 +411,16 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
         accent.stroke()
 
         for annotation in annotations {
-            draw(annotation, color: .systemRed)
+            draw(annotation, color: annotation.color.nsColor)
         }
         if let currentAnnotation {
-            draw(currentAnnotation, color: .systemRed)
+            draw(currentAnnotation, color: currentAnnotation.color.nsColor)
         }
 
         drawSizeLabel(selection)
         if mode == .editing {
             drawToolbar()
+            if colorPaletteVisible { drawColorPalette() }
             if toolSizeHintVisible { drawToolSizeHint() }
         }
     }
@@ -398,7 +490,7 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
         background.lineWidth = 1
         background.stroke()
 
-        let separatorX = toolbarButtonFrame(index: 3).maxX
+        let separatorX = toolbarButtonFrame(index: 4).maxX
             + Appearance.toolbarSpacing
             + Appearance.toolbarGroupGap / 2
         let separator = NSBezierPath()
@@ -413,6 +505,7 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
             let selected = (action == .rectangle && selectedTool == .rectangle)
                 || (action == .arrow && selectedTool == .arrow)
                 || (action == .text && selectedTool == .text)
+                || (action == .color && colorPaletteVisible)
             if action == .upload {
                 NSColor.controlAccentColor.setFill()
                 NSBezierPath(roundedRect: button, xRadius: 8, yRadius: 8).fill()
@@ -465,6 +558,15 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
             path.line(to: CGPoint(x: icon.maxX - 2, y: icon.maxY - 2))
             path.move(to: CGPoint(x: icon.minX + 5, y: icon.midY + 2))
             path.line(to: CGPoint(x: icon.maxX - 5, y: icon.midY + 2))
+        case .color:
+            let swatch = icon.insetBy(dx: 1.5, dy: 1.5)
+            annotationColor.nsColor.setFill()
+            NSBezierPath(ovalIn: swatch).fill()
+            color.setStroke()
+            let outline = NSBezierPath(ovalIn: swatch)
+            outline.lineWidth = 1.5
+            outline.stroke()
+            return
         case .undo:
             path.move(to: CGPoint(x: icon.minX + 3, y: icon.midY - 1))
             path.curve(
@@ -515,6 +617,41 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
             path.line(to: CGPoint(x: icon.midX + 4, y: icon.minY + 8))
         }
         path.stroke()
+    }
+
+    private func drawColorPalette() {
+        let frame = colorPaletteFrame()
+        let background = NSBezierPath(roundedRect: frame, xRadius: 10, yRadius: 10)
+
+        NSGraphicsContext.saveGraphicsState()
+        let shadow = NSShadow()
+        shadow.shadowColor = NSColor.black.withAlphaComponent(0.42)
+        shadow.shadowBlurRadius = 12
+        shadow.shadowOffset = NSSize(width: 0, height: -2)
+        shadow.set()
+        NSColor(calibratedWhite: 0.08, alpha: 0.96).setFill()
+        background.fill()
+        NSGraphicsContext.restoreGraphicsState()
+
+        NSColor.white.withAlphaComponent(0.16).setStroke()
+        background.lineWidth = 1
+        background.stroke()
+
+        for (index, color) in AnnotationColor.allCases.enumerated() {
+            let swatch = colorSwatchFrame(index: index)
+            color.nsColor.setFill()
+            NSBezierPath(ovalIn: swatch).fill()
+
+            let outline = NSBezierPath(ovalIn: swatch)
+            if color == annotationColor {
+                NSColor.white.setStroke()
+                outline.lineWidth = 2.5
+            } else {
+                NSColor.black.withAlphaComponent(0.35).setStroke()
+                outline.lineWidth = 1
+            }
+            outline.stroke()
+        }
     }
 
     private func drawToolSizeHint() {
@@ -793,6 +930,7 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
         )
         let frame = CGRect(x: x, y: y, width: width, height: height)
         let editor = NSTextField(frame: frame)
+        editor.cell = VerticallyCenteredTextFieldCell(textCell: "")
         editor.isBordered = false
         editor.isBezeled = false
         editor.drawsBackground = false
@@ -808,6 +946,7 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
         editor.delegate = self
         editor.cell?.isScrollable = true
         editor.cell?.wraps = false
+        editor.cell?.usesSingleLineMode = true
         editor.wantsLayer = true
         editor.layer?.backgroundColor = NSColor(calibratedWhite: 0.10, alpha: 0.94).cgColor
         editor.layer?.cornerRadius = 5
@@ -820,6 +959,7 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
         textEditor = editor
         textAnchor = textAnchor(for: frame)
         textEditorSize = textFontSize
+        textEditorColor = annotationColor
         window?.makeFirstResponder(editor)
         editor.selectText(nil)
         if let fieldEditor = editor.currentEditor() as? NSTextView {
@@ -834,9 +974,11 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
         let value = editor.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
         let anchor = textAnchor
         let styleSize = textEditorSize
+        let color = textEditorColor ?? annotationColor
         textEditor = nil
         textAnchor = nil
         textEditorSize = nil
+        textEditorColor = nil
         editor.delegate = nil
         editor.removeFromSuperview()
         if !value.isEmpty, let anchor {
@@ -845,7 +987,8 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
                 start: anchor,
                 end: anchor,
                 text: value,
-                styleSize: styleSize
+                styleSize: styleSize,
+                color: color
             ))
         }
         window?.makeFirstResponder(self)
@@ -857,6 +1000,7 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
         textEditor = nil
         textAnchor = nil
         textEditorSize = nil
+        textEditorColor = nil
         editor.delegate = nil
         editor.removeFromSuperview()
         window?.makeFirstResponder(self)
@@ -909,6 +1053,9 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
     }
 
     private func perform(_ action: ToolbarAction) {
+        if action != .color {
+            colorPaletteVisible = false
+        }
         switch action {
         case .rectangle:
             selectedTool = .rectangle
@@ -916,6 +1063,8 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
             selectedTool = .arrow
         case .text:
             selectedTool = .text
+        case .color:
+            colorPaletteVisible.toggle()
         case .undo:
             if !annotations.isEmpty { annotations.removeLast() }
             currentAnnotation = nil
@@ -1011,7 +1160,7 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
 
     private func toolbarButtonFrame(index: Int) -> CGRect {
         let toolbar = toolbarFrame()
-        let groupOffset = index >= 4 ? Appearance.toolbarGroupGap : 0
+        let groupOffset = index >= 5 ? Appearance.toolbarGroupGap : 0
         return CGRect(
             x: toolbar.minX
                 + Appearance.toolbarPadding
@@ -1021,6 +1170,52 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
             width: Appearance.toolbarButtonSize,
             height: Appearance.toolbarButtonSize
         )
+    }
+
+    private func colorPaletteFrame() -> CGRect {
+        let swatchSize: CGFloat = 22
+        let spacing: CGFloat = 7
+        let padding: CGFloat = 8
+        let count = CGFloat(AnnotationColor.allCases.count)
+        let width = count * swatchSize + (count - 1) * spacing + padding * 2
+        let height = swatchSize + padding * 2
+        let colorButton = toolbarButtonFrame(index: 3)
+        let toolbar = toolbarFrame()
+        let x = min(
+            max(colorButton.midX - width / 2, bounds.minX + 6),
+            bounds.maxX - width - 6
+        )
+        let above = toolbar.minY - height - 6
+        let y = above >= bounds.minY + 6 ? above : toolbar.maxY + 6
+        return CGRect(x: x, y: y, width: width, height: height)
+    }
+
+    private func colorSwatchFrame(index: Int) -> CGRect {
+        let palette = colorPaletteFrame()
+        let swatchSize: CGFloat = 22
+        let spacing: CGFloat = 7
+        return CGRect(
+            x: palette.minX + 8 + CGFloat(index) * (swatchSize + spacing),
+            y: palette.minY + 8,
+            width: swatchSize,
+            height: swatchSize
+        )
+    }
+
+    private func paletteColor(at point: CGPoint) -> AnnotationColor? {
+        guard colorPaletteFrame().contains(point) else { return nil }
+        for (index, color) in AnnotationColor.allCases.enumerated()
+            where colorSwatchFrame(index: index).insetBy(dx: -3, dy: -3).contains(point) {
+            return color
+        }
+        return nil
+    }
+
+    private func selectAnnotationColor(_ color: AnnotationColor) {
+        annotationColor = color
+        colorPaletteVisible = false
+        onAnnotationStyleChange?(currentAnnotationStyle)
+        needsDisplay = true
     }
 
     private func constrained(_ point: CGPoint) -> CGPoint {
@@ -1045,7 +1240,8 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
         AnnotationStylePreferences(
             rectangleLineWidth: rectangleLineWidth,
             arrowLineWidth: arrowLineWidth,
-            textFontSize: textFontSize
+            textFontSize: textFontSize,
+            color: annotationColor
         )
     }
 
