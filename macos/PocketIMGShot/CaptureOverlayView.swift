@@ -108,11 +108,13 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
     }
 
     private enum Appearance {
-        static let toolbarButtonSize: CGFloat = 38
-        static let toolbarPadding: CGFloat = 6
-        static let toolbarSpacing: CGFloat = 4
-        static let toolbarGroupGap: CGFloat = 8
-        static let toolbarCornerRadius: CGFloat = 12
+        static let toolbarButtonSize: CGFloat = 32
+        static let toolbarIconSize: CGFloat = 16
+        static let toolbarButtonCornerRadius: CGFloat = 7
+        static let toolbarPadding: CGFloat = 5
+        static let toolbarSpacing: CGFloat = 3
+        static let toolbarGroupGap: CGFloat = 7
+        static let toolbarCornerRadius: CGFloat = 10
     }
 
     weak var delegate: CaptureOverlayViewDelegate?
@@ -514,16 +516,32 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
                 || (action == .color && colorPaletteVisible)
             if action == .upload {
                 NSColor.controlAccentColor.setFill()
-                NSBezierPath(roundedRect: button, xRadius: 8, yRadius: 8).fill()
+                NSBezierPath(
+                    roundedRect: button,
+                    xRadius: Appearance.toolbarButtonCornerRadius,
+                    yRadius: Appearance.toolbarButtonCornerRadius
+                ).fill()
             } else if action == .pin || action == .copy {
                 NSColor.white.withAlphaComponent(0.14).setFill()
-                NSBezierPath(roundedRect: button, xRadius: 8, yRadius: 8).fill()
+                NSBezierPath(
+                    roundedRect: button,
+                    xRadius: Appearance.toolbarButtonCornerRadius,
+                    yRadius: Appearance.toolbarButtonCornerRadius
+                ).fill()
             } else if selected {
                 NSColor.controlAccentColor.withAlphaComponent(0.72).setFill()
-                NSBezierPath(roundedRect: button, xRadius: 8, yRadius: 8).fill()
+                NSBezierPath(
+                    roundedRect: button,
+                    xRadius: Appearance.toolbarButtonCornerRadius,
+                    yRadius: Appearance.toolbarButtonCornerRadius
+                ).fill()
             } else if action == .cancel {
                 NSColor.systemRed.withAlphaComponent(0.14).setFill()
-                NSBezierPath(roundedRect: button, xRadius: 8, yRadius: 8).fill()
+                NSBezierPath(
+                    roundedRect: button,
+                    xRadius: Appearance.toolbarButtonCornerRadius,
+                    yRadius: Appearance.toolbarButtonCornerRadius
+                ).fill()
             }
             let color: NSColor
             if action == .undo, annotations.isEmpty {
@@ -540,7 +558,13 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
     }
 
     private func drawToolbarIcon(_ action: ToolbarAction, in button: CGRect, color: NSColor) {
-        let icon = CGRect(x: button.midX - 9, y: button.midY - 9, width: 18, height: 18)
+        let iconSize = Appearance.toolbarIconSize
+        let icon = CGRect(
+            x: button.midX - iconSize / 2,
+            y: button.midY - iconSize / 2,
+            width: iconSize,
+            height: iconSize
+        )
         let path = NSBezierPath()
         path.lineWidth = 1.8
         path.lineCapStyle = .round
