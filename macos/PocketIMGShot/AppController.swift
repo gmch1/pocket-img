@@ -1,5 +1,6 @@
 import AppKit
 import Combine
+import CoreGraphics
 import Foundation
 
 @MainActor
@@ -72,8 +73,18 @@ final class AppController: ObservableObject {
             return
         }
 
+        guard CGPreflightScreenCaptureAccess() else {
+            let granted = CGRequestScreenCaptureAccess()
+            if !granted {
+                showScreenCapturePermissionHelp()
+                return
+            }
+            toast.show("已获得截屏权限，请再次按 \(settings.hotKey.displayName)")
+            return
+        }
+
         isCapturing = true
-        statusMessage = "请选择要截取的屏幕…"
+        statusMessage = "正在准备截图…"
         Task {
             do {
                 try await captureCoordinator.begin(
@@ -87,9 +98,6 @@ final class AppController: ObservableObject {
                     }
                 )
                 statusMessage = "拖拽选择截图区域"
-            } catch is CancellationError {
-                isCapturing = false
-                statusMessage = ""
             } catch {
                 isCapturing = false
                 statusMessage = ""
@@ -160,6 +168,20 @@ final class AppController: ObservableObject {
     private func openSettings() {
         NSApplication.shared.activate(ignoringOtherApps: true)
         NSApplication.shared.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
+    }
+
+    private func showScreenCapturePermissionHelp() {
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = "需要屏幕录制权限"
+        alert.informativeText = "PocketIMG Shot 只读取按下快捷键时的一张屏幕静态画面，不录制音频。请在“系统设置 → 隐私与安全性 → 屏幕与系统音频录制”中允许本应用，然后重新打开。"
+        alert.addButton(withTitle: "打开系统设置")
+        alert.addButton(withTitle: "取消")
+        NSApplication.shared.activate(ignoringOtherApps: true)
+        if alert.runModal() == .alertFirstButtonReturn,
+           let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture") {
+            NSWorkspace.shared.open(url)
+        }
     }
 
     private func showError(title: String, message: String) {

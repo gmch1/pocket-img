@@ -10,7 +10,6 @@
 		B00000000000000000000001 /* PocketIMGShotApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000001 /* PocketIMGShotApp.swift */; };
 		B00000000000000000000002 /* AppController.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000002 /* AppController.swift */; };
 		B00000000000000000000003 /* AppSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000003 /* AppSettings.swift */; };
-		B00000000000000000000004 /* KeychainStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000004 /* KeychainStore.swift */; };
 		B00000000000000000000005 /* GlobalHotKey.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000005 /* GlobalHotKey.swift */; };
 		B00000000000000000000006 /* HotKeyRecorder.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000006 /* HotKeyRecorder.swift */; };
 		B00000000000000000000007 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000007 /* SettingsView.swift */; };
@@ -42,7 +41,6 @@
 		F00000000000000000000001 /* PocketIMGShotApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PocketIMGShotApp.swift; sourceTree = "<group>"; };
 		F00000000000000000000002 /* AppController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppController.swift; sourceTree = "<group>"; };
 		F00000000000000000000003 /* AppSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppSettings.swift; sourceTree = "<group>"; };
-		F00000000000000000000004 /* KeychainStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainStore.swift; sourceTree = "<group>"; };
 		F00000000000000000000005 /* GlobalHotKey.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlobalHotKey.swift; sourceTree = "<group>"; };
 		F00000000000000000000006 /* HotKeyRecorder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotKeyRecorder.swift; sourceTree = "<group>"; };
 		F00000000000000000000007 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
@@ -52,7 +50,6 @@
 		F0000000000000000000000B /* PocketIMGClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PocketIMGClient.swift; sourceTree = "<group>"; };
 		F0000000000000000000000C /* ToastPresenter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ToastPresenter.swift; sourceTree = "<group>"; };
 		F0000000000000000000000D /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
-		F0000000000000000000000E /* PocketIMGShot.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = PocketIMGShot.entitlements; sourceTree = "<group>"; };
 		F00000000000000000000101 /* AnnotationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnnotationTests.swift; sourceTree = "<group>"; };
 		F00000000000000000000102 /* ConfigurationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfigurationTests.swift; sourceTree = "<group>"; };
 		F00000000000000000000201 /* AppKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AppKit.framework; path = System/Library/Frameworks/AppKit.framework; sourceTree = SDKROOT; };
@@ -103,7 +100,6 @@
 				F00000000000000000000001 /* PocketIMGShotApp.swift */,
 				F00000000000000000000002 /* AppController.swift */,
 				F00000000000000000000003 /* AppSettings.swift */,
-				F00000000000000000000004 /* KeychainStore.swift */,
 				F00000000000000000000005 /* GlobalHotKey.swift */,
 				F00000000000000000000006 /* HotKeyRecorder.swift */,
 				F00000000000000000000007 /* SettingsView.swift */,
@@ -113,7 +109,6 @@
 				F0000000000000000000000B /* PocketIMGClient.swift */,
 				F0000000000000000000000C /* ToastPresenter.swift */,
 				F0000000000000000000000D /* Info.plist */,
-				F0000000000000000000000E /* PocketIMGShot.entitlements */,
 			);
 			path = PocketIMGShot;
 			sourceTree = "<group>";
@@ -249,7 +244,6 @@
 				B00000000000000000000001 /* PocketIMGShotApp.swift in Sources */,
 				B00000000000000000000002 /* AppController.swift in Sources */,
 				B00000000000000000000003 /* AppSettings.swift in Sources */,
-				B00000000000000000000004 /* KeychainStore.swift in Sources */,
 				B00000000000000000000005 /* GlobalHotKey.swift in Sources */,
 				B00000000000000000000006 /* HotKeyRecorder.swift in Sources */,
 				B00000000000000000000007 /* SettingsView.swift in Sources */,
@@ -320,16 +314,15 @@
 		E00000000000000000000201 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				CODE_SIGN_ENTITLEMENTS = PocketIMGShot/PocketIMGShot.entitlements;
 				CODE_SIGN_IDENTITY = "-";
 				CODE_SIGN_STYLE = Manual;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 2;
+				CURRENT_PROJECT_VERSION = 3;
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = PocketIMGShot/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/../Frameworks";
-				MARKETING_VERSION = 0.4.1;
+				MARKETING_VERSION = 0.4.2;
 				PRODUCT_BUNDLE_IDENTIFIER = com.gmch.pocketimg.shot;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -340,16 +333,15 @@
 		E00000000000000000000202 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				CODE_SIGN_ENTITLEMENTS = PocketIMGShot/PocketIMGShot.entitlements;
 				CODE_SIGN_IDENTITY = "-";
 				CODE_SIGN_STYLE = Manual;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 2;
+				CURRENT_PROJECT_VERSION = 3;
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = PocketIMGShot/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/../Frameworks";
-				MARKETING_VERSION = 0.4.1;
+				MARKETING_VERSION = 0.4.2;
 				PRODUCT_BUNDLE_IDENTIFIER = com.gmch.pocketimg.shot;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
