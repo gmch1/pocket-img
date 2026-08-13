@@ -82,10 +82,12 @@ export default function App() {
   const [selected, setSelected] = useState<Set<string>>(() => new Set());
   const [uploadTasks, setUploadTasks] = useState<UploadTask[]>([]);
   const [toast, setToast] = useState<Toast | null>(null);
+  const authRef = useRef<AuthState>(auth);
   const uploadQueue = useRef<Promise<void>>(Promise.resolve());
   const taskSequence = useRef(0);
   const toastTimer = useRef<number | undefined>(undefined);
   const groupedImages = timelineGroups(images);
+  authRef.current = auth;
 
   const notify = useCallback((message: string, error = false) => {
     if (toastTimer.current !== undefined) window.clearTimeout(toastTimer.current);
@@ -156,7 +158,7 @@ export default function App() {
   }, []);
 
   const enqueueFiles = useCallback((incoming: File[]) => {
-    if (auth !== "authenticated") {
+    if (authRef.current !== "authenticated") {
       notify("请先输入 Token", true);
       return;
     }
@@ -225,7 +227,7 @@ export default function App() {
         notify(`${successful.length} 张图片上传完成`);
       }
     });
-  }, [auth, expireSession, finishTask, notify, updateTask]);
+  }, [expireSession, finishTask, notify, updateTask]);
 
   useEffect(() => {
     const handlePaste = (event: ClipboardEvent) => {

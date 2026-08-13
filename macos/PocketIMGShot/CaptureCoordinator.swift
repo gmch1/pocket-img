@@ -117,15 +117,16 @@ final class CaptureCoordinator: NSObject, CaptureOverlayViewDelegate {
             filter = try await requestDisplayFilter()
         }
 
-        guard let display = filter.includedDisplays.first,
-              let screen = NSScreen.screens.first(where: { $0.displayID == display.displayID }) else {
+        guard let screen = screen(matching: filter.contentRect),
+              let displayID = screen.displayID else {
             throw CaptureError.noDisplays
         }
-        approvedDisplayFilters[display.displayID] = filter
+        approvedDisplayFilters[displayID] = filter
 
         let configuration = SCStreamConfiguration()
-        configuration.width = display.width
-        configuration.height = display.height
+        let pixelScale = max(CGFloat(filter.pointPixelScale), 1)
+        configuration.width = max(1, Int(filter.contentRect.width * pixelScale))
+        configuration.height = max(1, Int(filter.contentRect.height * pixelScale))
         configuration.pixelFormat = kCVPixelFormatType_32BGRA
         configuration.showsCursor = false
         configuration.capturesAudio = false
@@ -134,6 +135,19 @@ final class CaptureCoordinator: NSObject, CaptureOverlayViewDelegate {
             configuration: configuration
         )
         return [CapturedDisplay(screen: screen, image: image)]
+    }
+
+    private func screen(matching contentRect: CGRect) -> NSScreen? {
+        NSScreen.screens.max { first, second in
+            overlapArea(of: first, with: contentRect) < overlapArea(of: second, with: contentRect)
+        }
+    }
+
+    private func overlapArea(of screen: NSScreen, with contentRect: CGRect) -> CGFloat {
+        guard let displayID = screen.displayID else { return 0 }
+        let intersection = CGDisplayBounds(displayID).intersection(contentRect)
+        guard !intersection.isNull, !intersection.isInfinite else { return 0 }
+        return max(0, intersection.width) * max(0, intersection.height)
     }
 
     private func requestDisplayFilter() async throws -> SCContentFilter {
