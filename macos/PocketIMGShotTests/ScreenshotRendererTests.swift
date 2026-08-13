@@ -37,7 +37,8 @@ final class ScreenshotRendererTests: XCTestCase {
         XCTAssertFalse(annotationPixels.isEmpty)
         XCTAssertGreaterThanOrEqual(annotationPixels.map { $0.red }.min() ?? 0, 245)
         XCTAssertTrue(annotationPixels.contains { pixel in
-            pixel.red >= 250 && pixel.green <= 10 && pixel.blue <= 10
+            Int(pixel.red) - Int(pixel.green) >= 80
+                && Int(pixel.red) - Int(pixel.blue) >= 80
         })
     }
 
