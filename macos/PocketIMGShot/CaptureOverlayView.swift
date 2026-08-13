@@ -108,13 +108,13 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
     }
 
     private enum Appearance {
-        static let toolbarButtonSize: CGFloat = 32
+        static let toolbarButtonSize: CGFloat = 24
         static let toolbarIconSize: CGFloat = 16
-        static let toolbarButtonCornerRadius: CGFloat = 7
-        static let toolbarPadding: CGFloat = 5
-        static let toolbarSpacing: CGFloat = 3
-        static let toolbarGroupGap: CGFloat = 7
-        static let toolbarCornerRadius: CGFloat = 10
+        static let toolbarButtonCornerRadius: CGFloat = 5
+        static let toolbarPadding: CGFloat = 4
+        static let toolbarSpacing: CGFloat = 2
+        static let toolbarGroupGap: CGFloat = 5
+        static let toolbarCornerRadius: CGFloat = 8
     }
 
     weak var delegate: CaptureOverlayViewDelegate?
@@ -487,8 +487,8 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
         NSGraphicsContext.saveGraphicsState()
         let shadow = NSShadow()
         shadow.shadowColor = NSColor.black.withAlphaComponent(0.45)
-        shadow.shadowBlurRadius = 14
-        shadow.shadowOffset = NSSize(width: 0, height: -3)
+        shadow.shadowBlurRadius = 10
+        shadow.shadowOffset = NSSize(width: 0, height: -2)
         shadow.set()
         NSColor(calibratedWhite: 0.08, alpha: 0.94).setFill()
         background.fill()
@@ -502,8 +502,8 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
             + Appearance.toolbarSpacing
             + Appearance.toolbarGroupGap / 2
         let separator = NSBezierPath()
-        separator.move(to: CGPoint(x: separatorX, y: frame.minY + 11))
-        separator.line(to: CGPoint(x: separatorX, y: frame.maxY - 11))
+        separator.move(to: CGPoint(x: separatorX, y: frame.minY + 8))
+        separator.line(to: CGPoint(x: separatorX, y: frame.maxY - 8))
         NSColor.white.withAlphaComponent(0.14).setStroke()
         separator.lineWidth = 1
         separator.stroke()
