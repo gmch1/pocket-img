@@ -160,20 +160,16 @@ jobs:
             -P "${SIGNING_P12_PASSWORD}" \
             -T /usr/bin/codesign \
             -T /usr/bin/security
-          security add-trusted-cert \
-            -r trustAsRoot \
-            -p codeSign \
-            -k "${keychain_path}" \
-            macos/signing/PocketIMGShot-Release.pem
           security set-key-partition-list \
             -S apple-tool:,apple:,codesign: \
             -s \
             -k "${keychain_password}" \
             "${keychain_path}"
 
-          signing_identity="$(security find-identity -v -p codesigning "${keychain_path}" | awk '/PocketIMG Shot Local Release/ { print $2; exit }')"
-          if [[ ! "${signing_identity}" =~ ^[0-9A-Fa-f]{40}$ ]]; then
-            echo "Stable macOS signing identity was not imported" >&2
+          signing_identity="$(openssl x509 -in macos/signing/PocketIMGShot-Release.pem -outform DER | shasum | awk '{ print $1 }')"
+          imported_certificate="$(security find-certificate -c 'PocketIMG Shot Local Release' -Z "${keychain_path}" | awk '/SHA-1 hash:/ { print tolower($3); exit }')"
+          if [[ ! "${signing_identity}" =~ ^[0-9a-f]{40}$ || "${imported_certificate}" != "${signing_identity}" ]]; then
+            echo "Imported macOS signing identity does not match the pinned certificate" >&2
             exit 1
           fi
           echo "MACOS_SIGNING_IDENTITY=${signing_identity}" >> "${GITHUB_ENV}"
