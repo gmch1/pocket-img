@@ -94,24 +94,14 @@ enum SettingsError: LocalizedError {
 
 @MainActor
 final class AppSettings: ObservableObject {
-    private enum Keys {
-        static let serverAddress = "serverAddress"
-        static let token = "token"
-        static let hotKeyCode = "hotKeyCode"
-        static let hotKeyModifiers = "hotKeyModifiers"
-        static let hotKeyLabel = "hotKeyLabel"
-    }
-
     @Published var serverAddress: String
     @Published var token: String
     @Published var hotKey: HotKey
     @Published var hotKeyRegistrationError = ""
 
-    private let defaults: UserDefaults
     private let store: SettingsStore
 
-    init(defaults: UserDefaults = .standard, settingsURL: URL? = nil) {
-        self.defaults = defaults
+    init(settingsURL: URL? = nil) {
         store = SettingsStore(fileURL: settingsURL ?? SettingsStore.defaultURL)
 
         if let stored = try? store.load() {
@@ -123,27 +113,14 @@ final class AppSettings: ObservableObject {
                 keyLabel: stored.hotKeyLabel
             )
         } else {
-            serverAddress = defaults.string(forKey: Keys.serverAddress) ?? ""
-            token = defaults.string(forKey: Keys.token) ?? ""
-            if defaults.object(forKey: Keys.hotKeyCode) != nil {
-                hotKey = HotKey(
-                    keyCode: UInt32(defaults.integer(forKey: Keys.hotKeyCode)),
-                    modifiers: (defaults.object(forKey: Keys.hotKeyModifiers) as? NSNumber)?.uintValue ?? 0,
-                    keyLabel: defaults.string(forKey: Keys.hotKeyLabel) ?? HotKey.default.keyLabel
-                )
-            } else {
-                hotKey = .default
-            }
+            serverAddress = ""
+            token = ""
+            hotKey = .default
         }
     }
 
     func save() throws {
         let configuration = try serviceConfiguration()
-        defaults.set(configuration.baseURL.absoluteString, forKey: Keys.serverAddress)
-        defaults.set(configuration.token, forKey: Keys.token)
-        defaults.set(Int(hotKey.keyCode), forKey: Keys.hotKeyCode)
-        defaults.set(NSNumber(value: hotKey.modifiers), forKey: Keys.hotKeyModifiers)
-        defaults.set(hotKey.keyLabel, forKey: Keys.hotKeyLabel)
         try store.save(StoredSettings(
             serverAddress: configuration.baseURL.absoluteString,
             token: configuration.token,

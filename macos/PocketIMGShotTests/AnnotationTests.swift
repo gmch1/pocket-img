@@ -24,5 +24,17 @@ final class AnnotationTests: XCTestCase {
             start: CGPoint(x: 1, y: 1),
             end: CGPoint(x: 3, y: 3)
         ).isMeaningful)
+        XCTAssertFalse(Annotation(
+            tool: .text,
+            start: CGPoint(x: 1, y: 1),
+            end: CGPoint(x: 1, y: 1),
+            text: "  "
+        ).isMeaningful)
+        XCTAssertTrue(Annotation(
+            tool: .text,
+            start: CGPoint(x: 1, y: 1),
+            end: CGPoint(x: 1, y: 1),
+            text: "说明"
+        ).isMeaningful)
     }
 }

@@ -27,26 +27,20 @@ final class ConfigurationTests: XCTestCase {
 
     @MainActor
     func testSettingsPersistAcrossAppInstancesWithoutKeychain() throws {
-        let firstSuite = "PocketIMGShotTests.first.\(UUID().uuidString)"
-        let secondSuite = "PocketIMGShotTests.second.\(UUID().uuidString)"
-        let firstDefaults = try XCTUnwrap(UserDefaults(suiteName: firstSuite))
-        let secondDefaults = try XCTUnwrap(UserDefaults(suiteName: secondSuite))
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent("PocketIMGShotTests-\(UUID().uuidString)", isDirectory: true)
         let settingsURL = directory.appendingPathComponent("settings.json")
         defer {
-            firstDefaults.removePersistentDomain(forName: firstSuite)
-            secondDefaults.removePersistentDomain(forName: secondSuite)
             try? FileManager.default.removeItem(at: directory)
         }
 
-        let settings = AppSettings(defaults: firstDefaults, settingsURL: settingsURL)
+        let settings = AppSettings(settingsURL: settingsURL)
         settings.serverAddress = "https://img.example.com/"
         settings.token = "test-token"
         settings.hotKey = HotKey(keyCode: 3, modifiers: 256, keyLabel: "F")
         try settings.save()
 
-        let restored = AppSettings(defaults: secondDefaults, settingsURL: settingsURL)
+        let restored = AppSettings(settingsURL: settingsURL)
         XCTAssertEqual(restored.serverAddress, "https://img.example.com")
         XCTAssertEqual(restored.token, "test-token")
         XCTAssertEqual(restored.hotKey, settings.hotKey)

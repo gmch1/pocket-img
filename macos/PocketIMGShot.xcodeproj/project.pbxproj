@@ -28,6 +28,7 @@
 		B00000000000000000000203 /* ScreenCaptureKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = F00000000000000000000203 /* ScreenCaptureKit.framework */; };
 		B00000000000000000000205 /* Carbon.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = F00000000000000000000205 /* Carbon.framework */; };
 		B00000000000000000000206 /* ImageIO.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = F00000000000000000000206 /* ImageIO.framework */; };
+		B00000000000000000000207 /* CoreText.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = F00000000000000000000207 /* CoreText.framework */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -63,6 +64,7 @@
 		F00000000000000000000203 /* ScreenCaptureKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = ScreenCaptureKit.framework; path = System/Library/Frameworks/ScreenCaptureKit.framework; sourceTree = SDKROOT; };
 		F00000000000000000000205 /* Carbon.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Carbon.framework; path = System/Library/Frameworks/Carbon.framework; sourceTree = SDKROOT; };
 		F00000000000000000000206 /* ImageIO.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = ImageIO.framework; path = System/Library/Frameworks/ImageIO.framework; sourceTree = SDKROOT; };
+		F00000000000000000000207 /* CoreText.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreText.framework; path = System/Library/Frameworks/CoreText.framework; sourceTree = SDKROOT; };
 		F00000000000000000000301 /* PocketIMGShot.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = PocketIMGShot.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		F00000000000000000000302 /* PocketIMGShotTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = PocketIMGShotTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -77,6 +79,7 @@
 				B00000000000000000000203 /* ScreenCaptureKit.framework in Frameworks */,
 				B00000000000000000000205 /* Carbon.framework in Frameworks */,
 				B00000000000000000000206 /* ImageIO.framework in Frameworks */,
+				B00000000000000000000207 /* CoreText.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -139,6 +142,7 @@
 				F00000000000000000000203 /* ScreenCaptureKit.framework */,
 				F00000000000000000000205 /* Carbon.framework */,
 				F00000000000000000000206 /* ImageIO.framework */,
+				F00000000000000000000207 /* CoreText.framework */,
 			);
 			name = Frameworks;
 			sourceTree = "<group>";

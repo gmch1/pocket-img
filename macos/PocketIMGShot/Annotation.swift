@@ -4,12 +4,21 @@ import Foundation
 enum AnnotationTool: Equatable, Sendable {
     case rectangle
     case arrow
+    case text
 }
 
 struct Annotation: Equatable, Sendable {
     let tool: AnnotationTool
     let start: CGPoint
     let end: CGPoint
+    let text: String?
+
+    init(tool: AnnotationTool, start: CGPoint, end: CGPoint, text: String? = nil) {
+        self.tool = tool
+        self.start = start
+        self.end = end
+        self.text = text
+    }
 
     var rect: CGRect {
         CGRect(
@@ -26,6 +35,8 @@ struct Annotation: Equatable, Sendable {
             return rect.width >= 3 && rect.height >= 3
         case .arrow:
             return hypot(end.x - start.x, end.y - start.y) >= 6
+        case .text:
+            return !(text?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)
         }
     }
 }
