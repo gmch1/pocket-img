@@ -22,4 +22,22 @@ final class ConfigurationTests: XCTestCase {
         XCTAssertEqual(HotKey.default.displayName, "F2")
         XCTAssertEqual(HotKey.default.modifiers, 0)
     }
+
+    @MainActor
+    func testSettingsPersistAcrossAppInstancesWithoutKeychain() throws {
+        let suiteName = "PocketIMGShotTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let settings = AppSettings(defaults: defaults)
+        settings.serverAddress = "https://img.example.com/"
+        settings.token = "test-token"
+        settings.hotKey = HotKey(keyCode: 3, modifiers: 256, keyLabel: "F")
+        try settings.save()
+
+        let restored = AppSettings(defaults: defaults)
+        XCTAssertEqual(restored.serverAddress, "https://img.example.com")
+        XCTAssertEqual(restored.token, "test-token")
+        XCTAssertEqual(restored.hotKey, settings.hotKey)
+    }
 }

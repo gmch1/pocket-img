@@ -50,6 +50,7 @@ enum SettingsError: LocalizedError {
 final class AppSettings: ObservableObject {
     private enum Keys {
         static let serverAddress = "serverAddress"
+        static let token = "token"
         static let hotKeyCode = "hotKeyCode"
         static let hotKeyModifiers = "hotKeyModifiers"
         static let hotKeyLabel = "hotKeyLabel"
@@ -61,13 +62,10 @@ final class AppSettings: ObservableObject {
     @Published var hotKeyRegistrationError = ""
 
     private let defaults: UserDefaults
-    private let keychain: KeychainStore
-
-    init(defaults: UserDefaults = .standard, keychain: KeychainStore = KeychainStore()) {
+    init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
-        self.keychain = keychain
         serverAddress = defaults.string(forKey: Keys.serverAddress) ?? ""
-        token = (try? keychain.loadToken()) ?? ""
+        token = defaults.string(forKey: Keys.token) ?? ""
 
         if defaults.object(forKey: Keys.hotKeyCode) != nil {
             hotKey = HotKey(
@@ -83,11 +81,12 @@ final class AppSettings: ObservableObject {
     func save() throws {
         let configuration = try serviceConfiguration()
         defaults.set(configuration.baseURL.absoluteString, forKey: Keys.serverAddress)
+        defaults.set(configuration.token, forKey: Keys.token)
         defaults.set(Int(hotKey.keyCode), forKey: Keys.hotKeyCode)
         defaults.set(NSNumber(value: hotKey.modifiers), forKey: Keys.hotKeyModifiers)
         defaults.set(hotKey.keyLabel, forKey: Keys.hotKeyLabel)
-        try keychain.saveToken(configuration.token)
         serverAddress = configuration.baseURL.absoluteString
+        token = configuration.token
     }
 
     func serviceConfiguration() throws -> ServiceConfiguration {
