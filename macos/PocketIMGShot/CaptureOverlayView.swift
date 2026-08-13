@@ -444,9 +444,6 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
         }
 
         let lineWidth = annotation.resolvedStyleSize
-        NSColor.black.withAlphaComponent(0.38).setStroke()
-        path.lineWidth = lineWidth + 2
-        path.stroke()
         color.setStroke()
         path.lineWidth = lineWidth
         path.stroke()
@@ -462,8 +459,6 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
                     weight: .semibold
                 ),
                 .foregroundColor: color,
-                .strokeColor: NSColor.black.withAlphaComponent(0.58),
-                .strokeWidth: -3,
             ]
         )
     }
@@ -929,17 +924,17 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
             max(selection.minY, selection.maxY - height)
         )
         let frame = CGRect(x: x, y: y, width: width, height: height)
-        let editor = Self.makeEditableTextField(frame: frame)
+        let textColor = annotationColor.nsColor
+        let editor = Self.makeEditableTextField(frame: frame, textColor: textColor)
         editor.isBordered = false
         editor.isBezeled = false
         editor.drawsBackground = false
-        editor.textColor = NSColor.white.withAlphaComponent(0.94)
         editor.font = font
         editor.focusRingType = .none
         editor.placeholderAttributedString = NSAttributedString(
             string: "输入文字",
             attributes: [
-                .foregroundColor: NSColor.white.withAlphaComponent(0.42),
+                .foregroundColor: textColor.withAlphaComponent(0.56),
             ]
         )
         editor.delegate = self
@@ -947,7 +942,7 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
         editor.cell?.wraps = false
         editor.cell?.usesSingleLineMode = true
         editor.wantsLayer = true
-        editor.layer?.backgroundColor = NSColor(calibratedWhite: 0.10, alpha: 0.94).cgColor
+        editor.layer?.backgroundColor = NSColor.black.withAlphaComponent(0.18).cgColor
         editor.layer?.cornerRadius = 5
         editor.layer?.cornerCurve = .continuous
         editor.layer?.borderWidth = 1
@@ -962,13 +957,14 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
         window?.makeFirstResponder(editor)
         editor.selectText(nil)
         if let fieldEditor = editor.currentEditor() as? NSTextView {
-            fieldEditor.insertionPointColor = .controlAccentColor
+            fieldEditor.insertionPointColor = textColor
             fieldEditor.backgroundColor = .clear
+            fieldEditor.textColor = textColor
         }
         updateTextEditorFocus(true)
     }
 
-    static func makeEditableTextField(frame: CGRect) -> NSTextField {
+    static func makeEditableTextField(frame: CGRect, textColor: NSColor) -> NSTextField {
         let editor = NSTextField(frame: frame)
         let cell = VerticallyCenteredTextFieldCell(textCell: "")
         cell.isEditable = true
@@ -977,6 +973,7 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
         editor.isEditable = true
         editor.isSelectable = true
         editor.isEnabled = true
+        editor.textColor = textColor
         return editor
     }
 

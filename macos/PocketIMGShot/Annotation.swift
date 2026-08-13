@@ -22,15 +22,15 @@ enum AnnotationColor: String, CaseIterable, Codable, Equatable, Sendable {
         case .red:
             return (1, 0, 0, 1)
         case .yellow:
-            return (1, 0.82, 0.12, 1)
+            return (1, 242.0 / 255.0, 0, 1)
         case .green:
-            return (0.20, 0.82, 0.38, 1)
+            return (34.0 / 255.0, 177.0 / 255.0, 76.0 / 255.0, 1)
         case .blue:
-            return (0.18, 0.55, 1, 1)
+            return (0, 162.0 / 255.0, 232.0 / 255.0, 1)
         case .purple:
-            return (0.68, 0.38, 1, 1)
+            return (163.0 / 255.0, 73.0 / 255.0, 164.0 / 255.0, 1)
         case .white:
-            return (0.96, 0.96, 0.98, 1)
+            return (1, 1, 1, 1)
         }
     }
 

@@ -81,6 +81,11 @@ final class AnnotationTests: XCTestCase {
         XCTAssertEqual(AnnotationColor.red.components.red, 1)
         XCTAssertEqual(AnnotationColor.red.components.green, 0)
         XCTAssertEqual(AnnotationColor.red.components.blue, 0)
+        XCTAssertEqual(AnnotationColor.yellow.components.green, 242.0 / 255.0)
+        XCTAssertEqual(AnnotationColor.green.components.red, 34.0 / 255.0)
+        XCTAssertEqual(AnnotationColor.blue.components.green, 162.0 / 255.0)
+        XCTAssertEqual(AnnotationColor.purple.components.red, 163.0 / 255.0)
+        XCTAssertEqual(AnnotationColor.white.components.blue, 1)
     }
 
     func testAnnotationStylePreferencesClampUnsafeValues() {
@@ -118,7 +123,16 @@ final class AnnotationTests: XCTestCase {
     @MainActor
     func testTextFieldCellCentersPlaceholderAndAcceptsInput() throws {
         let bounds = CGRect(x: 0, y: 0, width: 200, height: 32)
-        let field = CaptureOverlayView.makeEditableTextField(frame: bounds)
+        let expectedColor = NSColor(
+            srgbRed: 1,
+            green: 0,
+            blue: 0,
+            alpha: 1
+        )
+        let field = CaptureOverlayView.makeEditableTextField(
+            frame: bounds,
+            textColor: expectedColor
+        )
         let cell = try XCTUnwrap(field.cell as? VerticallyCenteredTextFieldCell)
         cell.font = NSFont.systemFont(ofSize: 20, weight: .semibold)
         field.placeholderString = "输入文字"
@@ -134,6 +148,7 @@ final class AnnotationTests: XCTestCase {
         XCTAssertTrue(field.isEditable)
         XCTAssertTrue(field.isSelectable)
         XCTAssertTrue(field.acceptsFirstResponder)
+        XCTAssertEqual(field.textColor, expectedColor)
         field.stringValue = "测试输入"
         XCTAssertEqual(field.stringValue, "测试输入")
     }
