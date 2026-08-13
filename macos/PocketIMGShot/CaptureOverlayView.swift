@@ -161,8 +161,14 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
 
     private var mode: Mode = .selecting
     private var dragStart: CGPoint?
+    private var selectionAtDragStart: CGRect?
+    private var annotationsAtDragStart: [Annotation]?
     private var selection: CGRect?
-    private var selectedTool: AnnotationTool = .rectangle
+    private var selectedTool: AnnotationTool? {
+        didSet {
+            window?.invalidateCursorRects(for: self)
+        }
+    }
     private var annotations: [Annotation] = []
     private var currentAnnotation: Annotation?
     private var textEditor: NSTextField?
@@ -184,7 +190,17 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
     override var acceptsFirstResponder: Bool { true }
 
     override func resetCursorRects() {
-        addCursorRect(bounds, cursor: mode == .selecting ? .crosshair : .arrow)
+        if mode == .selecting {
+            addCursorRect(bounds, cursor: .crosshair)
+            return
+        }
+        addCursorRect(bounds, cursor: .arrow)
+        if selectedTool == nil, let selection {
+            addCursorRect(
+                selection,
+                cursor: selectionAtDragStart == nil ? .openHand : .closedHand
+            )
+        }
     }
 
     override func mouseDown(with event: NSEvent) {
@@ -212,18 +228,24 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
             if colorPaletteVisible, !colorPaletteFrame().contains(point) {
                 colorPaletteVisible = false
             }
-            guard selection?.contains(point) == true else { return }
+            guard let selection, selection.contains(point) else { return }
             if selectedTool == .text {
                 beginTextEditing(at: point)
                 return
             }
             commitTextEditing()
             dragStart = point
+            guard let selectedTool else {
+                selectionAtDragStart = selection
+                annotationsAtDragStart = annotations
+                window?.invalidateCursorRects(for: self)
+                return
+            }
             currentAnnotation = Annotation(
                 tool: selectedTool,
                 start: point,
                 end: point,
-                styleSize: currentToolSize,
+                styleSize: toolSize(for: selectedTool),
                 color: annotationColor
             )
         }
@@ -239,6 +261,25 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
             selection = CGRect.between(dragStart, point).intersection(bounds)
         case .editing:
             guard let selection else { return }
+            guard let selectedTool else {
+                guard let originalSelection = selectionAtDragStart,
+                      let originalAnnotations = annotationsAtDragStart else { return }
+                let movedSelection = CaptureGeometry.movedSelection(
+                    originalSelection,
+                    from: dragStart,
+                    to: point,
+                    within: bounds
+                )
+                let offsetX = movedSelection.minX - originalSelection.minX
+                let offsetY = movedSelection.minY - originalSelection.minY
+                self.selection = movedSelection
+                annotations = originalAnnotations.map {
+                    $0.translatedBy(x: offsetX, y: offsetY)
+                }
+                window?.invalidateCursorRects(for: self)
+                needsDisplay = true
+                return
+            }
             let endpoint = CGPoint(
                 x: min(max(point.x, selection.minX), selection.maxX),
                 y: min(max(point.y, selection.minY), selection.maxY)
@@ -247,7 +288,7 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
                 tool: selectedTool,
                 start: dragStart,
                 end: endpoint,
-                styleSize: currentToolSize,
+                styleSize: toolSize(for: selectedTool),
                 color: annotationColor
             )
         }
@@ -255,7 +296,12 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
     }
 
     override func mouseUp(with event: NSEvent) {
-        defer { dragStart = nil }
+        defer {
+            dragStart = nil
+            selectionAtDragStart = nil
+            annotationsAtDragStart = nil
+            window?.invalidateCursorRects(for: self)
+        }
         guard !isFinishing else { return }
         let point = constrained(convert(event.locationInWindow, from: nil))
         if let pressedToolbarAction {
@@ -305,9 +351,9 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
             return
         }
         switch event.charactersIgnoringModifiers?.lowercased() {
-        case "r": selectedTool = .rectangle
-        case "a": selectedTool = .arrow
-        case "t": selectedTool = .text
+        case "r": toggleAnnotationTool(.rectangle)
+        case "a": toggleAnnotationTool(.arrow)
+        case "t": toggleAnnotationTool(.text)
         default:
             super.keyDown(with: event)
             return
@@ -328,6 +374,10 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
 
     override func scrollWheel(with event: NSEvent) {
         guard mode == .editing, !isFinishing, abs(event.scrollingDeltaY) > 0.01 else {
+            super.scrollWheel(with: event)
+            return
+        }
+        guard let selectedTool else {
             super.scrollWheel(with: event)
             return
         }
@@ -631,15 +681,19 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
             path.line(to: CGPoint(x: icon.midX, y: icon.maxY - 1))
         case .copy:
             path.appendRoundedRect(
-                CGRect(x: icon.minX + 1, y: icon.minY + 1, width: 11, height: 11),
-                xRadius: 1.5,
-                yRadius: 1.5
+                CGRect(x: icon.minX + 2.5, y: icon.minY + 2, width: 11, height: 13),
+                xRadius: 2,
+                yRadius: 2
             )
             path.appendRoundedRect(
-                CGRect(x: icon.minX + 6, y: icon.minY + 6, width: 11, height: 11),
-                xRadius: 1.5,
-                yRadius: 1.5
+                CGRect(x: icon.midX - 3, y: icon.minY + 1, width: 6, height: 3.5),
+                xRadius: 1,
+                yRadius: 1
             )
+            for offset in [CGFloat(7), 10, 13] {
+                path.move(to: CGPoint(x: icon.minX + 5, y: icon.minY + offset))
+                path.line(to: CGPoint(x: icon.maxX - 5, y: icon.minY + offset))
+            }
         case .upload:
             path.move(to: CGPoint(x: icon.minX + 2, y: icon.maxY - 6))
             path.line(to: CGPoint(x: icon.minX + 2, y: icon.maxY - 2))
@@ -690,6 +744,7 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
     }
 
     private func drawToolSizeHint() {
+        guard let selectedTool else { return }
         let actionIndex: Int
         let suffix: String
         switch selectedTool {
@@ -703,7 +758,7 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
             actionIndex = 2
             suffix = "pt"
         }
-        let size = currentToolSize
+        let size = toolSize(for: selectedTool)
         let value = size.rounded() == size
             ? "\(Int(size)) \(suffix)"
             : String(format: "%.1f %@", size, suffix)
@@ -1129,11 +1184,11 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
         }
         switch action {
         case .rectangle:
-            selectedTool = .rectangle
+            toggleAnnotationTool(.rectangle)
         case .arrow:
-            selectedTool = .arrow
+            toggleAnnotationTool(.arrow)
         case .text:
-            selectedTool = .text
+            toggleAnnotationTool(.text)
         case .color:
             colorPaletteVisible.toggle()
         case .undo:
@@ -1299,8 +1354,14 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
         )
     }
 
-    private var currentToolSize: CGFloat {
-        switch selectedTool {
+    private func toggleAnnotationTool(_ tool: AnnotationTool) {
+        selectedTool = selectedTool == tool ? nil : tool
+        currentAnnotation = nil
+        toolSizeHintVisible = false
+    }
+
+    private func toolSize(for tool: AnnotationTool) -> CGFloat {
+        switch tool {
         case .rectangle:
             return rectangleLineWidth
         case .arrow:
