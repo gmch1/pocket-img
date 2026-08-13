@@ -1,6 +1,5 @@
 import AppKit
 import CoreGraphics
-import CoreImage
 
 enum CaptureAction: Sendable {
     case pin
@@ -51,10 +50,7 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
         }
     }
     var screenshot: CGImage? {
-        didSet {
-            blurredScreenshot = screenshot.map(makeBlurredScreenshot)
-            needsDisplay = true
-        }
+        didSet { needsDisplay = true }
     }
 
     private enum Mode {
@@ -80,7 +76,6 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
     private var selectedTool: AnnotationTool = .rectangle
     private var annotations: [Annotation] = []
     private var currentAnnotation: Annotation?
-    private var blurredScreenshot: NSImage?
     private var textEditor: NSTextField?
     private var textAnchor: CGPoint?
     private var textEditorSize: CGFloat?
@@ -277,16 +272,9 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
         }
 
         let originalImage = NSImage(cgImage: screenshot, size: bounds.size)
-        drawImage(blurredScreenshot ?? originalImage, interpolation: .high)
+        drawImage(originalImage, interpolation: .none)
 
-        if let selection {
-            NSGraphicsContext.saveGraphicsState()
-            NSBezierPath(rect: selection).addClip()
-            drawImage(originalImage, interpolation: .none)
-            NSGraphicsContext.restoreGraphicsState()
-        }
-
-        NSColor.black.withAlphaComponent(0.28).setFill()
+        NSColor.black.withAlphaComponent(0.42).setFill()
         if let selection {
             let shade = NSBezierPath(rect: bounds)
             shade.appendRect(selection)
@@ -318,22 +306,6 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
         if let previousInterpolation {
             graphicsContext?.imageInterpolation = previousInterpolation
         }
-    }
-
-    private func makeBlurredScreenshot(_ screenshot: CGImage) -> NSImage {
-        let source = CIImage(cgImage: screenshot)
-        let blurred = source
-            .clampedToExtent()
-            .applyingFilter(
-                "CIGaussianBlur",
-                parameters: [kCIInputRadiusKey: 8]
-            )
-            .cropped(to: source.extent)
-        let representation = NSCIImageRep(ciImage: blurred)
-        representation.size = bounds.size
-        let image = NSImage(size: bounds.size)
-        image.addRepresentation(representation)
-        return image
     }
 
     private func drawSelection(_ selection: CGRect) {
