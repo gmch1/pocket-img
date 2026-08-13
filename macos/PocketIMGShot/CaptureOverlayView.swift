@@ -27,25 +27,6 @@ final class CaptureOverlayView: NSView {
         case cancel
         case upload
 
-        var symbolName: String {
-            switch self {
-            case .rectangle: return "rectangle"
-            case .arrow: return "arrow.up.right"
-            case .undo: return "arrow.uturn.backward"
-            case .cancel: return "xmark"
-            case .upload: return "arrow.up.circle.fill"
-            }
-        }
-
-        var accessibilityLabel: String {
-            switch self {
-            case .rectangle: return "红框"
-            case .arrow: return "箭头"
-            case .undo: return "撤销"
-            case .cancel: return "取消"
-            case .upload: return "上传"
-            }
-        }
     }
 
     private var mode: Mode = .selecting
@@ -235,33 +216,55 @@ final class CaptureOverlayView: NSView {
                 NSColor.white.withAlphaComponent(0.18).setFill()
                 NSBezierPath(roundedRect: button.insetBy(dx: 3, dy: 3), xRadius: 5, yRadius: 5).fill()
             }
-            guard let symbol = NSImage(systemSymbolName: action.symbolName, accessibilityDescription: action.accessibilityLabel) else {
-                continue
-            }
             let color: NSColor = action == .upload || selected ? .white : .lightGray
-            let configured = symbol.withSymbolConfiguration(.init(pointSize: 15, weight: .medium)) ?? symbol
-            let imageRect = NSRect(
-                x: button.midX - 9,
-                y: button.midY - 9,
-                width: 18,
-                height: 18
-            )
-            NSGraphicsContext.saveGraphicsState()
-            configured.draw(
-                in: imageRect,
-                from: .zero,
-                operation: .sourceOver,
-                fraction: 1,
-                respectFlipped: true,
-                hints: nil
-            )
-            if let context = NSGraphicsContext.current?.cgContext {
-                context.setBlendMode(.sourceAtop)
-                context.setFillColor(color.cgColor)
-                context.fill(imageRect)
-            }
-            NSGraphicsContext.restoreGraphicsState()
+            drawToolbarIcon(action, in: button, color: color)
         }
+    }
+
+    private func drawToolbarIcon(_ action: ToolbarAction, in button: CGRect, color: NSColor) {
+        let icon = CGRect(x: button.midX - 9, y: button.midY - 9, width: 18, height: 18)
+        let path = NSBezierPath()
+        path.lineWidth = 1.8
+        path.lineCapStyle = .round
+        path.lineJoinStyle = .round
+        color.setStroke()
+
+        switch action {
+        case .rectangle:
+            path.appendRoundedRect(icon.insetBy(dx: 1.5, dy: 2.5), xRadius: 1.5, yRadius: 1.5)
+        case .arrow:
+            let start = CGPoint(x: icon.minX + 2, y: icon.maxY - 2)
+            let end = CGPoint(x: icon.maxX - 2, y: icon.minY + 2)
+            path.move(to: start)
+            path.line(to: end)
+            path.move(to: CGPoint(x: end.x - 7, y: end.y))
+            path.line(to: end)
+            path.line(to: CGPoint(x: end.x, y: end.y + 7))
+        case .undo:
+            path.move(to: CGPoint(x: icon.minX + 3, y: icon.midY - 1))
+            path.curve(
+                to: CGPoint(x: icon.maxX - 2, y: icon.maxY - 3),
+                controlPoint1: CGPoint(x: icon.midX + 2, y: icon.minY),
+                controlPoint2: CGPoint(x: icon.maxX - 1, y: icon.midY + 1)
+            )
+            path.move(to: CGPoint(x: icon.minX + 3, y: icon.midY - 1))
+            path.line(to: CGPoint(x: icon.minX + 7, y: icon.minY + 2))
+            path.move(to: CGPoint(x: icon.minX + 3, y: icon.midY - 1))
+            path.line(to: CGPoint(x: icon.minX + 8, y: icon.midY + 2))
+        case .cancel:
+            path.move(to: CGPoint(x: icon.minX + 3, y: icon.minY + 3))
+            path.line(to: CGPoint(x: icon.maxX - 3, y: icon.maxY - 3))
+            path.move(to: CGPoint(x: icon.maxX - 3, y: icon.minY + 3))
+            path.line(to: CGPoint(x: icon.minX + 3, y: icon.maxY - 3))
+        case .upload:
+            path.appendOval(in: icon.insetBy(dx: 1, dy: 1))
+            path.move(to: CGPoint(x: icon.midX, y: icon.maxY - 4))
+            path.line(to: CGPoint(x: icon.midX, y: icon.minY + 4))
+            path.move(to: CGPoint(x: icon.midX - 4, y: icon.minY + 8))
+            path.line(to: CGPoint(x: icon.midX, y: icon.minY + 4))
+            path.line(to: CGPoint(x: icon.midX + 4, y: icon.minY + 8))
+        }
+        path.stroke()
     }
 
     private func drawSizeLabel(_ selection: CGRect) {
