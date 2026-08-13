@@ -139,6 +139,9 @@ final class CaptureOverlayView: NSView {
         }
 
         let image = NSImage(cgImage: screenshot, size: bounds.size)
+        let graphicsContext = NSGraphicsContext.current
+        let previousInterpolation = graphicsContext?.imageInterpolation
+        graphicsContext?.imageInterpolation = .none
         image.draw(
             in: bounds,
             from: .zero,
@@ -147,6 +150,9 @@ final class CaptureOverlayView: NSView {
             respectFlipped: true,
             hints: nil
         )
+        if let previousInterpolation {
+            graphicsContext?.imageInterpolation = previousInterpolation
+        }
 
         NSColor.black.withAlphaComponent(0.48).setFill()
         if let selection {

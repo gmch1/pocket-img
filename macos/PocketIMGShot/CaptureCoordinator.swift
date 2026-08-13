@@ -51,6 +51,7 @@ final class CaptureCoordinator: NSObject, CaptureOverlayViewDelegate {
             window.level = .screenSaver
             window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
             window.acceptsMouseMovedEvents = true
+            window.isReleasedWhenClosed = false
             window.setFrame(display.screen.frame, display: true)
             return window
         }
@@ -111,12 +112,25 @@ final class CaptureCoordinator: NSObject, CaptureOverlayViewDelegate {
     }
 
     private func closeWindows() {
-        for window in windows {
-            window.orderOut(nil)
-            window.contentView = nil
-            window.close()
-        }
+        let dismissedWindows = windows
         windows.removeAll()
+
+        for window in dismissedWindows {
+            (window.contentView as? CaptureOverlayView)?.delegate = nil
+            window.orderOut(nil)
+        }
+
+        // The delegate callback originates from a toolbar mouse event owned by the
+        // capture view. Releasing that view and its window synchronously can tear
+        // down the final AppKit window while the event is still being dispatched.
+        // Wait until the callback stack has unwound before releasing the windows.
+        Task { @MainActor in
+            await Task.yield()
+            for window in dismissedWindows {
+                window.contentView = nil
+                window.close()
+            }
+        }
     }
 
     private func captureDisplays() async throws -> [CapturedDisplay] {
