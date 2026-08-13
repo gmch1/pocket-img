@@ -172,9 +172,13 @@ jobs:
           [[ "${architectures}" == *arm64* ]]
           [[ "${architectures}" == *x86_64* ]]
           install -d release
-          archive="release/PocketIMGShot-${RELEASE_VERSION}-macos-universal.zip"
+          archive_name="PocketIMGShot-${RELEASE_VERSION}-macos-universal.zip"
+          archive="release/${archive_name}"
           ditto -c -k --sequesterRsrc --keepParent "${app}" "${archive}"
-          shasum -a 256 "${archive}" > "${archive}.sha256"
+          (
+            cd release
+            shasum -a 256 "${archive_name}" > "${archive_name}.sha256"
+          )
 
       - name: Upload macOS artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0 # v7
