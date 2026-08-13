@@ -32,6 +32,7 @@ final class AppController: ObservableObject {
     func stop() {
         hotKey.unregister()
         captureCoordinator.cancel(notify: false)
+        settings.flushAnnotationStyle()
     }
 
     func registerHotKey() {
@@ -66,6 +67,30 @@ final class AppController: ObservableObject {
         }
     }
 
+    func bringSettingsToFront() {
+        let application = NSApplication.shared
+        application.activate(ignoringOtherApps: true)
+
+        Task { @MainActor in
+            for attempt in 0..<4 {
+                if attempt > 0 {
+                    try? await Task.sleep(for: .milliseconds(Int64(50 * attempt)))
+                } else {
+                    await Task.yield()
+                }
+                guard let settingsWindow = application.windows.first(where: {
+                    $0.isVisible && $0.styleMask.contains(.titled)
+                }) else {
+                    continue
+                }
+                application.activate(ignoringOtherApps: true)
+                settingsWindow.makeKeyAndOrderFront(nil)
+                settingsWindow.orderFrontRegardless()
+                return
+            }
+        }
+    }
+
     func startCapture() {
         guard !isCapturing, !isUploading else { return }
         guard CGPreflightScreenCaptureAccess() else {
@@ -83,6 +108,10 @@ final class AppController: ObservableObject {
         Task {
             do {
                 try await captureCoordinator.begin(
+                    annotationStyle: settings.annotationStyle,
+                    onAnnotationStyleChange: { [weak self] style in
+                        self?.settings.updateAnnotationStyle(style)
+                    },
                     onFinish: { [weak self] payload, action in
                         guard let self else { return }
                         self.isCapturing = false

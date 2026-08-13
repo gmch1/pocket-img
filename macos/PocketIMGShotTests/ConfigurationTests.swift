@@ -38,12 +38,18 @@ final class ConfigurationTests: XCTestCase {
         settings.serverAddress = "https://img.example.com/"
         settings.token = "test-token"
         settings.hotKey = HotKey(keyCode: 3, modifiers: 256, keyLabel: "F")
+        settings.updateAnnotationStyle(AnnotationStylePreferences(
+            rectangleLineWidth: 5.5,
+            arrowLineWidth: 7,
+            textFontSize: 28
+        ))
         try settings.save()
 
         let restored = AppSettings(settingsURL: settingsURL)
         XCTAssertEqual(restored.serverAddress, "https://img.example.com")
         XCTAssertEqual(restored.token, "test-token")
         XCTAssertEqual(restored.hotKey, settings.hotKey)
+        XCTAssertEqual(restored.annotationStyle, settings.annotationStyle)
         let attributes = try FileManager.default.attributesOfItem(atPath: settingsURL.path)
         let permissions = try XCTUnwrap(attributes[.posixPermissions] as? NSNumber)
         XCTAssertEqual(permissions.intValue & 0o777, 0o600)

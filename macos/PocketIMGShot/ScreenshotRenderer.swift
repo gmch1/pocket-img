@@ -67,7 +67,6 @@ enum ScreenshotRenderer {
         let annotationScaleX = CGFloat(outputWidth) / selection.width
         let annotationScaleY = CGFloat(outputHeight) / selection.height
         context.setStrokeColor(CGColor(red: 1, green: 0.12, blue: 0.1, alpha: 1))
-        context.setLineWidth(max(3, 3 * min(annotationScaleX, annotationScaleY)))
         context.setLineCap(.round)
         context.setLineJoin(.round)
         for annotation in annotations {
@@ -124,11 +123,16 @@ enum ScreenshotRenderer {
 
         switch annotation.tool {
         case .rectangle:
+            context.setLineWidth(max(1, annotation.resolvedStyleSize * min(scaleX, scaleY)))
             context.stroke(CGRect.between(outputPoint(annotation.start), outputPoint(annotation.end)))
         case .arrow:
+            context.setLineWidth(max(1, annotation.resolvedStyleSize * min(scaleX, scaleY)))
             let start = outputPoint(annotation.start)
             let end = outputPoint(annotation.end)
-            let headLength = max(14, 14 * min(scaleX, scaleY))
+            let headLength = max(
+                14,
+                max(14, annotation.resolvedStyleSize * 4) * min(scaleX, scaleY)
+            )
             let angle = atan2(end.y - start.y, end.x - start.x)
             let spread = CGFloat.pi / 7
             let first = CGPoint(
@@ -151,7 +155,7 @@ enum ScreenshotRenderer {
                   !value.isEmpty else {
                 return
             }
-            let fontSize = max(20, 20 * min(scaleX, scaleY))
+            let fontSize = max(8, annotation.resolvedStyleSize * min(scaleX, scaleY))
             guard let font = CTFontCreateUIFontForLanguage(.system, fontSize, nil),
                   let attributed = CFAttributedStringCreate(
                     nil,
