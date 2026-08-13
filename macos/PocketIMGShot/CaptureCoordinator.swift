@@ -11,18 +11,18 @@ final class CaptureCoordinator: NSObject, CaptureOverlayViewDelegate {
     }
 
     private var windows: [CaptureWindow] = []
-    private var onUpload: ((UploadPayload) -> Void)?
+    private var onFinish: ((UploadPayload, CaptureAction) -> Void)?
     private var onCancel: (() -> Void)?
     private var onError: ((Error) -> Void)?
     private var finished = false
 
     func begin(
-        onUpload: @escaping (UploadPayload) -> Void,
+        onFinish: @escaping (UploadPayload, CaptureAction) -> Void,
         onCancel: @escaping () -> Void,
         onError: @escaping (Error) -> Void
     ) async throws {
         cancel(notify: false)
-        self.onUpload = onUpload
+        self.onFinish = onFinish
         self.onCancel = onCancel
         self.onError = onError
         finished = false
@@ -71,7 +71,7 @@ final class CaptureCoordinator: NSObject, CaptureOverlayViewDelegate {
         finished = true
         closeWindows()
         if notify { onCancel?() }
-        onUpload = nil
+        onFinish = nil
         onCancel = nil
         onError = nil
     }
@@ -89,15 +89,19 @@ final class CaptureCoordinator: NSObject, CaptureOverlayViewDelegate {
         cancel()
     }
 
-    func captureOverlay(_ overlay: CaptureOverlayView, didFinish payload: UploadPayload) {
+    func captureOverlay(
+        _ overlay: CaptureOverlayView,
+        didFinish payload: UploadPayload,
+        action: CaptureAction
+    ) {
         guard !finished else { return }
         finished = true
         closeWindows()
-        let completion = onUpload
-        onUpload = nil
+        let completion = onFinish
+        onFinish = nil
         onCancel = nil
         onError = nil
-        completion?(payload)
+        completion?(payload, action)
     }
 
     func captureOverlay(_ overlay: CaptureOverlayView, didFailWith error: Error) {
@@ -105,7 +109,7 @@ final class CaptureCoordinator: NSObject, CaptureOverlayViewDelegate {
         finished = true
         closeWindows()
         let completion = onError
-        onUpload = nil
+        onFinish = nil
         onCancel = nil
         onError = nil
         completion?(error)

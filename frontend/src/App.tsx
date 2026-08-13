@@ -138,6 +138,29 @@ export default function App() {
     return () => controller.abort();
   }, [range, refresh]);
 
+  useEffect(() => {
+    let wasHidden = document.visibilityState === "hidden";
+    let controller: AbortController | undefined;
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "hidden") {
+        wasHidden = true;
+        return;
+      }
+      if (!wasHidden) return;
+      wasHidden = false;
+      if (authRef.current !== "authenticated") return;
+      controller?.abort();
+      controller = new AbortController();
+      void refresh(range, controller.signal);
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      controller?.abort();
+    };
+  }, [range, refresh]);
+
   const authenticate = useCallback(async (token: string) => {
     await createSession(token);
     const loaded = await refresh(range);

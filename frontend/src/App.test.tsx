@@ -102,6 +102,36 @@ describe("App", () => {
     expect(await screen.findByRole("button", { name: "复制图片链接" })).toBeTruthy();
   });
 
+  test("refreshes the gallery when a hidden tab becomes visible", async () => {
+    let visibility: DocumentVisibilityState = "visible";
+    vi.spyOn(document, "visibilityState", "get").mockImplementation(() => visibility);
+    const newest: ImageItem = {
+      ...image,
+      id: "fedcba9876543210fedcba9876543210",
+      thumbnail_url: "/t/fedcba9876543210fedcba9876543210.webp",
+      url: "/i/fedcba9876543210fedcba9876543210.webp",
+    };
+    vi.mocked(listImages)
+      .mockResolvedValueOnce(gallery([image]))
+      .mockResolvedValueOnce(gallery([newest]));
+
+    const { container } = render(<App />);
+    await screen.findByRole("button", { name: "复制图片链接" });
+    expect(listImages).toHaveBeenCalledTimes(1);
+
+    visibility = "hidden";
+    fireEvent(document, new Event("visibilitychange"));
+    expect(listImages).toHaveBeenCalledTimes(1);
+
+    visibility = "visible";
+    fireEvent(document, new Event("visibilitychange"));
+    await waitFor(() => expect(listImages).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(container.querySelector(".image-card img")?.getAttribute("src")).toBe(newest.thumbnail_url));
+
+    fireEvent(document, new Event("visibilitychange"));
+    expect(listImages).toHaveBeenCalledTimes(2);
+  });
+
   test("lets an administrator create a user token", async () => {
     const account = gallery([], true).account;
     vi.mocked(listImages).mockResolvedValue(gallery([], true));

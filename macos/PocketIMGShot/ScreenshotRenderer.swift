@@ -85,7 +85,12 @@ enum ScreenshotRenderer {
             throw CaptureError.imageEncodingFailed
         }
         if let png = encode(image, type: .png, properties: [:]), png.count <= maxPayloadBytes {
-            return UploadPayload(data: png, fileName: "screenshot.png", contentType: "image/png")
+            return UploadPayload(
+                data: png,
+                fileName: "screenshot.png",
+                contentType: "image/png",
+                displaySize: selection.size
+            )
         }
         guard let jpeg = encode(
             image,
@@ -94,7 +99,12 @@ enum ScreenshotRenderer {
         ), jpeg.count <= maxPayloadBytes else {
             throw CaptureError.imageEncodingFailed
         }
-        return UploadPayload(data: jpeg, fileName: "screenshot.jpg", contentType: "image/jpeg")
+        return UploadPayload(
+            data: jpeg,
+            fileName: "screenshot.jpg",
+            contentType: "image/jpeg",
+            displaySize: selection.size
+        )
     }
 
     private static func draw(

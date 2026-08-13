@@ -1,11 +1,21 @@
 import AppKit
 import CoreGraphics
 
+enum CaptureAction: Sendable {
+    case pin
+    case copy
+    case upload
+}
+
 @MainActor
 protocol CaptureOverlayViewDelegate: AnyObject {
     func captureOverlayDidStartSelection(_ overlay: CaptureOverlayView)
     func captureOverlayDidCancel(_ overlay: CaptureOverlayView)
-    func captureOverlay(_ overlay: CaptureOverlayView, didFinish payload: UploadPayload)
+    func captureOverlay(
+        _ overlay: CaptureOverlayView,
+        didFinish payload: UploadPayload,
+        action: CaptureAction
+    )
     func captureOverlay(_ overlay: CaptureOverlayView, didFailWith error: Error)
 }
 
@@ -45,6 +55,8 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
         case text
         case undo
         case cancel
+        case pin
+        case copy
         case upload
 
     }
@@ -149,7 +161,7 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
             return
         }
         if event.keyCode == 36 || event.keyCode == 76 {
-            finishAndUpload()
+            finish(.upload)
             return
         }
         switch event.charactersIgnoringModifiers?.lowercased() {
@@ -310,6 +322,9 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
             if action == .upload {
                 NSColor.controlAccentColor.setFill()
                 NSBezierPath(roundedRect: button, xRadius: 8, yRadius: 8).fill()
+            } else if action == .pin || action == .copy {
+                NSColor.white.withAlphaComponent(0.14).setFill()
+                NSBezierPath(roundedRect: button, xRadius: 8, yRadius: 8).fill()
             } else if selected {
                 NSColor.controlAccentColor.withAlphaComponent(0.72).setFill()
                 NSBezierPath(roundedRect: button, xRadius: 8, yRadius: 8).fill()
@@ -372,6 +387,28 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
             path.line(to: CGPoint(x: icon.maxX - 3, y: icon.maxY - 3))
             path.move(to: CGPoint(x: icon.maxX - 3, y: icon.minY + 3))
             path.line(to: CGPoint(x: icon.minX + 3, y: icon.maxY - 3))
+        case .pin:
+            path.move(to: CGPoint(x: icon.minX + 4, y: icon.minY + 3))
+            path.line(to: CGPoint(x: icon.maxX - 4, y: icon.minY + 3))
+            path.move(to: CGPoint(x: icon.minX + 6, y: icon.minY + 3))
+            path.line(to: CGPoint(x: icon.minX + 6, y: icon.midY - 1))
+            path.line(to: CGPoint(x: icon.minX + 3, y: icon.midY + 3))
+            path.line(to: CGPoint(x: icon.maxX - 3, y: icon.midY + 3))
+            path.line(to: CGPoint(x: icon.maxX - 6, y: icon.midY - 1))
+            path.line(to: CGPoint(x: icon.maxX - 6, y: icon.minY + 3))
+            path.move(to: CGPoint(x: icon.midX, y: icon.midY + 3))
+            path.line(to: CGPoint(x: icon.midX, y: icon.maxY - 1))
+        case .copy:
+            path.appendRoundedRect(
+                CGRect(x: icon.minX + 1, y: icon.minY + 1, width: 11, height: 11),
+                xRadius: 1.5,
+                yRadius: 1.5
+            )
+            path.appendRoundedRect(
+                CGRect(x: icon.minX + 6, y: icon.minY + 6, width: 11, height: 11),
+                xRadius: 1.5,
+                yRadius: 1.5
+            )
         case .upload:
             path.move(to: CGPoint(x: icon.minX + 2, y: icon.maxY - 6))
             path.line(to: CGPoint(x: icon.minX + 2, y: icon.maxY - 2))
@@ -703,13 +740,17 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
             currentAnnotation = nil
         case .cancel:
             delegate?.captureOverlayDidCancel(self)
+        case .pin:
+            finish(.pin)
+        case .copy:
+            finish(.copy)
         case .upload:
-            finishAndUpload()
+            finish(.upload)
         }
         needsDisplay = true
     }
 
-    private func finishAndUpload() {
+    private func finish(_ action: CaptureAction) {
         guard mode == .editing, !isFinishing else { return }
         commitTextEditing()
         guard let screenshot, let selection else {
@@ -720,7 +761,7 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
         let viewBounds = bounds
         let annotations = annotations
         DiagnosticLog.record(
-            "render started selection=\(Int(selection.width))x\(Int(selection.height)) " +
+            "render started action=\(action) selection=\(Int(selection.width))x\(Int(selection.height)) " +
             "source=\(screenshot.width)x\(screenshot.height)"
         )
 
@@ -736,7 +777,7 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
                 }.value
                 DiagnosticLog.record("render finished bytes=\(payload.data.count)")
                 guard let self else { return }
-                self.delegate?.captureOverlay(self, didFinish: payload)
+                self.delegate?.captureOverlay(self, didFinish: payload, action: action)
             } catch {
                 DiagnosticLog.record(error, phase: "render")
                 guard let self else { return }

@@ -33,6 +33,7 @@ final class ScreenshotRendererTests: XCTestCase {
 
         XCTAssertEqual(payload.contentType, "image/png")
         XCTAssertFalse(payload.data.isEmpty)
+        XCTAssertEqual(payload.displaySize, selection.size)
         let imageSource = try XCTUnwrap(CGImageSourceCreateWithData(payload.data as CFData, nil))
         let properties = try XCTUnwrap(CGImageSourceCopyPropertiesAtIndex(imageSource, 0, nil)) as NSDictionary
         XCTAssertEqual((properties[kCGImagePropertyPixelWidth] as? NSNumber)?.intValue, 4720)

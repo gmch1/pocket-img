@@ -45,6 +45,7 @@ struct UploadPayload: Sendable {
     let data: Data
     let fileName: String
     let contentType: String
+    let displaySize: CGSize
 }
 
 extension CGRect {

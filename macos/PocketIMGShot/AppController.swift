@@ -15,6 +15,7 @@ final class AppController: ObservableObject {
 
     private let hotKey = GlobalHotKey()
     private let captureCoordinator = CaptureCoordinator()
+    private let pinnedImages = PinnedImagePresenter()
     private let toast = ToastPresenter()
     private var pendingUpload: UploadPayload?
     private var client: PocketIMGClient?
@@ -67,14 +68,6 @@ final class AppController: ObservableObject {
 
     func startCapture() {
         guard !isCapturing, !isUploading else { return }
-        do {
-            try settings.save()
-        } catch {
-            showError(title: "请先配置 PocketIMG", message: error.localizedDescription)
-            openSettings()
-            return
-        }
-
         guard CGPreflightScreenCaptureAccess() else {
             let granted = CGRequestScreenCaptureAccess()
             if !granted {
@@ -90,9 +83,17 @@ final class AppController: ObservableObject {
         Task {
             do {
                 try await captureCoordinator.begin(
-                    onUpload: { [weak self] payload in
-                        self?.isCapturing = false
-                        self?.upload(payload)
+                    onFinish: { [weak self] payload, action in
+                        guard let self else { return }
+                        self.isCapturing = false
+                        switch action {
+                        case .pin:
+                            self.pin(payload)
+                        case .copy:
+                            self.copy(payload)
+                        case .upload:
+                            self.upload(payload)
+                        }
                     },
                     onCancel: { [weak self] in
                         self?.isCapturing = false
@@ -143,7 +144,7 @@ final class AppController: ObservableObject {
                 statusMessage = "链接已复制"
                 DiagnosticLog.record("upload finished")
                 toast.show("上传完成，链接已复制")
-                clearStatusLater()
+                clearStatusLater(expected: "链接已复制")
             } catch {
                 DiagnosticLog.record(error, phase: "upload")
                 isUploading = false
@@ -151,6 +152,34 @@ final class AppController: ObservableObject {
                 toast.dismiss()
                 offerUploadRetry(error: error)
             }
+        }
+    }
+
+    private func copy(_ payload: UploadPayload) {
+        guard let image = NSImage(data: payload.data) else {
+            showError(title: "无法复制截图", message: CaptureError.imageEncodingFailed.localizedDescription)
+            return
+        }
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        guard pasteboard.writeObjects([image]) else {
+            showError(title: "无法复制截图", message: "系统剪贴板写入失败。")
+            return
+        }
+        statusMessage = "截图已复制"
+        toast.show("截图已复制")
+        clearStatusLater(expected: "截图已复制")
+    }
+
+    private func pin(_ payload: UploadPayload) {
+        do {
+            try pinnedImages.show(payload)
+            statusMessage = "截图已置顶"
+            toast.show("截图已贴到桌面，双击或按 Esc 关闭")
+            clearStatusLater(expected: "截图已置顶")
+        } catch {
+            statusMessage = "贴图失败"
+            showError(title: "无法创建贴图", message: error.localizedDescription)
         }
     }
 
@@ -170,18 +199,13 @@ final class AppController: ObservableObject {
         }
     }
 
-    private func clearStatusLater() {
+    private func clearStatusLater(expected: String) {
         Task {
             try? await Task.sleep(for: .seconds(3))
-            if !isUploading, statusMessage == "链接已复制" {
+            if !isUploading, statusMessage == expected {
                 statusMessage = ""
             }
         }
-    }
-
-    private func openSettings() {
-        NSApplication.shared.activate(ignoringOtherApps: true)
-        NSApplication.shared.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
     }
 
     private func showScreenCapturePermissionHelp() {
