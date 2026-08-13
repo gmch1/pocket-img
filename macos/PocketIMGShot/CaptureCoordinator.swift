@@ -162,11 +162,20 @@ final class CaptureCoordinator: NSObject, CaptureOverlayViewDelegate {
                 exceptingWindows: []
             )
             let configuration = SCStreamConfiguration()
-            configuration.width = display.width
-            configuration.height = display.height
+            let captureSize = CaptureGeometry.capturePixelSize(
+                displayPointSize: CGSize(width: display.width, height: display.height),
+                backingScaleFactor: screen.backingScaleFactor
+            )
+            configuration.width = Int(captureSize.width)
+            configuration.height = Int(captureSize.height)
             configuration.pixelFormat = kCVPixelFormatType_32BGRA
             configuration.showsCursor = false
             configuration.capturesAudio = false
+            DiagnosticLog.record(
+                "capture display points=\(display.width)x\(display.height) " +
+                "scale=\(screen.backingScaleFactor) " +
+                "output=\(configuration.width)x\(configuration.height)"
+            )
             let image = try await SCScreenshotManager.captureImage(
                 contentFilter: filter,
                 configuration: configuration

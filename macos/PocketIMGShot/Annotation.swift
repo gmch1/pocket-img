@@ -106,6 +106,16 @@ struct UploadPayload: Sendable {
 }
 
 enum CaptureGeometry {
+    static func capturePixelSize(
+        displayPointSize: CGSize,
+        backingScaleFactor: CGFloat
+    ) -> CGSize {
+        CGSize(
+            width: max(1, (displayPointSize.width * backingScaleFactor).rounded()),
+            height: max(1, (displayPointSize.height * backingScaleFactor).rounded())
+        )
+    }
+
     static func screenFrame(for selection: CGRect, in captureWindowFrame: CGRect) -> CGRect {
         CGRect(
             x: captureWindowFrame.minX + selection.minX,

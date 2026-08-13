@@ -28,6 +28,7 @@ struct SettingsView: View {
                     Spacer()
                     HotKeyRecorder(
                         hotKey: $settings.hotKey,
+                        onChange: controller.persistHotKey,
                         onRecordingChanged: controller.setHotKeyRecording
                     )
                         .frame(width: 170, height: 28)

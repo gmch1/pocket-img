@@ -54,4 +54,54 @@ final class ConfigurationTests: XCTestCase {
         let permissions = try XCTUnwrap(attributes[.posixPermissions] as? NSNumber)
         XCTAssertEqual(permissions.intValue & 0o777, 0o600)
     }
+
+    @MainActor
+    func testMigratesLegacyDefaultF2ToF1WithoutLosingConnectionSettings() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("PocketIMGShotLegacyTests-\(UUID().uuidString)", isDirectory: true)
+        let settingsURL = directory.appendingPathComponent("settings.json")
+        defer { try? FileManager.default.removeItem(at: directory) }
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let legacyJSON = """
+        {
+          "serverAddress": "https://img.example.com",
+          "token": "legacy-token",
+          "hotKeyCode": \(UInt32(kVK_F2)),
+          "hotKeyModifiers": 0,
+          "hotKeyLabel": "F2"
+        }
+        """
+        try XCTUnwrap(legacyJSON.data(using: .utf8)).write(to: settingsURL)
+
+        let migrated = AppSettings(settingsURL: settingsURL)
+
+        XCTAssertEqual(migrated.serverAddress, "https://img.example.com")
+        XCTAssertEqual(migrated.token, "legacy-token")
+        XCTAssertEqual(migrated.hotKey, .default)
+        let storedObject = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: Data(contentsOf: settingsURL)) as? [String: Any]
+        )
+        XCTAssertEqual(storedObject["schemaVersion"] as? Int, 2)
+        XCTAssertEqual(storedObject["hotKeyLabel"] as? String, "F1")
+    }
+
+    @MainActor
+    func testExplicitF2InCurrentSchemaIsNotMigrated() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("PocketIMGShotCurrentTests-\(UUID().uuidString)", isDirectory: true)
+        let settingsURL = directory.appendingPathComponent("settings.json")
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let settings = AppSettings(settingsURL: settingsURL)
+        settings.serverAddress = "https://img.example.com"
+        settings.token = "token"
+        settings.persistHotKey(HotKey(
+            keyCode: UInt32(kVK_F2),
+            modifiers: 0,
+            keyLabel: "F2"
+        ))
+
+        let restored = AppSettings(settingsURL: settingsURL)
+        XCTAssertEqual(restored.hotKey.displayName, "F2")
+    }
 }

@@ -1,7 +1,9 @@
 import Combine
+import Carbon.HIToolbox
 import Foundation
 
 private struct StoredSettings: Codable {
+    let schemaVersion: Int?
     let serverAddress: String
     let token: String
     let hotKeyCode: UInt32
@@ -95,6 +97,8 @@ enum SettingsError: LocalizedError {
 
 @MainActor
 final class AppSettings: ObservableObject {
+    private static let currentSchemaVersion = 2
+
     @Published var serverAddress: String
     @Published var token: String
     @Published var hotKey: HotKey
@@ -108,14 +112,33 @@ final class AppSettings: ObservableObject {
         store = SettingsStore(fileURL: settingsURL ?? SettingsStore.defaultURL)
 
         if let stored = try? store.load() {
-            serverAddress = stored.serverAddress
-            token = stored.token
-            hotKey = HotKey(
+            let storedHotKey = HotKey(
                 keyCode: stored.hotKeyCode,
                 modifiers: stored.hotKeyModifiers,
                 keyLabel: stored.hotKeyLabel
             )
-            annotationStyle = (stored.annotationStyle ?? .default).normalized
+            let shouldMigrateLegacyF2 = stored.schemaVersion == nil
+                && storedHotKey.keyCode == UInt32(kVK_F2)
+                && storedHotKey.modifiers == 0
+                && storedHotKey.keyLabel.uppercased() == "F2"
+            let resolvedHotKey = shouldMigrateLegacyF2 ? HotKey.default : storedHotKey
+            let resolvedAnnotationStyle = (stored.annotationStyle ?? .default).normalized
+            serverAddress = stored.serverAddress
+            token = stored.token
+            hotKey = resolvedHotKey
+            annotationStyle = resolvedAnnotationStyle
+
+            if stored.schemaVersion != Self.currentSchemaVersion || shouldMigrateLegacyF2 {
+                try? store.save(StoredSettings(
+                    schemaVersion: Self.currentSchemaVersion,
+                    serverAddress: stored.serverAddress,
+                    token: stored.token,
+                    hotKeyCode: resolvedHotKey.keyCode,
+                    hotKeyModifiers: resolvedHotKey.modifiers,
+                    hotKeyLabel: resolvedHotKey.keyLabel,
+                    annotationStyle: resolvedAnnotationStyle
+                ))
+            }
         } else {
             serverAddress = ""
             token = ""
@@ -127,6 +150,7 @@ final class AppSettings: ObservableObject {
     func save() throws {
         let configuration = try serviceConfiguration()
         try store.save(StoredSettings(
+            schemaVersion: Self.currentSchemaVersion,
             serverAddress: configuration.baseURL.absoluteString,
             token: configuration.token,
             hotKeyCode: hotKey.keyCode,
@@ -136,6 +160,24 @@ final class AppSettings: ObservableObject {
         ))
         serverAddress = configuration.baseURL.absoluteString
         token = configuration.token
+    }
+
+    func persistHotKey(_ value: HotKey) {
+        hotKey = value
+        do {
+            let stored = try store.load()
+            try store.save(StoredSettings(
+                schemaVersion: Self.currentSchemaVersion,
+                serverAddress: stored?.serverAddress ?? serverAddress,
+                token: stored?.token ?? token,
+                hotKeyCode: value.keyCode,
+                hotKeyModifiers: value.modifiers,
+                hotKeyLabel: value.keyLabel,
+                annotationStyle: stored?.annotationStyle ?? annotationStyle
+            ))
+        } catch {
+            DiagnosticLog.record(error, phase: "save hotkey")
+        }
     }
 
     func updateAnnotationStyle(_ value: AnnotationStylePreferences) {
@@ -158,6 +200,7 @@ final class AppSettings: ObservableObject {
         do {
             let stored = try store.load()
             try store.save(StoredSettings(
+                schemaVersion: Self.currentSchemaVersion,
                 serverAddress: stored?.serverAddress ?? serverAddress,
                 token: stored?.token ?? token,
                 hotKeyCode: stored?.hotKeyCode ?? hotKey.keyCode,

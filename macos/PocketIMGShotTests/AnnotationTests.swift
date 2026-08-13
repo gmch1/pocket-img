@@ -47,6 +47,16 @@ final class AnnotationTests: XCTestCase {
         XCTAssertEqual(screenFrame, CGRect(x: -1820, y: 730, width: 500, height: 300))
     }
 
+    func testCapturePixelSizeUsesRetinaBackingScale() {
+        XCTAssertEqual(
+            CaptureGeometry.capturePixelSize(
+                displayPointSize: CGSize(width: 1512, height: 982),
+                backingScaleFactor: 2
+            ),
+            CGSize(width: 3024, height: 1964)
+        )
+    }
+
     func testAnnotationStyleSizesHaveToolDefaultsAndCanBeCustomized() {
         let rectangle = Annotation(
             tool: .rectangle,
