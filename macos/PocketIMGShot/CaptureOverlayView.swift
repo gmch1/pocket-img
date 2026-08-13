@@ -11,6 +11,14 @@ protocol CaptureOverlayViewDelegate: AnyObject {
 
 @MainActor
 final class CaptureOverlayView: NSView {
+    private enum Appearance {
+        static let toolbarButtonSize: CGFloat = 38
+        static let toolbarPadding: CGFloat = 6
+        static let toolbarSpacing: CGFloat = 4
+        static let toolbarGroupGap: CGFloat = 8
+        static let toolbarCornerRadius: CGFloat = 12
+    }
+
     weak var delegate: CaptureOverlayViewDelegate?
     var screenshot: CGImage? {
         didSet { needsDisplay = true }
@@ -154,7 +162,7 @@ final class CaptureOverlayView: NSView {
             graphicsContext?.imageInterpolation = previousInterpolation
         }
 
-        NSColor.black.withAlphaComponent(0.48).setFill()
+        NSColor.black.withAlphaComponent(0.42).setFill()
         if let selection {
             let shade = NSBezierPath(rect: bounds)
             shade.appendRect(selection)
@@ -163,19 +171,19 @@ final class CaptureOverlayView: NSView {
             drawSelection(selection)
         } else {
             NSBezierPath(rect: bounds).fill()
-            drawCenteredHint("拖拽选择截图区域 · Esc 取消")
+            drawCenteredHint("拖拽选择截图区域  ·  Esc 取消")
         }
     }
 
     private func drawSelection(_ selection: CGRect) {
-        let border = NSBezierPath(rect: selection.insetBy(dx: -0.5, dy: -0.5))
-        NSColor.white.withAlphaComponent(0.92).setStroke()
-        border.lineWidth = 1
-        border.stroke()
+        let outline = NSBezierPath(rect: selection.insetBy(dx: -1, dy: -1))
+        NSColor.black.withAlphaComponent(0.65).setStroke()
+        outline.lineWidth = 3
+        outline.stroke()
 
-        let accent = NSBezierPath(rect: selection.insetBy(dx: 0.5, dy: 0.5))
+        let accent = NSBezierPath(rect: selection.insetBy(dx: 0.25, dy: 0.25))
         NSColor.controlAccentColor.setStroke()
-        accent.lineWidth = 1
+        accent.lineWidth = 1.5
         accent.stroke()
 
         for annotation in annotations {
@@ -185,17 +193,12 @@ final class CaptureOverlayView: NSView {
             draw(currentAnnotation, color: .systemRed)
         }
 
-        if mode == .editing {
-            drawToolbar()
-        } else {
-            drawSizeLabel(selection)
-        }
+        drawSizeLabel(selection)
+        if mode == .editing { drawToolbar() }
     }
 
     private func draw(_ annotation: Annotation, color: NSColor) {
-        color.setStroke()
         let path = NSBezierPath()
-        path.lineWidth = 3
         path.lineCapStyle = .round
         path.lineJoinStyle = .round
         switch annotation.tool {
@@ -204,13 +207,46 @@ final class CaptureOverlayView: NSView {
         case .arrow:
             appendArrow(to: path, from: annotation.start, to: annotation.end, headLength: 14)
         }
+
+        NSColor.black.withAlphaComponent(0.38).setStroke()
+        path.lineWidth = 5
+        path.stroke()
+        color.setStroke()
+        path.lineWidth = 3
         path.stroke()
     }
 
     private func drawToolbar() {
         let frame = toolbarFrame()
-        NSColor.black.withAlphaComponent(0.86).setFill()
-        NSBezierPath(roundedRect: frame, xRadius: 8, yRadius: 8).fill()
+        let background = NSBezierPath(
+            roundedRect: frame,
+            xRadius: Appearance.toolbarCornerRadius,
+            yRadius: Appearance.toolbarCornerRadius
+        )
+
+        NSGraphicsContext.saveGraphicsState()
+        let shadow = NSShadow()
+        shadow.shadowColor = NSColor.black.withAlphaComponent(0.45)
+        shadow.shadowBlurRadius = 14
+        shadow.shadowOffset = NSSize(width: 0, height: -3)
+        shadow.set()
+        NSColor(calibratedWhite: 0.08, alpha: 0.94).setFill()
+        background.fill()
+        NSGraphicsContext.restoreGraphicsState()
+
+        NSColor.white.withAlphaComponent(0.14).setStroke()
+        background.lineWidth = 1
+        background.stroke()
+
+        let separatorX = toolbarButtonFrame(index: 2).maxX
+            + Appearance.toolbarSpacing
+            + Appearance.toolbarGroupGap / 2
+        let separator = NSBezierPath()
+        separator.move(to: CGPoint(x: separatorX, y: frame.minY + 11))
+        separator.line(to: CGPoint(x: separatorX, y: frame.maxY - 11))
+        NSColor.white.withAlphaComponent(0.14).setStroke()
+        separator.lineWidth = 1
+        separator.stroke()
 
         for (index, action) in ToolbarAction.allCases.enumerated() {
             let button = toolbarButtonFrame(index: index)
@@ -218,12 +254,24 @@ final class CaptureOverlayView: NSView {
                 || (action == .arrow && selectedTool == .arrow)
             if action == .upload {
                 NSColor.controlAccentColor.setFill()
-                NSBezierPath(roundedRect: button.insetBy(dx: 3, dy: 3), xRadius: 6, yRadius: 6).fill()
+                NSBezierPath(roundedRect: button, xRadius: 8, yRadius: 8).fill()
             } else if selected {
-                NSColor.white.withAlphaComponent(0.18).setFill()
-                NSBezierPath(roundedRect: button.insetBy(dx: 3, dy: 3), xRadius: 5, yRadius: 5).fill()
+                NSColor.controlAccentColor.withAlphaComponent(0.72).setFill()
+                NSBezierPath(roundedRect: button, xRadius: 8, yRadius: 8).fill()
+            } else if action == .cancel {
+                NSColor.systemRed.withAlphaComponent(0.14).setFill()
+                NSBezierPath(roundedRect: button, xRadius: 8, yRadius: 8).fill()
             }
-            let color: NSColor = action == .upload || selected ? .white : .lightGray
+            let color: NSColor
+            if action == .undo, annotations.isEmpty {
+                color = NSColor.white.withAlphaComponent(0.3)
+            } else if action == .cancel {
+                color = NSColor.systemRed.withAlphaComponent(0.9)
+            } else {
+                color = action == .upload || selected
+                    ? .white
+                    : NSColor.white.withAlphaComponent(0.72)
+            }
             drawToolbarIcon(action, in: button, color: color)
         }
     }
@@ -264,8 +312,11 @@ final class CaptureOverlayView: NSView {
             path.move(to: CGPoint(x: icon.maxX - 3, y: icon.minY + 3))
             path.line(to: CGPoint(x: icon.minX + 3, y: icon.maxY - 3))
         case .upload:
-            path.appendOval(in: icon.insetBy(dx: 1, dy: 1))
-            path.move(to: CGPoint(x: icon.midX, y: icon.maxY - 4))
+            path.move(to: CGPoint(x: icon.minX + 2, y: icon.maxY - 6))
+            path.line(to: CGPoint(x: icon.minX + 2, y: icon.maxY - 2))
+            path.line(to: CGPoint(x: icon.maxX - 2, y: icon.maxY - 2))
+            path.line(to: CGPoint(x: icon.maxX - 2, y: icon.maxY - 6))
+            path.move(to: CGPoint(x: icon.midX, y: icon.maxY - 5))
             path.line(to: CGPoint(x: icon.midX, y: icon.minY + 4))
             path.move(to: CGPoint(x: icon.midX - 4, y: icon.minY + 8))
             path.line(to: CGPoint(x: icon.midX, y: icon.minY + 4))
@@ -276,13 +327,31 @@ final class CaptureOverlayView: NSView {
 
     private func drawSizeLabel(_ selection: CGRect) {
         guard selection.width >= 50 else { return }
-        let value = "\(Int(selection.width)) × \(Int(selection.height))"
+        let scaleX = screenshot.map { CGFloat($0.width) / bounds.width } ?? 1
+        let scaleY = screenshot.map { CGFloat($0.height) / bounds.height } ?? 1
+        let value = "\(Int((selection.width * scaleX).rounded())) × \(Int((selection.height * scaleY).rounded()))"
         let attributes: [NSAttributedString.Key: Any] = [
             .font: NSFont.monospacedDigitSystemFont(ofSize: 12, weight: .medium),
             .foregroundColor: NSColor.white,
-            .backgroundColor: NSColor.black.withAlphaComponent(0.7),
         ]
-        value.draw(at: NSPoint(x: selection.minX + 5, y: selection.minY + 5), withAttributes: attributes)
+        let textSize = value.size(withAttributes: attributes)
+        let labelSize = NSSize(width: textSize.width + 16, height: textSize.height + 8)
+        let x = min(
+            max(selection.minX, bounds.minX + 8),
+            bounds.maxX - labelSize.width - 8
+        )
+        let above = selection.minY - labelSize.height - 7
+        let y = above >= bounds.minY + 8 ? above : selection.minY + 7
+        let labelFrame = NSRect(origin: NSPoint(x: x, y: y), size: labelSize)
+
+        NSColor(calibratedWhite: 0.08, alpha: 0.9).setFill()
+        NSBezierPath(roundedRect: labelFrame, xRadius: 6, yRadius: 6).fill()
+        NSColor.white.withAlphaComponent(0.16).setStroke()
+        NSBezierPath(roundedRect: labelFrame, xRadius: 6, yRadius: 6).stroke()
+        value.draw(
+            at: NSPoint(x: labelFrame.minX + 8, y: labelFrame.minY + 4),
+            withAttributes: attributes
+        )
     }
 
     private func drawCenteredHint(_ value: String) {
@@ -297,8 +366,10 @@ final class CaptureOverlayView: NSView {
             width: size.width + 28,
             height: size.height + 18
         )
-        NSColor.black.withAlphaComponent(0.7).setFill()
-        NSBezierPath(roundedRect: background, xRadius: 8, yRadius: 8).fill()
+        NSColor(calibratedWhite: 0.08, alpha: 0.88).setFill()
+        NSBezierPath(roundedRect: background, xRadius: 10, yRadius: 10).fill()
+        NSColor.white.withAlphaComponent(0.16).setStroke()
+        NSBezierPath(roundedRect: background, xRadius: 10, yRadius: 10).stroke()
         value.draw(
             at: NSPoint(x: bounds.midX - size.width / 2, y: bounds.midY - size.height / 2),
             withAttributes: attributes
@@ -392,19 +463,30 @@ final class CaptureOverlayView: NSView {
 
     private func toolbarFrame() -> CGRect {
         guard let selection else { return .zero }
-        let buttonSize: CGFloat = 36
-        let padding: CGFloat = 4
-        let width = CGFloat(ToolbarAction.allCases.count) * buttonSize + padding * 2
-        let height = buttonSize + padding * 2
+        let count = CGFloat(ToolbarAction.allCases.count)
+        let width = count * Appearance.toolbarButtonSize
+            + (count - 1) * Appearance.toolbarSpacing
+            + Appearance.toolbarGroupGap
+            + Appearance.toolbarPadding * 2
+        let height = Appearance.toolbarButtonSize + Appearance.toolbarPadding * 2
         let x = min(max(selection.maxX - width, bounds.minX + 8), bounds.maxX - width - 8)
-        let below = selection.maxY + 8
+        let below = selection.maxY + 10
         let y = below + height <= bounds.maxY - 8 ? below : max(bounds.minY + 8, selection.minY - height - 8)
         return CGRect(x: x, y: y, width: width, height: height)
     }
 
     private func toolbarButtonFrame(index: Int) -> CGRect {
         let toolbar = toolbarFrame()
-        return CGRect(x: toolbar.minX + 4 + CGFloat(index) * 36, y: toolbar.minY + 4, width: 36, height: 36)
+        let groupOffset = index >= 3 ? Appearance.toolbarGroupGap : 0
+        return CGRect(
+            x: toolbar.minX
+                + Appearance.toolbarPadding
+                + CGFloat(index) * (Appearance.toolbarButtonSize + Appearance.toolbarSpacing)
+                + groupOffset,
+            y: toolbar.minY + Appearance.toolbarPadding,
+            width: Appearance.toolbarButtonSize,
+            height: Appearance.toolbarButtonSize
+        )
     }
 
     private func constrained(_ point: CGPoint) -> CGPoint {

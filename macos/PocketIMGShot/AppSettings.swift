@@ -129,7 +129,7 @@ final class AppSettings: ObservableObject {
                 hotKey = HotKey(
                     keyCode: UInt32(defaults.integer(forKey: Keys.hotKeyCode)),
                     modifiers: (defaults.object(forKey: Keys.hotKeyModifiers) as? NSNumber)?.uintValue ?? 0,
-                    keyLabel: defaults.string(forKey: Keys.hotKeyLabel) ?? "F2"
+                    keyLabel: defaults.string(forKey: Keys.hotKeyLabel) ?? HotKey.default.keyLabel
                 )
             } else {
                 hotKey = .default
