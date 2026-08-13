@@ -20,6 +20,10 @@ struct PocketIMGShotApp: App {
             }
 
             Divider()
+            Button("检查更新…") {
+                controller.checkForUpdates()
+            }
+            .disabled(!controller.canCheckForUpdates)
             SettingsMenuButton(controller: controller)
             Button("退出 PocketIMG Shot") {
                 NSApplication.shared.terminate(nil)

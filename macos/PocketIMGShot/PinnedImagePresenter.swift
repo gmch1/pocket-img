@@ -64,12 +64,18 @@ private final class PinnedImageWindow: NSWindow {
     override var canBecomeMain: Bool { false }
 }
 
-private final class PinnedImageView: NSImageView {
+final class PinnedImageView: NSImageView {
     var onClose: (() -> Void)?
 
     override var acceptsFirstResponder: Bool { true }
 
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
+        true
+    }
+
     override func mouseDown(with event: NSEvent) {
+        window?.makeKey()
+        window?.makeFirstResponder(self)
         if event.clickCount == 2 {
             onClose?()
         } else {

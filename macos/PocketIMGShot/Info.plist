@@ -35,5 +35,17 @@
 	<string>用于选择屏幕区域、添加标注并上传到你的 PocketIMG 服务。</string>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
+	<key>SUEnableAutomaticChecks</key>
+	<true/>
+	<key>SUFeedURL</key>
+	<string>https://github.com/gmch1/pocket-img/releases/latest/download/appcast.xml</string>
+	<key>SUPublicEDKey</key>
+	<string>dJRxr9O/Tz6oy3osLACHixePxxUYanrpXeclryBhsgs=</string>
+	<key>SURequireSignedFeed</key>
+	<true/>
+	<key>SUScheduledCheckInterval</key>
+	<integer>86400</integer>
+	<key>SUVerifyUpdateBeforeExtraction</key>
+	<true/>
 </dict>
 </plist>

@@ -30,6 +30,7 @@
 		B00000000000000000000205 /* Carbon.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = F00000000000000000000205 /* Carbon.framework */; };
 		B00000000000000000000206 /* ImageIO.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = F00000000000000000000206 /* ImageIO.framework */; };
 		B00000000000000000000207 /* CoreText.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = F00000000000000000000207 /* CoreText.framework */; };
+		B00000000000000000000208 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = P00000000000000000000001 /* Sparkle */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -58,6 +59,7 @@
 		F0000000000000000000000E /* ScreenshotRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenshotRenderer.swift; sourceTree = "<group>"; };
 		F0000000000000000000000F /* DiagnosticLog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiagnosticLog.swift; sourceTree = "<group>"; };
 		F00000000000000000000010 /* PinnedImagePresenter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PinnedImagePresenter.swift; sourceTree = "<group>"; };
+		F00000000000000000000011 /* PocketIMGShot.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = PocketIMGShot.entitlements; sourceTree = "<group>"; };
 		F00000000000000000000101 /* AnnotationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnnotationTests.swift; sourceTree = "<group>"; };
 		F00000000000000000000102 /* ConfigurationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfigurationTests.swift; sourceTree = "<group>"; };
 		F00000000000000000000103 /* ScreenshotRendererTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenshotRendererTests.swift; sourceTree = "<group>"; };
@@ -76,6 +78,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				B00000000000000000000208 /* Sparkle in Frameworks */,
 				B00000000000000000000201 /* AppKit.framework in Frameworks */,
 				B00000000000000000000202 /* SwiftUI.framework in Frameworks */,
 				B00000000000000000000203 /* ScreenCaptureKit.framework in Frameworks */,
@@ -122,6 +125,7 @@
 				F0000000000000000000000E /* ScreenshotRenderer.swift */,
 				F0000000000000000000000F /* DiagnosticLog.swift */,
 				F00000000000000000000010 /* PinnedImagePresenter.swift */,
+				F00000000000000000000011 /* PocketIMGShot.entitlements */,
 				F0000000000000000000000D /* Info.plist */,
 			);
 			path = PocketIMGShot;
@@ -175,6 +179,9 @@
 			dependencies = (
 			);
 			name = PocketIMGShot;
+			packageProductDependencies = (
+				P00000000000000000000001 /* Sparkle */,
+			);
 			productName = PocketIMGShot;
 			productReference = F00000000000000000000301 /* PocketIMGShot.app */;
 			productType = "com.apple.product-type.application";
@@ -225,6 +232,9 @@
 				Base,
 			);
 			mainGroup = G00000000000000000000000;
+			packageReferences = (
+				R00000000000000000000001 /* XCRemoteSwiftPackageReference "Sparkle" */,
+			);
 			productRefGroup = G00000000000000000000004 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
@@ -334,6 +344,7 @@
 		E00000000000000000000201 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = PocketIMGShot/PocketIMGShot.entitlements;
 				CODE_SIGN_IDENTITY = "-";
 				CODE_SIGN_STYLE = Manual;
 				COMBINE_HIDPI_IMAGES = YES;
@@ -353,6 +364,7 @@
 		E00000000000000000000202 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = PocketIMGShot/PocketIMGShot.entitlements;
 				CODE_SIGN_IDENTITY = "-";
 				CODE_SIGN_STYLE = Manual;
 				COMBINE_HIDPI_IMAGES = YES;
@@ -430,6 +442,25 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		R00000000000000000000001 /* XCRemoteSwiftPackageReference "Sparkle" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/sparkle-project/Sparkle";
+			requirement = {
+				kind = exactVersion;
+				version = 2.9.4;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		P00000000000000000000001 /* Sparkle */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = R00000000000000000000001 /* XCRemoteSwiftPackageReference "Sparkle" */;
+			productName = Sparkle;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = A00000000000000000000000 /* Project object */;
 }
