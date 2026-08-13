@@ -229,7 +229,7 @@ jobs:
           grep -Fq 'Authority=PocketIMG Shot Local Release' <<< "${signature_details}"
 
           certificate_prefix="${RUNNER_TEMP}/PocketIMGShot-signing-cert-"
-          codesign -d --extract-certificates "${certificate_prefix}" "${app}"
+          codesign -d --extract-certificates="${certificate_prefix}" "${app}"
           expected_certificate_sha256="$(openssl x509 -in macos/signing/PocketIMGShot-Release.pem -outform DER | shasum -a 256 | awk '{ print $1 }')"
           actual_certificate_sha256="$(shasum -a 256 "${certificate_prefix}0" | awk '{ print $1 }')"
           if [[ "${actual_certificate_sha256}" != "${expected_certificate_sha256}" ]]; then
