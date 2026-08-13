@@ -14,6 +14,8 @@ final class CaptureCoordinator: NSObject, CaptureOverlayViewDelegate {
     private var onUpload: ((UploadPayload) -> Void)?
     private var onCancel: (() -> Void)?
     private var finished = false
+    private var approvedDisplayFilters: [CGDirectDisplayID: SCContentFilter] = [:]
+    private var pickerContinuation: CheckedContinuation<SCContentFilter, Error>?
 
     func begin(
         onUpload: @escaping (UploadPayload) -> Void,
@@ -63,8 +65,9 @@ final class CaptureCoordinator: NSObject, CaptureOverlayViewDelegate {
     }
 
     func cancel(notify: Bool = true) {
-        guard !finished || !windows.isEmpty else { return }
+        guard !finished || !windows.isEmpty || pickerContinuation != nil else { return }
         finished = true
+        finishPicker(with: .failure(CancellationError()))
         closeWindows()
         if notify { onCancel?() }
         onUpload = nil
@@ -103,35 +106,94 @@ final class CaptureCoordinator: NSObject, CaptureOverlayViewDelegate {
     }
 
     private func captureDisplays() async throws -> [CapturedDisplay] {
-        let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
-        let ownApplications = content.applications.filter {
-            $0.bundleIdentifier == Bundle.main.bundleIdentifier
-        }
-        var captured: [CapturedDisplay] = []
+        let pointer = NSEvent.mouseLocation
+        let preferredScreen = NSScreen.screens.first { $0.frame.contains(pointer) } ?? NSScreen.main
+        let preferredDisplayID = preferredScreen?.displayID
+        let filter: SCContentFilter
 
-        for screen in NSScreen.screens {
-            guard let displayID = screen.displayID,
-                  let display = content.displays.first(where: { $0.displayID == displayID }) else {
-                continue
-            }
-            let filter = SCContentFilter(
-                display: display,
-                excludingApplications: ownApplications,
-                exceptingWindows: []
-            )
-            let configuration = SCStreamConfiguration()
-            configuration.width = display.width
-            configuration.height = display.height
-            configuration.pixelFormat = kCVPixelFormatType_32BGRA
-            configuration.showsCursor = false
-            configuration.capturesAudio = false
-            let image = try await SCScreenshotManager.captureImage(
-                contentFilter: filter,
-                configuration: configuration
-            )
-            captured.append(CapturedDisplay(screen: screen, image: image))
+        if let preferredDisplayID, let approved = approvedDisplayFilters[preferredDisplayID] {
+            filter = approved
+        } else {
+            filter = try await requestDisplayFilter()
         }
-        return captured
+
+        guard let display = filter.includedDisplays.first,
+              let screen = NSScreen.screens.first(where: { $0.displayID == display.displayID }) else {
+            throw CaptureError.noDisplays
+        }
+        approvedDisplayFilters[display.displayID] = filter
+
+        let configuration = SCStreamConfiguration()
+        configuration.width = display.width
+        configuration.height = display.height
+        configuration.pixelFormat = kCVPixelFormatType_32BGRA
+        configuration.showsCursor = false
+        configuration.capturesAudio = false
+        let image = try await SCScreenshotManager.captureImage(
+            contentFilter: filter,
+            configuration: configuration
+        )
+        return [CapturedDisplay(screen: screen, image: image)]
+    }
+
+    private func requestDisplayFilter() async throws -> SCContentFilter {
+        guard pickerContinuation == nil else {
+            throw CaptureError.captureAlreadyInProgress
+        }
+
+        return try await withCheckedThrowingContinuation { continuation in
+            pickerContinuation = continuation
+
+            var configuration = SCContentSharingPickerConfiguration()
+            configuration.allowedPickerModes = .singleDisplay
+            configuration.allowsChangingSelectedContent = false
+            if let bundleIdentifier = Bundle.main.bundleIdentifier {
+                configuration.excludedBundleIDs = [bundleIdentifier]
+            }
+
+            let picker = SCContentSharingPicker.shared
+            picker.defaultConfiguration = configuration
+            picker.add(self)
+            picker.isActive = true
+            NSApplication.shared.activate(ignoringOtherApps: true)
+            picker.present(using: .display)
+        }
+    }
+
+    private func finishPicker(with result: Result<SCContentFilter, Error>) {
+        guard let continuation = pickerContinuation else { return }
+        pickerContinuation = nil
+        let picker = SCContentSharingPicker.shared
+        picker.isActive = false
+        picker.remove(self)
+        continuation.resume(with: result)
+    }
+}
+
+extension CaptureCoordinator: SCContentSharingPickerObserver {
+    nonisolated func contentSharingPicker(
+        _ picker: SCContentSharingPicker,
+        didCancelFor stream: SCStream?
+    ) {
+        Task { @MainActor [weak self] in
+            self?.finishPicker(with: .failure(CancellationError()))
+        }
+    }
+
+    nonisolated func contentSharingPicker(
+        _ picker: SCContentSharingPicker,
+        didUpdateWith filter: SCContentFilter,
+        for stream: SCStream?
+    ) {
+        Task { @MainActor [weak self] in
+            self?.finishPicker(with: .success(filter))
+        }
+    }
+
+    nonisolated func contentSharingPickerStartDidFailWithError(_ error: Error) {
+        Task { @MainActor [weak self] in
+            self?.finishPicker(with: .failure(error))
+        }
     }
 }
 
@@ -151,6 +213,7 @@ private extension NSScreen {
 enum CaptureError: LocalizedError {
     case noDisplays
     case imageEncodingFailed
+    case captureAlreadyInProgress
 
     var errorDescription: String? {
         switch self {
@@ -158,6 +221,8 @@ enum CaptureError: LocalizedError {
             return "没有找到可截取的显示器。"
         case .imageEncodingFailed:
             return "无法生成截图文件。"
+        case .captureAlreadyInProgress:
+            return "已有截图选择正在进行。"
         }
     }
 }
