@@ -58,4 +58,11 @@ jobs:
             sleep 0.25
           done
           kill -TERM "${app_pid}"
+          set +e
           wait "${app_pid}"
+          exit_code=$?
+          set -e
+          if [[ "${exit_code}" -ne 0 && "${exit_code}" -ne 143 ]]; then
+            cat "${launch_log}" >&2
+            exit "${exit_code}"
+          fi
