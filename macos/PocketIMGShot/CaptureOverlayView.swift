@@ -326,7 +326,7 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
             .clampedToExtent()
             .applyingFilter(
                 "CIGaussianBlur",
-                parameters: [kCIInputRadiusKey: 14]
+                parameters: [kCIInputRadiusKey: 8]
             )
             .cropped(to: source.extent)
         let representation = NSCIImageRep(ciImage: blurred)

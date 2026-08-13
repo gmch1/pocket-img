@@ -4,6 +4,7 @@ import SwiftUI
 
 struct HotKeyRecorder: NSViewRepresentable {
     @Binding var hotKey: HotKey
+    var onChange: (HotKey) -> Void = { _ in }
     var onRecordingChanged: (Bool) -> Void = { _ in }
 
     func makeNSView(context: Context) -> HotKeyRecorderView {
@@ -11,6 +12,7 @@ struct HotKeyRecorder: NSViewRepresentable {
         view.hotKey = hotKey
         view.onChange = { value in
             hotKey = value
+            onChange(value)
         }
         view.onRecordingChanged = onRecordingChanged
         return view

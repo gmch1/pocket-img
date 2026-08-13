@@ -55,6 +55,10 @@ final class AppController: ObservableObject {
         }
     }
 
+    func persistHotKey(_ value: HotKey) {
+        settings.persistHotKey(value)
+    }
+
     func saveSettings() {
         do {
             try settings.save()
