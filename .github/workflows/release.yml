@@ -293,17 +293,58 @@ jobs:
         shell: bash
         env:
           RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
+          SPARKLE_PRIVATE_KEY: ${{ secrets.MACOS_UPDATE_ED25519_PRIVATE_KEY }}
         run: |
+          if [[ -z "${SPARKLE_PRIVATE_KEY}" ]]; then
+            echo "macOS update signing key is not configured" >&2
+            exit 1
+          fi
           app="${RUNNER_TEMP}/PocketIMGShotBuild/Build/Products/Release/PocketIMGShot.app"
           binary="${app}/Contents/MacOS/PocketIMGShot"
           test -d "${app}"
           signing_certificate_sha1="$(openssl x509 -in macos/signing/PocketIMGShot-Release.pem -outform DER | shasum | awk '{ print $1 }')"
           stable_requirement="designated => identifier \"com.gmch.pocketimg.shot\" and certificate leaf = H\"${signing_certificate_sha1}\""
+
+          sparkle_framework="${app}/Contents/Frameworks/Sparkle.framework"
+          sparkle_version="${sparkle_framework}/Versions/B"
+          test -d "${sparkle_version}"
           codesign \
             --force \
             --sign "${MACOS_SIGNING_IDENTITY}" \
             --keychain "${MACOS_KEYCHAIN_PATH}" \
             --options runtime \
+            "${sparkle_version}/XPCServices/Installer.xpc"
+          codesign \
+            --force \
+            --sign "${MACOS_SIGNING_IDENTITY}" \
+            --keychain "${MACOS_KEYCHAIN_PATH}" \
+            --options runtime \
+            --preserve-metadata=entitlements \
+            "${sparkle_version}/XPCServices/Downloader.xpc"
+          codesign \
+            --force \
+            --sign "${MACOS_SIGNING_IDENTITY}" \
+            --keychain "${MACOS_KEYCHAIN_PATH}" \
+            --options runtime \
+            "${sparkle_version}/Autoupdate"
+          codesign \
+            --force \
+            --sign "${MACOS_SIGNING_IDENTITY}" \
+            --keychain "${MACOS_KEYCHAIN_PATH}" \
+            --options runtime \
+            "${sparkle_version}/Updater.app"
+          codesign \
+            --force \
+            --sign "${MACOS_SIGNING_IDENTITY}" \
+            --keychain "${MACOS_KEYCHAIN_PATH}" \
+            --options runtime \
+            "${sparkle_framework}"
+          codesign \
+            --force \
+            --sign "${MACOS_SIGNING_IDENTITY}" \
+            --keychain "${MACOS_KEYCHAIN_PATH}" \
+            --options runtime \
+            --entitlements macos/PocketIMGShot/PocketIMGShot.entitlements \
             --requirements "=${stable_requirement}" \
             --timestamp=none \
             "${app}"
@@ -338,6 +379,7 @@ jobs:
             echo "Unexpected sandbox or keychain entitlement in macOS release" >&2
             exit 1
           fi
+          grep -Fq 'com.apple.security.cs.disable-library-validation' <<< "${entitlements}"
           architectures="$(lipo -archs "${binary}")"
           [[ "${architectures}" == *arm64* ]]
           [[ "${architectures}" == *x86_64* ]]
@@ -349,6 +391,45 @@ jobs:
             cd release
             shasum -a 256 "${archive_name}" > "${archive_name}.sha256"
           )
+
+          sign_update="$(find "${RUNNER_TEMP}/PocketIMGShotBuild/SourcePackages" -type f -name sign_update -print -quit)"
+          if [[ -z "${sign_update}" || ! -x "${sign_update}" ]]; then
+            echo "Sparkle sign_update tool was not found" >&2
+            exit 1
+          fi
+          update_key_file="${RUNNER_TEMP}/pocketimg-update-ed25519-key"
+          printf '%s' "${SPARKLE_PRIVATE_KEY}" > "${update_key_file}"
+          chmod 600 "${update_key_file}"
+          signature_output="$("${sign_update}" --ed-key-file "${update_key_file}" "${archive}")"
+          update_signature="$(sed -n 's/.*sparkle:edSignature="\([^"]*\)".*/\1/p' <<< "${signature_output}")"
+          update_length="$(stat -f '%z' "${archive}")"
+          if [[ -z "${update_signature}" || ! "${update_length}" =~ ^[0-9]+$ ]]; then
+            echo "Unable to sign macOS update archive" >&2
+            exit 1
+          fi
+
+          appcast="release/appcast.xml"
+          published_at="$(LC_ALL=C date -u '+%a, %d %b %Y %H:%M:%S +0000')"
+          printf '%s\n' \
+            '<?xml version="1.0" encoding="utf-8"?>' \
+            '<rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle">' \
+            '  <channel>' \
+            '    <title>PocketIMG Shot 更新</title>' \
+            '    <link>https://github.com/gmch1/pocket-img/releases</link>' \
+            '    <description>PocketIMG Shot 稳定版本更新</description>' \
+            '    <language>zh-CN</language>' \
+            '    <item>' \
+            "      <title>PocketIMG Shot ${RELEASE_VERSION}</title>" \
+            "      <pubDate>${published_at}</pubDate>" \
+            '      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>' \
+            "      <enclosure url=\"https://github.com/gmch1/pocket-img/releases/download/v${RELEASE_VERSION}/${archive_name}\" sparkle:version=\"${GITHUB_RUN_NUMBER}\" sparkle:shortVersionString=\"${RELEASE_VERSION}\" sparkle:edSignature=\"${update_signature}\" length=\"${update_length}\" type=\"application/octet-stream\" />" \
+            '    </item>' \
+            '  </channel>' \
+            '</rss>' \
+            > "${appcast}"
+          "${sign_update}" --ed-key-file "${update_key_file}" "${appcast}"
+          "${sign_update}" --verify --ed-key-file "${update_key_file}" "${appcast}"
+          rm "${update_key_file}"
 
       - name: Upload macOS artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7

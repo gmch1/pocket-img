@@ -3,6 +3,25 @@ import XCTest
 @testable import PocketIMGShot
 
 final class ConfigurationTests: XCTestCase {
+    func testPinnedImageAcceptsTheFirstClickFromAnotherApplication() {
+        let view = PinnedImageView(frame: .zero)
+
+        XCTAssertTrue(view.acceptsFirstMouse(for: nil))
+    }
+
+    func testAutomaticUpdateFeedUsesSignedHTTPSAppcast() throws {
+        let info = Bundle.main.infoDictionary
+
+        XCTAssertEqual(
+            info?["SUFeedURL"] as? String,
+            "https://github.com/gmch1/pocket-img/releases/latest/download/appcast.xml"
+        )
+        XCTAssertEqual(info?["SUEnableAutomaticChecks"] as? Bool, true)
+        XCTAssertEqual(info?["SUVerifyUpdateBeforeExtraction"] as? Bool, true)
+        XCTAssertEqual(info?["SURequireSignedFeed"] as? Bool, true)
+        XCTAssertEqual(try XCTUnwrap(info?["SUPublicEDKey"] as? String).count, 44)
+    }
+
     func testNormalizesServerAddress() throws {
         XCTAssertEqual(
             try ServiceConfiguration.normalizeBaseURL(" https://img.example.com/ ").absoluteString,

@@ -2,6 +2,7 @@ import AppKit
 import Combine
 import CoreGraphics
 import Foundation
+import Sparkle
 
 @MainActor
 final class AppController: ObservableObject {
@@ -10,6 +11,7 @@ final class AppController: ObservableObject {
     @Published private(set) var isCapturing = false
     @Published private(set) var isUploading = false
     @Published private(set) var statusMessage = ""
+    @Published private(set) var canCheckForUpdates = false
 
     let settings = AppSettings()
 
@@ -17,11 +19,22 @@ final class AppController: ObservableObject {
     private let captureCoordinator = CaptureCoordinator()
     private let pinnedImages = PinnedImagePresenter()
     private let toast = ToastPresenter()
+    private let updaterController: SPUStandardUpdaterController
     private var pendingUpload: UploadPayload?
     private var client: PocketIMGClient?
     private var clientConfiguration: ServiceConfiguration?
 
-    private init() {}
+    private init() {
+        let shouldStartUpdater = ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil
+        updaterController = SPUStandardUpdaterController(
+            startingUpdater: shouldStartUpdater,
+            updaterDelegate: nil,
+            userDriverDelegate: nil
+        )
+        updaterController.updater.publisher(for: \.canCheckForUpdates)
+            .receive(on: RunLoop.main)
+            .assign(to: &$canCheckForUpdates)
+    }
 
     func start() {
         let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "unknown"
@@ -53,6 +66,12 @@ final class AppController: ObservableObject {
         } else {
             registerHotKey()
         }
+    }
+
+    func checkForUpdates() {
+        guard canCheckForUpdates else { return }
+        NSApplication.shared.activate(ignoringOtherApps: true)
+        updaterController.checkForUpdates(nil)
     }
 
     func persistHotKey(_ value: HotKey) {
