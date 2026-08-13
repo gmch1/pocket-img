@@ -43,6 +43,94 @@ jobs:
           echo "tag=${release_tag}" >> "${GITHUB_OUTPUT}"
           echo "version=${release_tag#v}" >> "${GITHUB_OUTPUT}"
 
+  linux-amd64:
+    needs: prepare
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Build and test web app
+        working-directory: frontend
+        run: |
+          npm ci
+          npm test
+          npm run build
+
+      - name: Test Go backend
+        run: go test -tags=nodynamic ./...
+
+      - name: Build Linux amd64 backend
+        shell: bash
+        env:
+          RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          install -d release
+          binary="release/PocketIMG-${RELEASE_VERSION}-linux-amd64"
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
+            -tags=nodynamic \
+            -trimpath \
+            -ldflags='-s -w' \
+            -o "${binary}" \
+            ./cmd/server
+          chmod 755 "${binary}"
+
+          file "${binary}" | grep -Fq 'ELF 64-bit LSB executable, x86-64'
+          readelf -h "${binary}" | grep -Eq 'Machine:[[:space:]]+Advanced Micro Devices X86-64'
+          if readelf -d "${binary}" | grep -q '(NEEDED)'; then
+            echo "Linux amd64 backend unexpectedly depends on shared libraries" >&2
+            exit 1
+          fi
+
+          smoke_data="${RUNNER_TEMP}/pocketimg-linux-amd64-smoke"
+          PIH_TOKEN='release-smoke-token' \
+          PIH_COOKIE_SECURE=false \
+          PIH_ADDR='127.0.0.1:18080' \
+          PIH_DATA_DIR="${smoke_data}" \
+            "${binary}" >"${RUNNER_TEMP}/pocketimg-linux-amd64.log" 2>&1 &
+          server_pid=$!
+          trap 'kill "${server_pid}" 2>/dev/null || true' EXIT
+          for attempt in $(seq 1 50); do
+            if curl --fail --silent --show-error http://127.0.0.1:18080/healthz; then
+              break
+            fi
+            if [[ "${attempt}" -eq 50 ]]; then
+              cat "${RUNNER_TEMP}/pocketimg-linux-amd64.log" >&2
+              exit 1
+            fi
+            sleep 0.1
+          done
+          kill "${server_pid}"
+          wait "${server_pid}"
+          trap - EXIT
+
+          (
+            cd release
+            sha256sum "PocketIMG-${RELEASE_VERSION}-linux-amd64" > \
+              "PocketIMG-${RELEASE_VERSION}-linux-amd64.sha256"
+          )
+
+      - name: Upload Linux amd64 artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: release-linux-amd64
+          path: release/*
+          if-no-files-found: error
+          compression-level: 0
+
   android:
     needs: prepare
     runs-on: ubuntu-latest
@@ -276,7 +364,7 @@ jobs:
         run: security delete-keychain "${MACOS_KEYCHAIN_PATH}" || true
 
   publish:
-    needs: [prepare, android, macos]
+    needs: [prepare, android, linux-amd64, macos]
     runs-on: ubuntu-latest
     steps:
       - name: Check out source
