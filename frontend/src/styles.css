@@ -98,9 +98,17 @@ button:focus-visible, input:focus-visible, [role="button"]:focus-visible { outli
 .gallery-refreshing { position: fixed; z-index: 19; top: 80px; left: 50%; width: 34px; height: 34px; display: grid; place-items: center; border: 1px solid var(--line); border-radius: 11px; background: var(--surface-raised); box-shadow: var(--shadow); transform: translateX(-50%); pointer-events: none; }
 .gallery-refreshing .spinner { width: 16px; height: 16px; }
 .empty-gallery svg { width: 42px; opacity: 0.4; }
-.empty-gallery p, .state-panel p { margin: 0; }
-.state-panel button { padding: 8px 14px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface); cursor: pointer; }
-.state-panel--error { color: var(--danger); }
+.empty-gallery p { margin: 0; }
+.state-panel--error { gap: 18px; color: inherit; }
+.state-panel__mark { width: 48px; height: 48px; display: grid; place-items: center; border-radius: 14px; color: var(--danger); background: var(--danger-soft); }
+.state-panel__mark svg { width: 24px; height: 24px; }
+.state-panel__copy { width: min(330px, calc(100vw - 40px)); display: grid; gap: 6px; }
+.state-panel__copy h1 { margin: 0; color: var(--ink); font-size: 19px; font-weight: 660; letter-spacing: -0.02em; }
+.state-panel__copy p { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.6; }
+.state-panel__copy small { margin-top: 2px; color: color-mix(in srgb, var(--danger) 72%, var(--muted)); font-size: 11px; }
+.state-panel__retry { width: 112px; height: 40px; border-radius: 10px; font-size: 13px; transition: filter 0.15s ease, transform 0.15s ease; }
+.state-panel__retry:hover { filter: brightness(1.08); }
+.state-panel__retry:active { transform: scale(0.97); }
 .list-limit { margin: 28px 0 0; color: var(--muted); text-align: center; font-size: 12px; }
 
 .admin-panel { width: min(680px, 100%); max-height: min(760px, calc(100vh - 48px)); overflow: auto; padding: 24px; border: 1px solid var(--line); border-radius: 22px; background: var(--surface); box-shadow: var(--shadow); animation: rise 0.18s ease-out; }

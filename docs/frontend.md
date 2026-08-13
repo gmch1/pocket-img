@@ -38,7 +38,7 @@ make frontend-test
 make frontend-build
 ```
 
-生产文件输出到 `internal/webui/dist`，随后通过 `go:embed` 编入 Go 二进制。`make build`、`make build-arm64` 和 `make test` 都会先重新生成这组文件。
+生产文件输出到 `internal/webui/dist`，随后通过 `go:embed` 编入 Go 二进制。生成的 HTML、CSS 和 JavaScript 不进入 Git；`make build`、`make build-arm64` 和 `make test` 都会先重新生成这组文件。
 
 ## 当前边界
 

@@ -6,6 +6,8 @@
 /frontend/*.tsbuildinfo
 /frontend/vite.config.js
 /frontend/vite.config.d.ts
+/internal/webui/dist/*
+!/internal/webui/dist/.gitkeep
 /android/.gradle/
 /android/local.properties
 /android/keystore.properties

@@ -3,7 +3,15 @@ import react from "@vitejs/plugin-react";
 import { defineConfig } from "vitest/config";
 
 export default defineConfig({
-  plugins: [react()],
+  plugins: [
+    react(),
+    {
+      name: "preserve-webui-embed-directory",
+      generateBundle() {
+        this.emitFile({ type: "asset", fileName: ".gitkeep", source: "" });
+      },
+    },
+  ],
   build: {
     outDir: resolve(import.meta.dirname, "../internal/webui/dist"),
     emptyOutDir: true,

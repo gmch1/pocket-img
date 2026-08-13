@@ -38,6 +38,10 @@ export function ImageIcon(props: IconProps) {
   return <IconBase {...props}><rect x="3" y="4" width="18" height="16" rx="2" /><circle cx="9" cy="10" r="2" /><path d="m21 15-5-5L5 20" /></IconBase>;
 }
 
+export function AlertIcon(props: IconProps) {
+  return <IconBase {...props}><circle cx="12" cy="12" r="9" /><path d="M12 7.5v5.5" /><path d="M12 16.5h.01" /></IconBase>;
+}
+
 export function ExpandIcon(props: IconProps) {
   return <IconBase {...props}><path d="M8 3H3v5m13-5h5v5M8 21H3v-5m18 0v5h-5" /></IconBase>;
 }

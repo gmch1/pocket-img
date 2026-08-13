@@ -17,6 +17,10 @@ func Handler() http.Handler {
 	if err != nil {
 		panic(err)
 	}
+	return newHandler(files)
+}
+
+func newHandler(files fs.FS) http.Handler {
 	return &handler{files: files, fileServer: http.FileServer(http.FS(files))}
 }
 
