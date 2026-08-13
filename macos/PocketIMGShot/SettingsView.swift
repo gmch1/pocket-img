@@ -32,7 +32,7 @@ struct SettingsView: View {
                     )
                         .frame(width: 170, height: 28)
                 }
-                Text("点击快捷键框后按下新组合。默认是 F2；部分 Mac 键盘需要同时按 Fn。")
+                Text("点击快捷键框后按下新组合。默认是 F1；部分 Mac 键盘需要同时按 Fn。")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 if !settings.hotKeyRegistrationError.isEmpty {

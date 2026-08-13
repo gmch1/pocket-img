@@ -3,7 +3,7 @@ import Carbon.HIToolbox
 import Foundation
 
 struct HotKey: Equatable {
-    static let `default` = HotKey(keyCode: UInt32(kVK_F2), modifiers: 0, keyLabel: "F2")
+    static let `default` = HotKey(keyCode: UInt32(kVK_F1), modifiers: 0, keyLabel: "F1")
 
     let keyCode: UInt32
     let modifiers: UInt

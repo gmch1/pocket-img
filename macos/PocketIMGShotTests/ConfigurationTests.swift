@@ -1,3 +1,4 @@
+import Carbon.HIToolbox
 import XCTest
 @testable import PocketIMGShot
 
@@ -18,8 +19,9 @@ final class ConfigurationTests: XCTestCase {
         XCTAssertThrowsError(try ServiceConfiguration.normalizeBaseURL("https://user:pass@img.example.com"))
     }
 
-    func testDefaultHotKeyIsF2() {
-        XCTAssertEqual(HotKey.default.displayName, "F2")
+    func testDefaultHotKeyIsF1() {
+        XCTAssertEqual(HotKey.default.keyCode, UInt32(kVK_F1))
+        XCTAssertEqual(HotKey.default.displayName, "F1")
         XCTAssertEqual(HotKey.default.modifiers, 0)
     }
 
