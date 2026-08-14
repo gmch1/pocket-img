@@ -99,6 +99,25 @@ final class AnnotationTests: XCTestCase {
         XCTAssertEqual(moved.color, annotation.color)
     }
 
+    func testAnnotationStyleSizeCanChangeWithoutChangingItsContentOrPosition() {
+        let annotation = Annotation(
+            tool: .text,
+            start: CGPoint(x: 120, y: 90),
+            end: CGPoint(x: 120, y: 90),
+            text: "说明",
+            styleSize: 20,
+            color: .blue
+        )
+
+        let resized = annotation.withStyleSize(32)
+
+        XCTAssertEqual(resized.start, annotation.start)
+        XCTAssertEqual(resized.end, annotation.end)
+        XCTAssertEqual(resized.text, annotation.text)
+        XCTAssertEqual(resized.resolvedStyleSize, 32)
+        XCTAssertEqual(resized.color, annotation.color)
+    }
+
     func testClampsAnnotationMovementToSelectionBounds() {
         let offset = CaptureGeometry.clampedMovementOffset(
             moving: CGRect(x: 180, y: 120, width: 60, height: 40),

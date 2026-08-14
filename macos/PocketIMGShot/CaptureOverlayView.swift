@@ -202,6 +202,7 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
     private var annotationColor: AnnotationColor = .default
     private var colorPaletteVisible = false
     private var toolSizeHintVisible = false
+    private var toolSizeHintTool: AnnotationTool?
     private var toolSizeHintGeneration = 0
     private var isFinishing = false
 
@@ -459,43 +460,50 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
             super.scrollWheel(with: event)
             return
         }
-        guard let selectedTool else {
+        let targetTool: AnnotationTool
+        let currentSize: CGFloat
+        if let currentAnnotation {
+            targetTool = currentAnnotation.tool
+            currentSize = currentAnnotation.resolvedStyleSize
+        } else if textEditor != nil {
+            targetTool = .text
+            currentSize = textEditorSize ?? textFontSize
+        } else if let selectedAnnotationIndex,
+                  annotations.indices.contains(selectedAnnotationIndex) {
+            let annotation = annotations[selectedAnnotationIndex]
+            targetTool = annotation.tool
+            currentSize = annotation.resolvedStyleSize
+        } else if let selectedTool {
+            targetTool = selectedTool
+            currentSize = toolSize(for: selectedTool)
+        } else {
             super.scrollWheel(with: event)
             return
         }
         let rawStep = event.hasPreciseScrollingDeltas
             ? event.scrollingDeltaY / 8
             : event.scrollingDeltaY
-        switch selectedTool {
+        let updatedSize: CGFloat
+        switch targetTool {
         case .rectangle:
-            rectangleLineWidth = roundedHalfStep(rectangleLineWidth + rawStep, range: 1...12)
+            updatedSize = roundedHalfStep(currentSize + rawStep, range: 1...12)
         case .arrow:
-            arrowLineWidth = roundedHalfStep(arrowLineWidth + rawStep, range: 1...12)
+            updatedSize = roundedHalfStep(currentSize + rawStep, range: 1...12)
         case .text:
-            textFontSize = roundedWholeStep(textFontSize + rawStep * 2, range: 12...72)
-            if let textEditor {
-                let font = annotationTextFont(size: textFontSize)
-                textEditor.font = font
-                textEditorSize = textFontSize
-                if let selection {
-                    var frame = textEditor.frame
-                    frame.size.height = textEditorHeight(for: font)
-                    frame.size.width = textEditorWidth(
-                        for: textEditor.stringValue,
-                        font: font,
-                        maximum: selection.maxX - frame.minX
-                    )
-                    frame.origin.y = max(
-                        selection.minY,
-                        min(frame.origin.y, selection.maxY - frame.height)
-                    )
-                    textEditor.frame = frame
-                    textAnchor = textAnchor(for: frame, font: font)
-                }
-            }
+            updatedSize = roundedWholeStep(currentSize + rawStep * 2, range: 12...72)
+        }
+        setToolSize(updatedSize, for: targetTool)
+        if let currentAnnotation {
+            self.currentAnnotation = currentAnnotation.withStyleSize(updatedSize)
+        } else if let textEditor {
+            updateTextEditor(textEditor, fontSize: updatedSize)
+        } else if let selectedAnnotationIndex,
+                  annotations.indices.contains(selectedAnnotationIndex) {
+            annotations[selectedAnnotationIndex] = annotations[selectedAnnotationIndex]
+                .withStyleSize(updatedSize)
         }
         onAnnotationStyleChange?(currentAnnotationStyle)
-        showToolSizeHint()
+        showToolSizeHint(for: targetTool)
         needsDisplay = true
     }
 
@@ -869,10 +877,10 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
     }
 
     private func drawToolSizeHint() {
-        guard let selectedTool else { return }
+        guard let toolSizeHintTool else { return }
         let actionIndex: Int
         let suffix: String
-        switch selectedTool {
+        switch toolSizeHintTool {
         case .rectangle:
             actionIndex = 0
             suffix = "px"
@@ -883,7 +891,7 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
             actionIndex = 2
             suffix = "pt"
         }
-        let size = toolSize(for: selectedTool)
+        let size = toolSize(for: toolSizeHintTool)
         let value = size.rounded() == size
             ? "\(Int(size)) \(suffix)"
             : String(format: "%.1f %@", size, suffix)
@@ -1742,6 +1750,7 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
         currentAnnotation = nil
         hoveredAnnotationHit = nil
         toolSizeHintVisible = false
+        toolSizeHintTool = nil
     }
 
     private func toolSize(for tool: AnnotationTool) -> CGFloat {
@@ -1753,6 +1762,37 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
         case .text:
             return textFontSize
         }
+    }
+
+    private func setToolSize(_ size: CGFloat, for tool: AnnotationTool) {
+        switch tool {
+        case .rectangle:
+            rectangleLineWidth = size
+        case .arrow:
+            arrowLineWidth = size
+        case .text:
+            textFontSize = size
+        }
+    }
+
+    private func updateTextEditor(_ editor: NSTextField, fontSize: CGFloat) {
+        let font = annotationTextFont(size: fontSize)
+        editor.font = font
+        textEditorSize = fontSize
+        guard let selection else { return }
+        var frame = editor.frame
+        frame.size.height = textEditorHeight(for: font)
+        frame.size.width = textEditorWidth(
+            for: editor.stringValue,
+            font: font,
+            maximum: selection.maxX - frame.minX
+        )
+        frame.origin.y = max(
+            selection.minY,
+            min(frame.origin.y, selection.maxY - frame.height)
+        )
+        editor.frame = frame
+        textAnchor = textAnchor(for: frame, font: font)
     }
 
     private var currentAnnotationStyle: AnnotationStylePreferences {
@@ -1772,14 +1812,16 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
         min(max(value.rounded(), range.lowerBound), range.upperBound)
     }
 
-    private func showToolSizeHint() {
+    private func showToolSizeHint(for tool: AnnotationTool) {
         toolSizeHintGeneration += 1
         let generation = toolSizeHintGeneration
+        toolSizeHintTool = tool
         toolSizeHintVisible = true
         Task { @MainActor [weak self] in
             try? await Task.sleep(for: .seconds(1.2))
             guard let self, self.toolSizeHintGeneration == generation else { return }
             self.toolSizeHintVisible = false
+            self.toolSizeHintTool = nil
             self.needsDisplay = true
         }
     }

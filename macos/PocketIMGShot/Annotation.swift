@@ -142,6 +142,17 @@ struct Annotation: Equatable, Sendable {
             color: color
         )
     }
+
+    func withStyleSize(_ styleSize: CGFloat) -> Annotation {
+        Annotation(
+            tool: tool,
+            start: start,
+            end: end,
+            text: text,
+            styleSize: styleSize,
+            color: color
+        )
+    }
 }
 
 struct UploadPayload: Sendable {
