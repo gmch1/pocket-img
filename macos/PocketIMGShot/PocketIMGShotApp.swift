@@ -29,7 +29,12 @@ struct PocketIMGShotApp: App {
                 NSApplication.shared.terminate(nil)
             }
         } label: {
-            Label("PocketIMG Shot", systemImage: controller.isUploading ? "arrow.up.circle" : "camera.viewfinder")
+            Label {
+                Text("PocketIMG Shot")
+            } icon: {
+                Image("MenuBarIcon")
+                    .renderingMode(.template)
+            }
         }
 
         Settings {

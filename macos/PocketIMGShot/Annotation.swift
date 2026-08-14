@@ -74,10 +74,21 @@ struct AnnotationStylePreferences: Codable, Equatable, Sendable {
         color ?? .default
     }
 
+    var lineWidth: CGFloat {
+        let rectangle = min(max(rectangleLineWidth, 1), 12)
+        let arrow = min(max(arrowLineWidth, 1), 12)
+        guard rectangle != arrow else { return rectangle }
+        let defaultWidth = Self.default.rectangleLineWidth
+        let rectangleDistance = abs(rectangle - defaultWidth)
+        let arrowDistance = abs(arrow - defaultWidth)
+        return arrowDistance > rectangleDistance ? arrow : rectangle
+    }
+
     var normalized: AnnotationStylePreferences {
-        AnnotationStylePreferences(
-            rectangleLineWidth: min(max(rectangleLineWidth, 1), 12),
-            arrowLineWidth: min(max(arrowLineWidth, 1), 12),
+        let lineWidth = lineWidth
+        return AnnotationStylePreferences(
+            rectangleLineWidth: lineWidth,
+            arrowLineWidth: lineWidth,
             textFontSize: min(max(textFontSize, 12), 72),
             color: resolvedColor
         )

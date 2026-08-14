@@ -3,6 +3,14 @@ import XCTest
 @testable import PocketIMGShot
 
 final class ConfigurationTests: XCTestCase {
+    @MainActor
+    func testMenuBarIconUsesAReusableTemplateAsset() throws {
+        let image = try XCTUnwrap(NSImage(named: "MenuBarIcon"))
+
+        XCTAssertTrue(image.isTemplate)
+        XCTAssertEqual(image.size, CGSize(width: 18, height: 18))
+    }
+
     func testPinnedImageAcceptsTheFirstClickFromAnotherApplication() {
         let view = PinnedImageView(frame: .zero)
 
@@ -120,7 +128,7 @@ final class ConfigurationTests: XCTestCase {
         let storedObject = try XCTUnwrap(
             JSONSerialization.jsonObject(with: Data(contentsOf: settingsURL)) as? [String: Any]
         )
-        XCTAssertEqual(storedObject["schemaVersion"] as? Int, 3)
+        XCTAssertEqual(storedObject["schemaVersion"] as? Int, 4)
         XCTAssertEqual(storedObject["hotKeyLabel"] as? String, "F1")
     }
 
@@ -164,7 +172,7 @@ final class ConfigurationTests: XCTestCase {
         try XCTUnwrap(customizedJSON.data(using: .utf8)).write(to: customSettingsURL)
         let customized = AppSettings(settingsURL: customSettingsURL)
         XCTAssertEqual(customized.annotationStyle.rectangleLineWidth, 4)
-        XCTAssertEqual(customized.annotationStyle.arrowLineWidth, 3)
+        XCTAssertEqual(customized.annotationStyle.arrowLineWidth, 4)
     }
 
     @MainActor
@@ -185,5 +193,40 @@ final class ConfigurationTests: XCTestCase {
 
         let restored = AppSettings(settingsURL: settingsURL)
         XCTAssertEqual(restored.hotKey.displayName, "F2")
+    }
+
+    @MainActor
+    func testMigratesSeparateLineWidthsToOneSharedValue() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("PocketIMGShotSharedLineWidthTests-\(UUID().uuidString)")
+        let settingsURL = directory.appendingPathComponent("settings.json")
+        defer { try? FileManager.default.removeItem(at: directory) }
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let legacyJSON = """
+        {
+          "schemaVersion": 3,
+          "serverAddress": "https://img.example.com",
+          "token": "token",
+          "hotKeyCode": 122,
+          "hotKeyModifiers": 0,
+          "hotKeyLabel": "F1",
+          "annotationStyle": {
+            "rectangleLineWidth": 2,
+            "arrowLineWidth": 6,
+            "textFontSize": 24,
+            "color": "red"
+          }
+        }
+        """
+        try XCTUnwrap(legacyJSON.data(using: .utf8)).write(to: settingsURL)
+
+        let migrated = AppSettings(settingsURL: settingsURL)
+
+        XCTAssertEqual(migrated.annotationStyle.rectangleLineWidth, 6)
+        XCTAssertEqual(migrated.annotationStyle.arrowLineWidth, 6)
+        let storedObject = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: Data(contentsOf: settingsURL)) as? [String: Any]
+        )
+        XCTAssertEqual(storedObject["schemaVersion"] as? Int, 4)
     }
 }

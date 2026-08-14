@@ -1159,12 +1159,7 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
         editor.drawsBackground = false
         editor.font = font
         editor.focusRingType = .none
-        editor.placeholderAttributedString = NSAttributedString(
-            string: "输入文字",
-            attributes: [
-                .foregroundColor: textColor.withAlphaComponent(0.56),
-            ]
-        )
+        Self.updateTextEditorPlaceholder(editor, font: font, textColor: textColor)
         editor.delegate = self
         editor.cell?.isScrollable = true
         editor.cell?.wraps = false
@@ -1203,6 +1198,20 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
         editor.isEnabled = true
         editor.textColor = textColor
         return editor
+    }
+
+    static func updateTextEditorPlaceholder(
+        _ editor: NSTextField,
+        font: NSFont,
+        textColor: NSColor
+    ) {
+        editor.placeholderAttributedString = NSAttributedString(
+            string: "输入文字",
+            attributes: [
+                .font: font,
+                .foregroundColor: textColor.withAlphaComponent(0.56),
+            ]
+        )
     }
 
     private func commitTextEditing() {
@@ -1766,9 +1775,8 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
 
     private func setToolSize(_ size: CGFloat, for tool: AnnotationTool) {
         switch tool {
-        case .rectangle:
+        case .rectangle, .arrow:
             rectangleLineWidth = size
-        case .arrow:
             arrowLineWidth = size
         case .text:
             textFontSize = size
@@ -1778,6 +1786,11 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
     private func updateTextEditor(_ editor: NSTextField, fontSize: CGFloat) {
         let font = annotationTextFont(size: fontSize)
         editor.font = font
+        Self.updateTextEditorPlaceholder(
+            editor,
+            font: font,
+            textColor: textEditorColor?.nsColor ?? annotationColor.nsColor
+        )
         textEditorSize = fontSize
         guard let selection else { return }
         var frame = editor.frame

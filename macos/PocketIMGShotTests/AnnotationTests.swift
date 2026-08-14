@@ -186,10 +186,28 @@ final class AnnotationTests: XCTestCase {
             color: .purple
         ).normalized
 
-        XCTAssertEqual(style.rectangleLineWidth, 1)
+        XCTAssertEqual(style.rectangleLineWidth, 12)
         XCTAssertEqual(style.arrowLineWidth, 12)
         XCTAssertEqual(style.textFontSize, 72)
         XCTAssertEqual(style.resolvedColor, .purple)
+    }
+
+    func testRectangleAndArrowUseOneSharedLineWidth() {
+        let rectangleCustomized = AnnotationStylePreferences(
+            rectangleLineWidth: 5,
+            arrowLineWidth: 2,
+            textFontSize: 20
+        ).normalized
+        let arrowCustomized = AnnotationStylePreferences(
+            rectangleLineWidth: 2,
+            arrowLineWidth: 6,
+            textFontSize: 20
+        ).normalized
+
+        XCTAssertEqual(rectangleCustomized.rectangleLineWidth, 5)
+        XCTAssertEqual(rectangleCustomized.arrowLineWidth, 5)
+        XCTAssertEqual(arrowCustomized.rectangleLineWidth, 6)
+        XCTAssertEqual(arrowCustomized.arrowLineWidth, 6)
     }
 
     func testAnnotationStyleDecodesLegacyJSONWithoutColor() throws {
@@ -207,6 +225,8 @@ final class AnnotationTests: XCTestCase {
         )
 
         XCTAssertEqual(style.resolvedColor, .red)
+        XCTAssertEqual(style.normalized.rectangleLineWidth, 5)
+        XCTAssertEqual(style.normalized.arrowLineWidth, 5)
         XCTAssertEqual(style.normalized.color, .red)
     }
 
@@ -241,5 +261,26 @@ final class AnnotationTests: XCTestCase {
         XCTAssertEqual(field.textColor, expectedColor)
         field.stringValue = "测试输入"
         XCTAssertEqual(field.stringValue, "测试输入")
+    }
+
+    @MainActor
+    func testTextFieldPlaceholderTracksTheCurrentFontSize() throws {
+        let field = CaptureOverlayView.makeEditableTextField(
+            frame: CGRect(x: 0, y: 0, width: 200, height: 40),
+            textColor: .systemRed
+        )
+        let font = NSFont.systemFont(ofSize: 34, weight: .semibold)
+
+        CaptureOverlayView.updateTextEditorPlaceholder(
+            field,
+            font: font,
+            textColor: .systemRed
+        )
+
+        let placeholder = try XCTUnwrap(field.placeholderAttributedString)
+        let placeholderFont = try XCTUnwrap(
+            placeholder.attribute(.font, at: 0, effectiveRange: nil) as? NSFont
+        )
+        XCTAssertEqual(placeholderFont.pointSize, 34)
     }
 }
