@@ -272,6 +272,49 @@ describe("App", () => {
     expect(container.querySelector(".selection-toolbar")).toBeNull();
   });
 
+  test("selects multiple images by dragging across blank gallery space", async () => {
+    const second = {
+      ...image,
+      id: "11111111111111111111111111111111",
+      url: "/i/11111111111111111111111111111111.webp",
+      thumbnail_url: "/t/11111111111111111111111111111111.webp",
+    };
+    const third = {
+      ...image,
+      id: "22222222222222222222222222222222",
+      url: "/i/22222222222222222222222222222222.webp",
+      thumbnail_url: "/t/22222222222222222222222222222222.webp",
+    };
+    vi.mocked(listImages).mockResolvedValue(gallery([image, second, third]));
+
+    const { container } = render(<App />);
+    await screen.findAllByRole("button", { name: "复制图片链接" });
+    const timeline = container.querySelector<HTMLElement>(".image-timeline");
+    const cards = Array.from(container.querySelectorAll<HTMLElement>(".image-card"));
+    expect(timeline).toBeTruthy();
+    expect(cards).toHaveLength(3);
+    cards[0].getBoundingClientRect = () => ({ left: 20, top: 40, right: 120, bottom: 120, width: 100, height: 80, x: 20, y: 40, toJSON: () => ({}) });
+    cards[1].getBoundingClientRect = () => ({ left: 140, top: 40, right: 240, bottom: 120, width: 100, height: 80, x: 140, y: 40, toJSON: () => ({}) });
+    cards[2].getBoundingClientRect = () => ({ left: 260, top: 40, right: 360, bottom: 120, width: 100, height: 80, x: 260, y: 40, toJSON: () => ({}) });
+
+    fireEvent.pointerDown(timeline!, { button: 0, pointerId: 7, pointerType: "mouse", clientX: 5, clientY: 20 });
+    fireEvent.pointerMove(timeline!, { pointerId: 7, pointerType: "mouse", clientX: 250, clientY: 130 });
+
+    expect(container.querySelector(".marquee-selection")).toBeTruthy();
+    expect(screen.getByLabelText("已选择 2 张")).toBeTruthy();
+    expect(container.querySelectorAll(".image-card--selected")).toHaveLength(2);
+
+    fireEvent.pointerUp(timeline!, { pointerId: 7, pointerType: "mouse", clientX: 250, clientY: 130 });
+    expect(container.querySelector(".marquee-selection")).toBeNull();
+    expect(screen.getByRole("toolbar", { name: "批量操作" })).toBeTruthy();
+
+    fireEvent.pointerDown(timeline!, { button: 0, pointerId: 8, pointerType: "mouse", ctrlKey: true, clientX: 370, clientY: 20 });
+    fireEvent.pointerMove(timeline!, { pointerId: 8, pointerType: "mouse", clientX: 250, clientY: 130 });
+    fireEvent.pointerUp(timeline!, { pointerId: 8, pointerType: "mouse", clientX: 250, clientY: 130 });
+    expect(screen.getByLabelText("已选择 3 张")).toBeTruthy();
+    expect(container.querySelectorAll(".image-card--selected")).toHaveLength(3);
+  });
+
   test("reports upload failures with a toast and clears global loading", async () => {
     let failUpload: ((reason: APIError) => void) | undefined;
     vi.mocked(listImages).mockResolvedValue(gallery([]));

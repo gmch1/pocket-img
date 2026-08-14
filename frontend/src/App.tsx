@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { APIError, absoluteImageURL, createSession, deleteImages, deleteSession, listImages, uploadImage } from "./api";
 import { copyText } from "./clipboard";
 import { prepareImageForUpload } from "./image-compression";
@@ -12,6 +12,15 @@ import type { AccountInfo, GalleryRange, ImageItem, UploadTask } from "./types";
 
 type AuthState = "checking" | "required" | "authenticated";
 type Toast = { id: number; message: string; error: boolean };
+type SelectionBox = { left: number; top: number; width: number; height: number };
+type MarqueeGesture = {
+  pointerId: number;
+  originX: number;
+  originY: number;
+  initialSelection: Set<string>;
+  additive: boolean;
+  active: boolean;
+};
 
 const RANGE_OPTIONS: ReadonlyArray<{ value: GalleryRange; label: string }> = [
   { value: "7d", label: "7 天" },
@@ -20,6 +29,7 @@ const RANGE_OPTIONS: ReadonlyArray<{ value: GalleryRange; label: string }> = [
 
 const MAX_PASTE_FILES = 20;
 const MAX_FILE_BYTES = 25 * 1024 * 1024;
+const MARQUEE_DRAG_THRESHOLD = 5;
 const TIMELINE_TIME_ZONE = "Asia/Shanghai";
 const TIMELINE_DATE_KEY = new Intl.DateTimeFormat("en-CA", {
   timeZone: TIMELINE_TIME_ZONE,
@@ -69,6 +79,22 @@ function timelineGroups(images: ImageItem[]): TimelineGroup[] {
   return Array.from(groups.values());
 }
 
+function selectionBoxBetween(originX: number, originY: number, currentX: number, currentY: number): SelectionBox {
+  return {
+    left: Math.min(originX, currentX),
+    top: Math.min(originY, currentY),
+    width: Math.abs(currentX - originX),
+    height: Math.abs(currentY - originY),
+  };
+}
+
+function intersectsSelectionBox(rect: DOMRect, box: SelectionBox): boolean {
+  return rect.right > box.left
+    && rect.left < box.left + box.width
+    && rect.bottom > box.top
+    && rect.top < box.top + box.height;
+}
+
 export default function App() {
   const [auth, setAuth] = useState<AuthState>("checking");
   const [range, setRange] = useState<GalleryRange>("7d");
@@ -80,12 +106,15 @@ export default function App() {
   const [account, setAccount] = useState<AccountInfo | null>(null);
   const [preview, setPreview] = useState<ImageItem | null>(null);
   const [selected, setSelected] = useState<Set<string>>(() => new Set());
+  const [selectionBox, setSelectionBox] = useState<SelectionBox | null>(null);
   const [uploadTasks, setUploadTasks] = useState<UploadTask[]>([]);
   const [toast, setToast] = useState<Toast | null>(null);
   const authRef = useRef<AuthState>(auth);
   const uploadQueue = useRef<Promise<void>>(Promise.resolve());
   const taskSequence = useRef(0);
   const toastTimer = useRef<number | undefined>(undefined);
+  const gallerySelectionSurface = useRef<HTMLElement | null>(null);
+  const marqueeGesture = useRef<MarqueeGesture | null>(null);
   const groupedImages = timelineGroups(images);
   authRef.current = auth;
 
@@ -303,6 +332,56 @@ export default function App() {
     });
   }
 
+  function beginMarqueeSelection(event: ReactPointerEvent<HTMLElement>) {
+    if (event.button !== 0 || event.pointerType === "touch") return;
+    const target = event.target as Element;
+    if (target.closest(".image-card, button, a, input, textarea, select, [contenteditable='true']")) return;
+
+    event.preventDefault();
+    marqueeGesture.current = {
+      pointerId: event.pointerId,
+      originX: event.clientX,
+      originY: event.clientY,
+      initialSelection: new Set(selected),
+      additive: event.metaKey || event.ctrlKey || event.shiftKey,
+      active: false,
+    };
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+  }
+
+  function updateMarqueeSelection(event: ReactPointerEvent<HTMLElement>) {
+    const gesture = marqueeGesture.current;
+    if (!gesture || gesture.pointerId !== event.pointerId) return;
+    if (!gesture.active
+      && Math.hypot(event.clientX - gesture.originX, event.clientY - gesture.originY) < MARQUEE_DRAG_THRESHOLD) return;
+
+    gesture.active = true;
+    event.preventDefault();
+    const box = selectionBoxBetween(gesture.originX, gesture.originY, event.clientX, event.clientY);
+    const next = gesture.additive ? new Set(gesture.initialSelection) : new Set<string>();
+    gallerySelectionSurface.current?.querySelectorAll<HTMLElement>(".image-card[data-image-id]").forEach((card) => {
+      if (intersectsSelectionBox(card.getBoundingClientRect(), box)) {
+        const id = card.dataset.imageId;
+        if (id) next.add(id);
+      }
+    });
+    setSelectionBox(box);
+    setSelected(next);
+  }
+
+  function finishMarqueeSelection(event: ReactPointerEvent<HTMLElement>, cancelled = false) {
+    const gesture = marqueeGesture.current;
+    if (!gesture || gesture.pointerId !== event.pointerId) return;
+
+    if (cancelled && gesture.active) setSelected(new Set(gesture.initialSelection));
+    else if (!gesture.active && !gesture.additive) setSelected(new Set());
+    marqueeGesture.current = null;
+    setSelectionBox(null);
+    if (event.currentTarget.hasPointerCapture?.(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+  }
+
   async function logout() {
     try {
       await deleteSession();
@@ -367,7 +446,15 @@ export default function App() {
           <div className="empty-gallery"><ImageIcon /><p>粘贴第一张图片</p></div>
         ) : null}
         {images.length > 0 ? (
-          <section className={`image-timeline${loading ? " image-timeline--loading" : ""}`} aria-label="图库">
+          <section
+            ref={gallerySelectionSurface}
+            className={`image-timeline${loading ? " image-timeline--loading" : ""}${selectionBox ? " image-timeline--selecting" : ""}`}
+            aria-label="图库"
+            onPointerDown={beginMarqueeSelection}
+            onPointerMove={updateMarqueeSelection}
+            onPointerUp={(event) => finishMarqueeSelection(event)}
+            onPointerCancel={(event) => finishMarqueeSelection(event, true)}
+          >
             {groupedImages.map((group) => (
               <div className="timeline-group" key={group.key}>
                 <header className="timeline-group__label">
@@ -391,6 +478,18 @@ export default function App() {
                 </div>
               </div>
             ))}
+            {selectionBox ? (
+              <div
+                className="marquee-selection"
+                aria-hidden="true"
+                style={{
+                  left: selectionBox.left,
+                  top: selectionBox.top,
+                  width: selectionBox.width,
+                  height: selectionBox.height,
+                }}
+              />
+            ) : null}
           </section>
         ) : null}
         {images.length === 100 ? <p className="list-limit">当前显示最近 100 张</p> : null}
