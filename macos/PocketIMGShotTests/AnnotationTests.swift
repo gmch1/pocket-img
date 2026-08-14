@@ -99,6 +99,17 @@ final class AnnotationTests: XCTestCase {
         XCTAssertEqual(moved.color, annotation.color)
     }
 
+    func testClampsAnnotationMovementToSelectionBounds() {
+        let offset = CaptureGeometry.clampedMovementOffset(
+            moving: CGRect(x: 180, y: 120, width: 60, height: 40),
+            from: CGPoint(x: 200, y: 140),
+            to: CGPoint(x: 500, y: 500),
+            within: CGRect(x: 100, y: 80, width: 200, height: 120)
+        )
+
+        XCTAssertEqual(offset, CGPoint(x: 60, y: 40))
+    }
+
     func testAnnotationStyleSizesHaveToolDefaultsAndCanBeCustomized() {
         let rectangle = Annotation(
             tool: .rectangle,

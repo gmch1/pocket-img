@@ -117,6 +117,21 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
         static let toolbarCornerRadius: CGFloat = 8
     }
 
+    private enum AnnotationResizeHandle: Equatable {
+        case rectangleTopLeft
+        case rectangleTopRight
+        case rectangleBottomLeft
+        case rectangleBottomRight
+        case arrowStart
+        case arrowEnd
+        case textScale
+    }
+
+    private struct AnnotationHit {
+        let index: Int
+        let resizeHandle: AnnotationResizeHandle?
+    }
+
     weak var delegate: CaptureOverlayViewDelegate?
     var onAnnotationStyleChange: ((AnnotationStylePreferences) -> Void)?
     var annotationStyle = AnnotationStylePreferences.default {
@@ -171,6 +186,10 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
     }
     private var annotations: [Annotation] = []
     private var currentAnnotation: Annotation?
+    private var selectedAnnotationIndex: Int?
+    private var hoveredAnnotationHit: AnnotationHit?
+    private var annotationAtDragStart: Annotation?
+    private var annotationResizeHandle: AnnotationResizeHandle?
     private var textEditor: NSTextField?
     private var textAnchor: CGPoint?
     private var textEditorSize: CGFloat?
@@ -196,10 +215,18 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
         }
         addCursorRect(bounds, cursor: .arrow)
         if selectedTool == nil, let selection {
+            let isMoving = selectionAtDragStart != nil
+                || (annotationAtDragStart != nil && annotationResizeHandle == nil)
             addCursorRect(
                 selection,
-                cursor: selectionAtDragStart == nil ? .openHand : .closedHand
+                cursor: isMoving ? .closedHand : .openHand
             )
+            let controlIndex = hoveredAnnotationHit?.index ?? selectedAnnotationIndex
+            if let controlIndex, annotations.indices.contains(controlIndex) {
+                for (_, frame) in annotationResizeHandles(for: annotations[controlIndex]) {
+                    addCursorRect(frame.insetBy(dx: -3, dy: -3), cursor: .crosshair)
+                }
+            }
         }
     }
 
@@ -236,6 +263,17 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
             commitTextEditing()
             dragStart = point
             guard let selectedTool else {
+                if let hit = annotationHit(at: point) {
+                    selectedAnnotationIndex = hit.index
+                    annotationAtDragStart = annotations[hit.index]
+                    annotationResizeHandle = hit.resizeHandle
+                    selectionAtDragStart = nil
+                    annotationsAtDragStart = nil
+                    window?.invalidateCursorRects(for: self)
+                    needsDisplay = true
+                    return
+                }
+                selectedAnnotationIndex = nil
                 selectionAtDragStart = selection
                 annotationsAtDragStart = annotations
                 window?.invalidateCursorRects(for: self)
@@ -262,6 +300,37 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
         case .editing:
             guard let selection else { return }
             guard let selectedTool else {
+                if let originalAnnotation = annotationAtDragStart,
+                   let selectedAnnotationIndex,
+                   annotations.indices.contains(selectedAnnotationIndex) {
+                    if let annotationResizeHandle {
+                        annotations[selectedAnnotationIndex] = resizedAnnotation(
+                            originalAnnotation,
+                            using: annotationResizeHandle,
+                            to: point,
+                            within: selection
+                        )
+                    } else {
+                        let annotationBounds = annotationInteractionBounds(originalAnnotation)
+                        let offset = CaptureGeometry.clampedMovementOffset(
+                            moving: annotationBounds,
+                            from: dragStart,
+                            to: point,
+                            within: selection
+                        )
+                        annotations[selectedAnnotationIndex] = originalAnnotation.translatedBy(
+                            x: offset.x,
+                            y: offset.y
+                        )
+                    }
+                    hoveredAnnotationHit = AnnotationHit(
+                        index: selectedAnnotationIndex,
+                        resizeHandle: annotationResizeHandle
+                    )
+                    window?.invalidateCursorRects(for: self)
+                    needsDisplay = true
+                    return
+                }
                 guard let originalSelection = selectionAtDragStart,
                       let originalAnnotations = annotationsAtDragStart else { return }
                 let movedSelection = CaptureGeometry.movedSelection(
@@ -300,6 +369,8 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
             dragStart = nil
             selectionAtDragStart = nil
             annotationsAtDragStart = nil
+            annotationAtDragStart = nil
+            annotationResizeHandle = nil
             window?.invalidateCursorRects(for: self)
         }
         guard !isFinishing else { return }
@@ -327,6 +398,7 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
         case .editing:
             if let annotation = currentAnnotation, annotation.isMeaningful {
                 annotations.append(annotation)
+                selectedAnnotationIndex = annotations.indices.last
             }
             currentAnnotation = nil
         }
@@ -341,6 +413,8 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
         if event.modifierFlags.contains(.command), event.charactersIgnoringModifiers?.lowercased() == "z" {
             if !annotations.isEmpty { annotations.removeLast() }
             currentAnnotation = nil
+            selectedAnnotationIndex = nil
+            hoveredAnnotationHit = nil
             needsDisplay = true
             return
         }
@@ -418,9 +492,21 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
     }
 
     override func mouseMoved(with event: NSEvent) {
-        guard mode == .selecting, !isFinishing else { return }
-        hoverPoint = constrained(convert(event.locationInWindow, from: nil))
-        needsDisplay = true
+        guard !isFinishing else { return }
+        let point = constrained(convert(event.locationInWindow, from: nil))
+        switch mode {
+        case .selecting:
+            hoverPoint = point
+            needsDisplay = true
+        case .editing:
+            guard selectedTool == nil else {
+                hoveredAnnotationHit = nil
+                return
+            }
+            hoveredAnnotationHit = annotationHit(at: point)
+            window?.invalidateCursorRects(for: self)
+            needsDisplay = true
+        }
     }
 
     override func draw(_ dirtyRect: NSRect) {
@@ -484,6 +570,12 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
         if let currentAnnotation {
             draw(currentAnnotation, color: currentAnnotation.color.nsColor)
         }
+        if selectedTool == nil {
+            let controlIndex = hoveredAnnotationHit?.index ?? selectedAnnotationIndex
+            if let controlIndex, annotations.indices.contains(controlIndex) {
+                drawAnnotationControls(for: annotations[controlIndex])
+            }
+        }
 
         drawSizeLabel(selection)
         if mode == .editing {
@@ -529,6 +621,37 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
                 .foregroundColor: color,
             ]
         )
+    }
+
+    private func drawAnnotationControls(for annotation: Annotation) {
+        let outline = NSBezierPath()
+        if annotation.tool == .arrow {
+            outline.move(to: annotation.start)
+            outline.line(to: annotation.end)
+        } else {
+            outline.appendRoundedRect(
+                annotationInteractionBounds(annotation).insetBy(dx: -3, dy: -3),
+                xRadius: 3,
+                yRadius: 3
+            )
+        }
+        NSColor.controlAccentColor.withAlphaComponent(0.82).setStroke()
+        outline.lineWidth = 1
+        outline.setLineDash([4, 3], count: 2, phase: 0)
+        outline.stroke()
+
+        for (_, frame) in annotationResizeHandles(for: annotation) {
+            NSColor.white.setFill()
+            NSBezierPath(roundedRect: frame, xRadius: 1.5, yRadius: 1.5).fill()
+            NSColor.controlAccentColor.setStroke()
+            let handleOutline = NSBezierPath(
+                roundedRect: frame.insetBy(dx: 0.5, dy: 0.5),
+                xRadius: 1.5,
+                yRadius: 1.5
+            )
+            handleOutline.lineWidth = 1.5
+            handleOutline.stroke()
+        }
     }
 
     private func drawToolbar() {
@@ -1093,6 +1216,7 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
                 styleSize: styleSize,
                 color: color
             ))
+            selectedAnnotationIndex = annotations.indices.last
         }
         window?.makeFirstResponder(self)
         needsDisplay = true
@@ -1194,6 +1318,8 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
         case .undo:
             if !annotations.isEmpty { annotations.removeLast() }
             currentAnnotation = nil
+            selectedAnnotationIndex = nil
+            hoveredAnnotationHit = nil
         case .cancel:
             delegate?.captureOverlayDidCancel(self)
         case .pin:
@@ -1354,9 +1480,246 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
         )
     }
 
+    private func annotationHit(at point: CGPoint) -> AnnotationHit? {
+        var controlIndices: [Int] = []
+        if let hoveredIndex = hoveredAnnotationHit?.index {
+            controlIndices.append(hoveredIndex)
+        }
+        if let selectedAnnotationIndex, !controlIndices.contains(selectedAnnotationIndex) {
+            controlIndices.append(selectedAnnotationIndex)
+        }
+        for index in controlIndices where annotations.indices.contains(index) {
+            for (handle, frame) in annotationResizeHandles(for: annotations[index])
+                where frame.insetBy(dx: -4, dy: -4).contains(point) {
+                return AnnotationHit(index: index, resizeHandle: handle)
+            }
+        }
+
+        for index in annotations.indices.reversed() {
+            let annotation = annotations[index]
+            if annotationContains(
+                annotation,
+                point: point,
+                useFilledBounds: index == selectedAnnotationIndex
+            ) {
+                return AnnotationHit(index: index, resizeHandle: nil)
+            }
+        }
+        return nil
+    }
+
+    private func annotationContains(
+        _ annotation: Annotation,
+        point: CGPoint,
+        useFilledBounds: Bool
+    ) -> Bool {
+        switch annotation.tool {
+        case .rectangle:
+            let tolerance = max(6, annotation.resolvedStyleSize / 2 + 4)
+            let rect = annotation.rect
+            guard rect.insetBy(dx: -tolerance, dy: -tolerance).contains(point) else {
+                return false
+            }
+            if useFilledBounds || rect.width <= tolerance * 2 || rect.height <= tolerance * 2 {
+                return true
+            }
+            return !rect.insetBy(dx: tolerance, dy: tolerance).contains(point)
+        case .arrow:
+            let tolerance = max(6, annotation.resolvedStyleSize / 2 + 4)
+            return distance(from: point, toSegmentFrom: annotation.start, to: annotation.end)
+                <= tolerance
+        case .text:
+            return annotationInteractionBounds(annotation)
+                .insetBy(dx: -5, dy: -5)
+                .contains(point)
+        }
+    }
+
+    private func distance(
+        from point: CGPoint,
+        toSegmentFrom start: CGPoint,
+        to end: CGPoint
+    ) -> CGFloat {
+        let deltaX = end.x - start.x
+        let deltaY = end.y - start.y
+        let squaredLength = deltaX * deltaX + deltaY * deltaY
+        guard squaredLength > 0 else {
+            return hypot(point.x - start.x, point.y - start.y)
+        }
+        let projection = min(
+            1,
+            max(
+                0,
+                ((point.x - start.x) * deltaX + (point.y - start.y) * deltaY)
+                    / squaredLength
+            )
+        )
+        let nearest = CGPoint(
+            x: start.x + projection * deltaX,
+            y: start.y + projection * deltaY
+        )
+        return hypot(point.x - nearest.x, point.y - nearest.y)
+    }
+
+    private func annotationInteractionBounds(_ annotation: Annotation) -> CGRect {
+        switch annotation.tool {
+        case .rectangle:
+            return annotation.rect
+        case .arrow:
+            return CGRect.between(annotation.start, annotation.end)
+                .insetBy(dx: -1, dy: -1)
+        case .text:
+            guard let value = annotation.text else {
+                return CGRect(origin: annotation.start, size: .zero)
+            }
+            let font = annotationTextFont(size: annotation.resolvedStyleSize)
+            let size = value.size(withAttributes: [.font: font])
+            return CGRect(origin: annotation.start, size: size)
+        }
+    }
+
+    private func annotationResizeHandles(
+        for annotation: Annotation
+    ) -> [(AnnotationResizeHandle, CGRect)] {
+        let size: CGFloat = 7
+        func frame(center: CGPoint) -> CGRect {
+            CGRect(
+                x: center.x - size / 2,
+                y: center.y - size / 2,
+                width: size,
+                height: size
+            )
+        }
+
+        switch annotation.tool {
+        case .rectangle:
+            let rect = annotation.rect
+            return [
+                (.rectangleTopLeft, frame(center: CGPoint(x: rect.minX, y: rect.minY))),
+                (.rectangleTopRight, frame(center: CGPoint(x: rect.maxX, y: rect.minY))),
+                (.rectangleBottomLeft, frame(center: CGPoint(x: rect.minX, y: rect.maxY))),
+                (.rectangleBottomRight, frame(center: CGPoint(x: rect.maxX, y: rect.maxY))),
+            ]
+        case .arrow:
+            return [
+                (.arrowStart, frame(center: annotation.start)),
+                (.arrowEnd, frame(center: annotation.end)),
+            ]
+        case .text:
+            let bounds = annotationInteractionBounds(annotation)
+            return [
+                (.textScale, frame(center: CGPoint(x: bounds.maxX, y: bounds.maxY))),
+            ]
+        }
+    }
+
+    private func resizedAnnotation(
+        _ annotation: Annotation,
+        using handle: AnnotationResizeHandle,
+        to point: CGPoint,
+        within selection: CGRect
+    ) -> Annotation {
+        let point = CGPoint(
+            x: min(max(point.x, selection.minX), selection.maxX),
+            y: min(max(point.y, selection.minY), selection.maxY)
+        )
+        switch handle {
+        case .rectangleTopLeft,
+             .rectangleTopRight,
+             .rectangleBottomLeft,
+             .rectangleBottomRight:
+            guard annotation.tool == .rectangle else { return annotation }
+            let rect = annotation.rect
+            let opposite: CGPoint
+            var endpoint = point
+            switch handle {
+            case .rectangleTopLeft:
+                opposite = CGPoint(x: rect.maxX, y: rect.maxY)
+                endpoint.x = min(endpoint.x, opposite.x - 3)
+                endpoint.y = min(endpoint.y, opposite.y - 3)
+            case .rectangleTopRight:
+                opposite = CGPoint(x: rect.minX, y: rect.maxY)
+                endpoint.x = max(endpoint.x, opposite.x + 3)
+                endpoint.y = min(endpoint.y, opposite.y - 3)
+            case .rectangleBottomLeft:
+                opposite = CGPoint(x: rect.maxX, y: rect.minY)
+                endpoint.x = min(endpoint.x, opposite.x - 3)
+                endpoint.y = max(endpoint.y, opposite.y + 3)
+            case .rectangleBottomRight:
+                opposite = CGPoint(x: rect.minX, y: rect.minY)
+                endpoint.x = max(endpoint.x, opposite.x + 3)
+                endpoint.y = max(endpoint.y, opposite.y + 3)
+            default:
+                return annotation
+            }
+            return Annotation(
+                tool: .rectangle,
+                start: opposite,
+                end: endpoint,
+                styleSize: annotation.styleSize,
+                color: annotation.color
+            )
+        case .arrowStart:
+            guard annotation.tool == .arrow else { return annotation }
+            return Annotation(
+                tool: .arrow,
+                start: point,
+                end: annotation.end,
+                styleSize: annotation.styleSize,
+                color: annotation.color
+            )
+        case .arrowEnd:
+            guard annotation.tool == .arrow else { return annotation }
+            return Annotation(
+                tool: .arrow,
+                start: annotation.start,
+                end: point,
+                styleSize: annotation.styleSize,
+                color: annotation.color
+            )
+        case .textScale:
+            guard annotation.tool == .text, let value = annotation.text else { return annotation }
+            let originalBounds = annotationInteractionBounds(annotation)
+            let originalDistance = max(
+                1,
+                hypot(
+                    originalBounds.maxX - annotation.start.x,
+                    originalBounds.maxY - annotation.start.y
+                )
+            )
+            let requestedDistance = max(
+                1,
+                hypot(point.x - annotation.start.x, point.y - annotation.start.y)
+            )
+            var fontSize = min(
+                max(annotation.resolvedStyleSize * requestedDistance / originalDistance, 12),
+                72
+            )
+            let measured = value.size(withAttributes: [
+                .font: annotationTextFont(size: fontSize),
+            ])
+            let availableWidth = max(1, selection.maxX - annotation.start.x)
+            let availableHeight = max(1, selection.maxY - annotation.start.y)
+            let fitScale = min(
+                1,
+                min(availableWidth / max(measured.width, 1), availableHeight / max(measured.height, 1))
+            )
+            fontSize = min(max((fontSize * fitScale).rounded(), 12), 72)
+            return Annotation(
+                tool: .text,
+                start: annotation.start,
+                end: annotation.end,
+                text: value,
+                styleSize: fontSize,
+                color: annotation.color
+            )
+        }
+    }
+
     private func toggleAnnotationTool(_ tool: AnnotationTool) {
         selectedTool = selectedTool == tool ? nil : tool
         currentAnnotation = nil
+        hoveredAnnotationHit = nil
         toolSizeHintVisible = false
     }
 
