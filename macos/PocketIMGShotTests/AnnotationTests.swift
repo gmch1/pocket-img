@@ -47,6 +47,24 @@ final class AnnotationTests: XCTestCase {
         XCTAssertEqual(screenFrame, CGRect(x: -1820, y: 730, width: 500, height: 300))
     }
 
+    func testConvertsGlobalPlacementToSecondaryScreenCoordinates() {
+        let localFrame = CaptureGeometry.screenLocalFrame(
+            for: CGRect(x: -1820, y: 730, width: 500, height: 300),
+            on: CGRect(x: -1920, y: 0, width: 1920, height: 1080)
+        )
+
+        XCTAssertEqual(localFrame, CGRect(x: 100, y: 730, width: 500, height: 300))
+    }
+
+    func testConvertsGlobalPlacementForScreenAboveMainDisplay() {
+        let localFrame = CaptureGeometry.screenLocalFrame(
+            for: CGRect(x: 240, y: 1260, width: 500, height: 300),
+            on: CGRect(x: 0, y: 1080, width: 1920, height: 1080)
+        )
+
+        XCTAssertEqual(localFrame, CGRect(x: 240, y: 180, width: 500, height: 300))
+    }
+
     func testCapturePixelSizeUsesRetinaBackingScale() {
         XCTAssertEqual(
             CaptureGeometry.capturePixelSize(
