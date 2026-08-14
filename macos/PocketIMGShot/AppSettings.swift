@@ -97,7 +97,7 @@ enum SettingsError: LocalizedError {
 
 @MainActor
 final class AppSettings: ObservableObject {
-    private static let currentSchemaVersion = 3
+    private static let currentSchemaVersion = 4
 
     @Published var serverAddress: String
     @Published var token: String
