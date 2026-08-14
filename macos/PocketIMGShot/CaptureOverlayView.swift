@@ -214,12 +214,14 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
             return
         }
         addCursorRect(bounds, cursor: .arrow)
-        if selectedTool == nil, let selection {
+        if let selection {
             let isMoving = selectionAtDragStart != nil
                 || (annotationAtDragStart != nil && annotationResizeHandle == nil)
             addCursorRect(
                 selection,
-                cursor: isMoving ? .closedHand : .openHand
+                cursor: selectedTool == nil
+                    ? (isMoving ? .closedHand : .openHand)
+                    : .crosshair
             )
             let controlIndex = hoveredAnnotationHit?.index ?? selectedAnnotationIndex
             if let controlIndex, annotations.indices.contains(controlIndex) {
@@ -256,29 +258,35 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
                 colorPaletteVisible = false
             }
             guard let selection, selection.contains(point) else { return }
-            if selectedTool == .text {
-                beginTextEditing(at: point)
+            commitTextEditing()
+            if let hit = editableAnnotationHit(at: point) {
+                dragStart = point
+                selectedAnnotationIndex = hit.index
+                annotationAtDragStart = annotations[hit.index]
+                annotationResizeHandle = hit.resizeHandle
+                selectionAtDragStart = nil
+                annotationsAtDragStart = nil
+                window?.invalidateCursorRects(for: self)
+                needsDisplay = true
                 return
             }
-            commitTextEditing()
+            if selectedTool == .text {
+                selectedAnnotationIndex = nil
+                hoveredAnnotationHit = nil
+                beginTextEditing(at: point)
+                window?.invalidateCursorRects(for: self)
+                return
+            }
             dragStart = point
             guard let selectedTool else {
-                if let hit = annotationHit(at: point) {
-                    selectedAnnotationIndex = hit.index
-                    annotationAtDragStart = annotations[hit.index]
-                    annotationResizeHandle = hit.resizeHandle
-                    selectionAtDragStart = nil
-                    annotationsAtDragStart = nil
-                    window?.invalidateCursorRects(for: self)
-                    needsDisplay = true
-                    return
-                }
                 selectedAnnotationIndex = nil
                 selectionAtDragStart = selection
                 annotationsAtDragStart = annotations
                 window?.invalidateCursorRects(for: self)
                 return
             }
+            selectedAnnotationIndex = nil
+            hoveredAnnotationHit = nil
             currentAnnotation = Annotation(
                 tool: selectedTool,
                 start: point,
@@ -299,38 +307,38 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
             selection = CGRect.between(dragStart, point).intersection(bounds)
         case .editing:
             guard let selection else { return }
-            guard let selectedTool else {
-                if let originalAnnotation = annotationAtDragStart,
-                   let selectedAnnotationIndex,
-                   annotations.indices.contains(selectedAnnotationIndex) {
-                    if let annotationResizeHandle {
-                        annotations[selectedAnnotationIndex] = resizedAnnotation(
-                            originalAnnotation,
-                            using: annotationResizeHandle,
-                            to: point,
-                            within: selection
-                        )
-                    } else {
-                        let annotationBounds = annotationInteractionBounds(originalAnnotation)
-                        let offset = CaptureGeometry.clampedMovementOffset(
-                            moving: annotationBounds,
-                            from: dragStart,
-                            to: point,
-                            within: selection
-                        )
-                        annotations[selectedAnnotationIndex] = originalAnnotation.translatedBy(
-                            x: offset.x,
-                            y: offset.y
-                        )
-                    }
-                    hoveredAnnotationHit = AnnotationHit(
-                        index: selectedAnnotationIndex,
-                        resizeHandle: annotationResizeHandle
+            if let originalAnnotation = annotationAtDragStart,
+               let selectedAnnotationIndex,
+               annotations.indices.contains(selectedAnnotationIndex) {
+                if let annotationResizeHandle {
+                    annotations[selectedAnnotationIndex] = resizedAnnotation(
+                        originalAnnotation,
+                        using: annotationResizeHandle,
+                        to: point,
+                        within: selection
                     )
-                    window?.invalidateCursorRects(for: self)
-                    needsDisplay = true
-                    return
+                } else {
+                    let annotationBounds = annotationInteractionBounds(originalAnnotation)
+                    let offset = CaptureGeometry.clampedMovementOffset(
+                        moving: annotationBounds,
+                        from: dragStart,
+                        to: point,
+                        within: selection
+                    )
+                    annotations[selectedAnnotationIndex] = originalAnnotation.translatedBy(
+                        x: offset.x,
+                        y: offset.y
+                    )
                 }
+                hoveredAnnotationHit = AnnotationHit(
+                    index: selectedAnnotationIndex,
+                    resizeHandle: annotationResizeHandle
+                )
+                window?.invalidateCursorRects(for: self)
+                needsDisplay = true
+                return
+            }
+            guard let selectedTool else {
                 guard let originalSelection = selectionAtDragStart,
                       let originalAnnotations = annotationsAtDragStart else { return }
                 let movedSelection = CaptureGeometry.movedSelection(
@@ -499,11 +507,7 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
             hoverPoint = point
             needsDisplay = true
         case .editing:
-            guard selectedTool == nil else {
-                hoveredAnnotationHit = nil
-                return
-            }
-            hoveredAnnotationHit = annotationHit(at: point)
+            hoveredAnnotationHit = editableAnnotationHit(at: point)
             window?.invalidateCursorRects(for: self)
             needsDisplay = true
         }
@@ -570,11 +574,9 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
         if let currentAnnotation {
             draw(currentAnnotation, color: currentAnnotation.color.nsColor)
         }
-        if selectedTool == nil {
-            let controlIndex = hoveredAnnotationHit?.index ?? selectedAnnotationIndex
-            if let controlIndex, annotations.indices.contains(controlIndex) {
-                drawAnnotationControls(for: annotations[controlIndex])
-            }
+        let controlIndex = hoveredAnnotationHit?.index ?? selectedAnnotationIndex
+        if let controlIndex, annotations.indices.contains(controlIndex) {
+            drawAnnotationControls(for: annotations[controlIndex])
         }
 
         drawSizeLabel(selection)
@@ -1506,6 +1508,25 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
             }
         }
         return nil
+    }
+
+    private func editableAnnotationHit(at point: CGPoint) -> AnnotationHit? {
+        guard selectedTool != nil else {
+            return annotationHit(at: point)
+        }
+        guard let selectedAnnotationIndex,
+              annotations.indices.contains(selectedAnnotationIndex) else {
+            return nil
+        }
+        let annotation = annotations[selectedAnnotationIndex]
+        for (handle, frame) in annotationResizeHandles(for: annotation)
+            where frame.insetBy(dx: -4, dy: -4).contains(point) {
+            return AnnotationHit(index: selectedAnnotationIndex, resizeHandle: handle)
+        }
+        guard annotationContains(annotation, point: point, useFilledBounds: true) else {
+            return nil
+        }
+        return AnnotationHit(index: selectedAnnotationIndex, resizeHandle: nil)
     }
 
     private func annotationContains(
