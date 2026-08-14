@@ -56,6 +56,7 @@ export function ImageCard({ image, selected, selectionMode, onOpen, onCopy, onDe
   return (
     <article
       className={`image-card${selected ? " image-card--selected" : ""}`}
+      data-image-id={image.id}
       tabIndex={0}
       role="button"
       aria-pressed={selectionMode ? selected : undefined}
