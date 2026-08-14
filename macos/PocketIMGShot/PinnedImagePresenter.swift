@@ -12,17 +12,30 @@ final class PinnedImagePresenter: NSObject, NSWindowDelegate {
             throw PinnedImageError.invalidImage
         }
 
-        let screen = NSScreen.screens.first(where: { $0.frame.intersects(placementFrame) }) ?? NSScreen.main
-        guard screen != nil else {
+        guard let screen = NSScreen.screens.first(where: { $0.frame.intersects(placementFrame) })
+            ?? NSScreen.main else {
             throw PinnedImageError.noScreen
         }
+        let screenLocalFrame = CaptureGeometry.screenLocalFrame(
+            for: placementFrame,
+            on: screen.frame
+        )
 
         let window = PinnedImageWindow(
-            contentRect: placementFrame,
+            contentRect: screenLocalFrame,
             styleMask: [.borderless, .resizable],
             backing: .buffered,
             defer: false,
             screen: screen
+        )
+        // The screen-specific initializer expects its origin relative to that screen.
+        // setFrame uses global screen coordinates and prevents AppKit from retaining a
+        // doubly-offset position on secondary displays.
+        window.setFrame(placementFrame, display: false)
+        DiagnosticLog.record(
+            "pin window placement=\(Int(placementFrame.minX)),\(Int(placementFrame.minY)) " +
+            "size=\(Int(placementFrame.width))x\(Int(placementFrame.height)) " +
+            "screenOrigin=\(Int(screen.frame.minX)),\(Int(screen.frame.minY))"
         )
         let imageView = PinnedImageView(frame: CGRect(origin: .zero, size: placementFrame.size))
         imageView.image = image

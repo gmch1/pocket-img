@@ -207,6 +207,15 @@ enum CaptureGeometry {
         )
     }
 
+    static func screenLocalFrame(for frame: CGRect, on screenFrame: CGRect) -> CGRect {
+        CGRect(
+            x: frame.minX - screenFrame.minX,
+            y: frame.minY - screenFrame.minY,
+            width: frame.width,
+            height: frame.height
+        )
+    }
+
     static func movedSelection(
         _ selection: CGRect,
         from dragStart: CGPoint,
