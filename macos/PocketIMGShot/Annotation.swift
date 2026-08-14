@@ -202,17 +202,32 @@ enum CaptureGeometry {
         to point: CGPoint,
         within bounds: CGRect
     ) -> CGRect {
+        let offset = clampedMovementOffset(
+            moving: selection,
+            from: dragStart,
+            to: point,
+            within: bounds
+        )
+        return selection.offsetBy(dx: offset.x, dy: offset.y)
+    }
+
+    static func clampedMovementOffset(
+        moving frame: CGRect,
+        from dragStart: CGPoint,
+        to point: CGPoint,
+        within bounds: CGRect
+    ) -> CGPoint {
         let requestedX = (point.x - dragStart.x).rounded()
         let requestedY = (point.y - dragStart.y).rounded()
         let offsetX = min(
-            max(requestedX, bounds.minX - selection.minX),
-            bounds.maxX - selection.maxX
+            max(requestedX, bounds.minX - frame.minX),
+            bounds.maxX - frame.maxX
         )
         let offsetY = min(
-            max(requestedY, bounds.minY - selection.minY),
-            bounds.maxY - selection.maxY
+            max(requestedY, bounds.minY - frame.minY),
+            bounds.maxY - frame.maxY
         )
-        return selection.offsetBy(dx: offsetX, dy: offsetY)
+        return CGPoint(x: offsetX, y: offsetY)
     }
 }
 
