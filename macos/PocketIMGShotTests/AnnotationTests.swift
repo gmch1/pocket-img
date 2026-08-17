@@ -98,6 +98,117 @@ final class AnnotationTests: XCTestCase {
         )
     }
 
+    func testResizesSelectionFromEveryEdgeAndCorner() {
+        let selection = CGRect(x: 100, y: 80, width: 300, height: 200)
+        let bounds = CGRect(x: 0, y: 0, width: 800, height: 600)
+
+        XCTAssertEqual(
+            CaptureGeometry.resizedSelection(
+                selection,
+                using: .topLeft,
+                to: CGPoint(x: 50, y: 30),
+                within: bounds
+            ),
+            CGRect(x: 50, y: 30, width: 350, height: 250)
+        )
+        XCTAssertEqual(
+            CaptureGeometry.resizedSelection(
+                selection,
+                using: .top,
+                to: CGPoint(x: 250, y: 45),
+                within: bounds
+            ),
+            CGRect(x: 100, y: 45, width: 300, height: 235)
+        )
+        XCTAssertEqual(
+            CaptureGeometry.resizedSelection(
+                selection,
+                using: .topRight,
+                to: CGPoint(x: 470, y: 40),
+                within: bounds
+            ),
+            CGRect(x: 100, y: 40, width: 370, height: 240)
+        )
+        XCTAssertEqual(
+            CaptureGeometry.resizedSelection(
+                selection,
+                using: .right,
+                to: CGPoint(x: 460, y: 180),
+                within: bounds
+            ),
+            CGRect(x: 100, y: 80, width: 360, height: 200)
+        )
+        XCTAssertEqual(
+            CaptureGeometry.resizedSelection(
+                selection,
+                using: .bottom,
+                to: CGPoint(x: 250, y: 340),
+                within: bounds
+            ),
+            CGRect(x: 100, y: 80, width: 300, height: 260)
+        )
+        XCTAssertEqual(
+            CaptureGeometry.resizedSelection(
+                selection,
+                using: .bottomLeft,
+                to: CGPoint(x: 60, y: 350),
+                within: bounds
+            ),
+            CGRect(x: 60, y: 80, width: 340, height: 270)
+        )
+        XCTAssertEqual(
+            CaptureGeometry.resizedSelection(
+                selection,
+                using: .left,
+                to: CGPoint(x: 70, y: 180),
+                within: bounds
+            ),
+            CGRect(x: 70, y: 80, width: 330, height: 200)
+        )
+        XCTAssertEqual(
+            CaptureGeometry.resizedSelection(
+                selection,
+                using: .bottomRight,
+                to: CGPoint(x: 520, y: 360),
+                within: bounds
+            ),
+            CGRect(x: 100, y: 80, width: 420, height: 280)
+        )
+    }
+
+    func testSelectionResizeClampsToScreenAndMinimumSize() {
+        let selection = CGRect(x: 100, y: 80, width: 300, height: 200)
+        let bounds = CGRect(x: 0, y: 0, width: 800, height: 600)
+
+        XCTAssertEqual(
+            CaptureGeometry.resizedSelection(
+                selection,
+                using: .topLeft,
+                to: CGPoint(x: -200, y: -100),
+                within: bounds
+            ),
+            CGRect(x: 0, y: 0, width: 400, height: 280)
+        )
+        XCTAssertEqual(
+            CaptureGeometry.resizedSelection(
+                selection,
+                using: .left,
+                to: CGPoint(x: 500, y: 180),
+                within: bounds
+            ),
+            CGRect(x: 392, y: 80, width: 8, height: 200)
+        )
+        XCTAssertEqual(
+            CaptureGeometry.resizedSelection(
+                selection,
+                using: .bottomRight,
+                to: CGPoint(x: 900, y: 700),
+                within: bounds
+            ),
+            CGRect(x: 100, y: 80, width: 700, height: 520)
+        )
+    }
+
     func testAnnotationsFollowMovedSelection() {
         let annotation = Annotation(
             tool: .text,

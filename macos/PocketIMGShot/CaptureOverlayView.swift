@@ -115,6 +115,8 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
         static let toolbarSpacing: CGFloat = 2
         static let toolbarGroupGap: CGFloat = 5
         static let toolbarCornerRadius: CGFloat = 8
+        static let selectionHandleSize: CGFloat = 7
+        static let selectionHandleHitSize: CGFloat = 14
     }
 
     private enum AnnotationResizeHandle: Equatable {
@@ -177,6 +179,8 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
     private var mode: Mode = .selecting
     private var dragStart: CGPoint?
     private var selectionAtDragStart: CGRect?
+    private var selectionResizeHandle: SelectionResizeHandle?
+    private var hoveredSelectionResizeHandle: SelectionResizeHandle?
     private var annotationsAtDragStart: [Annotation]?
     private var selection: CGRect?
     private var selectedTool: AnnotationTool? {
@@ -205,6 +209,8 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
     private var toolSizeHintTool: AnnotationTool?
     private var toolSizeHintGeneration = 0
     private var isFinishing = false
+    private lazy var northwestSoutheastResizeCursor = Self.makeDiagonalResizeCursor(falling: true)
+    private lazy var northeastSouthwestResizeCursor = Self.makeDiagonalResizeCursor(falling: false)
 
     override var isFlipped: Bool { true }
     override var acceptsFirstResponder: Bool { true }
@@ -216,6 +222,10 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
         }
         addCursorRect(bounds, cursor: .arrow)
         if let selection {
+            if let selectionResizeHandle {
+                addCursorRect(bounds, cursor: cursor(for: selectionResizeHandle))
+                return
+            }
             let isMoving = selectionAtDragStart != nil
                 || (annotationAtDragStart != nil && annotationResizeHandle == nil)
             addCursorRect(
@@ -229,6 +239,9 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
                 for (_, frame) in annotationResizeHandles(for: annotations[controlIndex]) {
                     addCursorRect(frame.insetBy(dx: -3, dy: -3), cursor: .crosshair)
                 }
+            }
+            for (handle, frame) in selectionResizeHandleFrames(for: selection) {
+                addCursorRect(frame, cursor: cursor(for: handle))
             }
         }
     }
@@ -258,8 +271,23 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
             if colorPaletteVisible, !colorPaletteFrame().contains(point) {
                 colorPaletteVisible = false
             }
-            guard let selection, selection.contains(point) else { return }
+            guard let selection else { return }
             commitTextEditing()
+            if let handle = selectionResizeHandle(at: point, in: selection) {
+                dragStart = point
+                selectionAtDragStart = selection
+                selectionResizeHandle = handle
+                annotationsAtDragStart = nil
+                annotationAtDragStart = nil
+                annotationResizeHandle = nil
+                selectedAnnotationIndex = nil
+                hoveredAnnotationHit = nil
+                hoveredSelectionResizeHandle = handle
+                window?.invalidateCursorRects(for: self)
+                needsDisplay = true
+                return
+            }
+            guard selection.contains(point) else { return }
             if let hit = editableAnnotationHit(at: point) {
                 dragStart = point
                 selectedAnnotationIndex = hit.index
@@ -308,6 +336,19 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
             selection = CGRect.between(dragStart, point).intersection(bounds)
         case .editing:
             guard let selection else { return }
+            if let selectionResizeHandle,
+               let originalSelection = selectionAtDragStart {
+                self.selection = CaptureGeometry.resizedSelection(
+                    originalSelection,
+                    using: selectionResizeHandle,
+                    to: point,
+                    within: bounds
+                )
+                hoveredSelectionResizeHandle = selectionResizeHandle
+                window?.invalidateCursorRects(for: self)
+                needsDisplay = true
+                return
+            }
             if let originalAnnotation = annotationAtDragStart,
                let selectedAnnotationIndex,
                annotations.indices.contains(selectedAnnotationIndex) {
@@ -377,6 +418,7 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
         defer {
             dragStart = nil
             selectionAtDragStart = nil
+            selectionResizeHandle = nil
             annotationsAtDragStart = nil
             annotationAtDragStart = nil
             annotationResizeHandle = nil
@@ -405,6 +447,9 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
             hoverPoint = nil
             window?.invalidateCursorRects(for: self)
         case .editing:
+            hoveredSelectionResizeHandle = selection.flatMap {
+                selectionResizeHandle(at: point, in: $0)
+            }
             if let annotation = currentAnnotation, annotation.isMeaningful {
                 annotations.append(annotation)
                 selectedAnnotationIndex = annotations.indices.last
@@ -515,7 +560,12 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
             hoverPoint = point
             needsDisplay = true
         case .editing:
-            hoveredAnnotationHit = editableAnnotationHit(at: point)
+            hoveredSelectionResizeHandle = selection.flatMap {
+                selectionResizeHandle(at: point, in: $0)
+            }
+            hoveredAnnotationHit = hoveredSelectionResizeHandle == nil
+                ? editableAnnotationHit(at: point)
+                : nil
             window?.invalidateCursorRects(for: self)
             needsDisplay = true
         }
@@ -575,6 +625,10 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
         NSColor.controlAccentColor.setStroke()
         accent.lineWidth = 1.5
         accent.stroke()
+
+        if mode == .editing {
+            drawSelectionResizeHandles(for: selection)
+        }
 
         for annotation in annotations {
             draw(annotation, color: annotation.color.nsColor)
@@ -1497,6 +1551,161 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
             x: min(max(point.x, bounds.minX), bounds.maxX),
             y: min(max(point.y, bounds.minY), bounds.maxY)
         )
+    }
+
+    private func selectionResizeHandleFrames(
+        for selection: CGRect
+    ) -> [(SelectionResizeHandle, CGRect)] {
+        let hitSize = Appearance.selectionHandleHitSize
+        let halfHitSize = hitSize / 2
+        func frame(center: CGPoint) -> CGRect {
+            CGRect(
+                x: center.x - halfHitSize,
+                y: center.y - halfHitSize,
+                width: hitSize,
+                height: hitSize
+            )
+        }
+        return [
+            (.top, CGRect(
+                x: selection.minX + halfHitSize,
+                y: selection.minY - halfHitSize,
+                width: max(0, selection.width - hitSize),
+                height: hitSize
+            )),
+            (.right, CGRect(
+                x: selection.maxX - halfHitSize,
+                y: selection.minY + halfHitSize,
+                width: hitSize,
+                height: max(0, selection.height - hitSize)
+            )),
+            (.bottom, CGRect(
+                x: selection.minX + halfHitSize,
+                y: selection.maxY - halfHitSize,
+                width: max(0, selection.width - hitSize),
+                height: hitSize
+            )),
+            (.left, CGRect(
+                x: selection.minX - halfHitSize,
+                y: selection.minY + halfHitSize,
+                width: hitSize,
+                height: max(0, selection.height - hitSize)
+            )),
+            (.topLeft, frame(center: selectionResizeHandleCenter(.topLeft, in: selection))),
+            (.topRight, frame(center: selectionResizeHandleCenter(.topRight, in: selection))),
+            (.bottomRight, frame(center: selectionResizeHandleCenter(.bottomRight, in: selection))),
+            (.bottomLeft, frame(center: selectionResizeHandleCenter(.bottomLeft, in: selection))),
+        ]
+    }
+
+    private func selectionResizeHandleCenter(
+        _ handle: SelectionResizeHandle,
+        in selection: CGRect
+    ) -> CGPoint {
+        switch handle {
+        case .topLeft:
+            return CGPoint(x: selection.minX, y: selection.minY)
+        case .top:
+            return CGPoint(x: selection.midX, y: selection.minY)
+        case .topRight:
+            return CGPoint(x: selection.maxX, y: selection.minY)
+        case .right:
+            return CGPoint(x: selection.maxX, y: selection.midY)
+        case .bottomRight:
+            return CGPoint(x: selection.maxX, y: selection.maxY)
+        case .bottom:
+            return CGPoint(x: selection.midX, y: selection.maxY)
+        case .bottomLeft:
+            return CGPoint(x: selection.minX, y: selection.maxY)
+        case .left:
+            return CGPoint(x: selection.minX, y: selection.midY)
+        }
+    }
+
+    private func selectionResizeHandle(
+        at point: CGPoint,
+        in selection: CGRect
+    ) -> SelectionResizeHandle? {
+        let frames = selectionResizeHandleFrames(for: selection)
+        let corners: Set<SelectionResizeHandle> = [
+            .topLeft, .topRight, .bottomRight, .bottomLeft,
+        ]
+        return frames.first { corners.contains($0.0) && $0.1.contains(point) }?.0
+            ?? frames.first { $0.1.contains(point) }?.0
+    }
+
+    private func drawSelectionResizeHandles(for selection: CGRect) {
+        for handle in SelectionResizeHandle.allCases {
+            let size = handle == hoveredSelectionResizeHandle
+                ? Appearance.selectionHandleSize + 2
+                : Appearance.selectionHandleSize
+            let center = selectionResizeHandleCenter(handle, in: selection)
+            let frame = CGRect(
+                x: center.x - size / 2,
+                y: center.y - size / 2,
+                width: size,
+                height: size
+            )
+            NSColor.white.setFill()
+            NSBezierPath(ovalIn: frame).fill()
+            NSColor.controlAccentColor.setStroke()
+            let outline = NSBezierPath(ovalIn: frame.insetBy(dx: 0.5, dy: 0.5))
+            outline.lineWidth = 1.5
+            outline.stroke()
+        }
+    }
+
+    private func cursor(for handle: SelectionResizeHandle) -> NSCursor {
+        switch handle {
+        case .top, .bottom:
+            return .resizeUpDown
+        case .left, .right:
+            return .resizeLeftRight
+        case .topLeft, .bottomRight:
+            return northwestSoutheastResizeCursor
+        case .topRight, .bottomLeft:
+            return northeastSouthwestResizeCursor
+        }
+    }
+
+    private static func makeDiagonalResizeCursor(falling: Bool) -> NSCursor {
+        let size = NSSize(width: 24, height: 24)
+        let image = NSImage(size: size, flipped: false) { _ in
+            let start = falling ? CGPoint(x: 5, y: 19) : CGPoint(x: 5, y: 5)
+            let end = falling ? CGPoint(x: 19, y: 5) : CGPoint(x: 19, y: 19)
+            let path = NSBezierPath()
+            path.lineCapStyle = .round
+            path.lineJoinStyle = .round
+            path.move(to: start)
+            path.line(to: end)
+            if falling {
+                path.move(to: start)
+                path.line(to: CGPoint(x: 5, y: 13))
+                path.move(to: start)
+                path.line(to: CGPoint(x: 11, y: 19))
+                path.move(to: end)
+                path.line(to: CGPoint(x: 19, y: 11))
+                path.move(to: end)
+                path.line(to: CGPoint(x: 13, y: 5))
+            } else {
+                path.move(to: start)
+                path.line(to: CGPoint(x: 5, y: 11))
+                path.move(to: start)
+                path.line(to: CGPoint(x: 11, y: 5))
+                path.move(to: end)
+                path.line(to: CGPoint(x: 19, y: 13))
+                path.move(to: end)
+                path.line(to: CGPoint(x: 13, y: 19))
+            }
+            NSColor.white.setStroke()
+            path.lineWidth = 4
+            path.stroke()
+            NSColor.black.setStroke()
+            path.lineWidth = 2
+            path.stroke()
+            return true
+        }
+        return NSCursor(image: image, hotSpot: CGPoint(x: size.width / 2, y: size.height / 2))
     }
 
     private func annotationHit(at point: CGPoint) -> AnnotationHit? {

@@ -198,6 +198,17 @@ struct UploadPayload: Sendable {
     }
 }
 
+enum SelectionResizeHandle: CaseIterable, Hashable {
+    case topLeft
+    case top
+    case topRight
+    case right
+    case bottomRight
+    case bottom
+    case bottomLeft
+    case left
+}
+
 enum CaptureGeometry {
     static func capturePixelSize(
         displayPointSize: CGSize,
@@ -240,6 +251,55 @@ enum CaptureGeometry {
             within: bounds
         )
         return selection.offsetBy(dx: offset.x, dy: offset.y)
+    }
+
+    static func resizedSelection(
+        _ selection: CGRect,
+        using handle: SelectionResizeHandle,
+        to point: CGPoint,
+        within bounds: CGRect,
+        minimumSize: CGFloat = 8
+    ) -> CGRect {
+        let minimumWidth = min(max(1, minimumSize), bounds.width)
+        let minimumHeight = min(max(1, minimumSize), bounds.height)
+        let point = CGPoint(
+            x: min(max(point.x.rounded(), bounds.minX), bounds.maxX),
+            y: min(max(point.y.rounded(), bounds.minY), bounds.maxY)
+        )
+        var minX = selection.minX
+        var minY = selection.minY
+        var maxX = selection.maxX
+        var maxY = selection.maxY
+
+        switch handle {
+        case .topLeft:
+            minX = min(point.x, maxX - minimumWidth)
+            minY = min(point.y, maxY - minimumHeight)
+        case .top:
+            minY = min(point.y, maxY - minimumHeight)
+        case .topRight:
+            maxX = max(point.x, minX + minimumWidth)
+            minY = min(point.y, maxY - minimumHeight)
+        case .right:
+            maxX = max(point.x, minX + minimumWidth)
+        case .bottomRight:
+            maxX = max(point.x, minX + minimumWidth)
+            maxY = max(point.y, minY + minimumHeight)
+        case .bottom:
+            maxY = max(point.y, minY + minimumHeight)
+        case .bottomLeft:
+            minX = min(point.x, maxX - minimumWidth)
+            maxY = max(point.y, minY + minimumHeight)
+        case .left:
+            minX = min(point.x, maxX - minimumWidth)
+        }
+
+        return CGRect(
+            x: minX,
+            y: minY,
+            width: maxX - minX,
+            height: maxY - minY
+        ).intersection(bounds)
     }
 
     static func clampedMovementOffset(
