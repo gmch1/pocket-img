@@ -196,6 +196,7 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
     private var annotationResizeHandle: AnnotationResizeHandle?
     private var textEditor: NSTextField?
     private var textAnchor: CGPoint?
+    private var textEditorVerticalCenter: CGFloat?
     private var textEditorSize: CGFloat?
     private var textEditorColor: AnnotationColor?
     private var hoverPoint: CGPoint?
@@ -230,10 +231,25 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
                 || (annotationAtDragStart != nil && annotationResizeHandle == nil)
             addCursorRect(
                 selection,
-                cursor: selectedTool == nil
-                    ? (isMoving ? .closedHand : .openHand)
-                    : .crosshair
+                cursor: isMoving
+                    ? .closedHand
+                    : (selectedTool == nil ? .openHand : .crosshair)
             )
+            if let hoveredAnnotationHit,
+               hoveredAnnotationHit.resizeHandle == nil,
+               let hoverPoint,
+               annotations.indices.contains(hoveredAnnotationHit.index) {
+                let hoverCursorRect = CGRect(
+                    x: hoverPoint.x - 3,
+                    y: hoverPoint.y - 3,
+                    width: 6,
+                    height: 6
+                ).intersection(selection)
+                addCursorRect(
+                    hoverCursorRect,
+                    cursor: annotationAtDragStart == nil ? .openHand : .closedHand
+                )
+            }
             let controlIndex = hoveredAnnotationHit?.index ?? selectedAnnotationIndex
             if let controlIndex, annotations.indices.contains(controlIndex) {
                 for (_, frame) in annotationResizeHandles(for: annotations[controlIndex]) {
@@ -590,7 +606,6 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
             drawSelection(selection)
         } else {
             NSBezierPath(rect: bounds).fill()
-            drawCenteredHint("拖拽选择截图区域  ·  Esc 取消")
         }
 
         if mode == .selecting, let hoverPoint {
@@ -1005,28 +1020,6 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
         )
     }
 
-    private func drawCenteredHint(_ value: String) {
-        let attributes: [NSAttributedString.Key: Any] = [
-            .font: NSFont.systemFont(ofSize: 15, weight: .medium),
-            .foregroundColor: NSColor.white,
-        ]
-        let size = value.size(withAttributes: attributes)
-        let background = NSRect(
-            x: bounds.midX - size.width / 2 - 14,
-            y: bounds.midY - size.height / 2 - 9,
-            width: size.width + 28,
-            height: size.height + 18
-        )
-        NSColor(calibratedWhite: 0.08, alpha: 0.88).setFill()
-        NSBezierPath(roundedRect: background, xRadius: 10, yRadius: 10).fill()
-        NSColor.white.withAlphaComponent(0.16).setStroke()
-        NSBezierPath(roundedRect: background, xRadius: 10, yRadius: 10).stroke()
-        value.draw(
-            at: NSPoint(x: bounds.midX - size.width / 2, y: bounds.midY - size.height / 2),
-            withAttributes: attributes
-        )
-    }
-
     private func drawPixelInspector(at point: CGPoint, screenshot: CGImage) {
         guard let inspection = pixelInspection(at: point, screenshot: screenshot) else { return }
         let frame = pixelInspectorFrame(near: point)
@@ -1197,15 +1190,11 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
         let font = annotationTextFont(size: textFontSize)
         let width = textEditorWidth(for: "", font: font, maximum: selection.width)
         let height = textEditorHeight(for: font)
-        let x = min(
-            max(point.x, selection.minX),
-            max(selection.minX, selection.maxX - width)
+        let frame = CaptureGeometry.textEditorFrame(
+            for: point,
+            size: CGSize(width: width, height: height),
+            within: selection
         )
-        let y = min(
-            max(point.y, selection.minY),
-            max(selection.minY, selection.maxY - height)
-        )
-        let frame = CGRect(x: x, y: y, width: width, height: height)
         let textColor = annotationColor.nsColor
         let editor = Self.makeEditableTextField(frame: frame, textColor: textColor)
         editor.isBordered = false
@@ -1229,6 +1218,7 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
         addSubview(editor)
         textEditor = editor
         textAnchor = textAnchor(for: frame, font: font)
+        textEditorVerticalCenter = point.y
         textEditorSize = textFontSize
         textEditorColor = annotationColor
         window?.makeFirstResponder(editor)
@@ -1276,6 +1266,7 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
         let color = textEditorColor ?? annotationColor
         textEditor = nil
         textAnchor = nil
+        textEditorVerticalCenter = nil
         textEditorSize = nil
         textEditorColor = nil
         editor.delegate = nil
@@ -1299,6 +1290,7 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
         guard let editor = textEditor else { return }
         textEditor = nil
         textAnchor = nil
+        textEditorVerticalCenter = nil
         textEditorSize = nil
         textEditorColor = nil
         editor.delegate = nil
@@ -1358,9 +1350,13 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
             maximum: selection.maxX - frame.minX
         )
         frame.size.height = textEditorHeight(for: font)
-        frame.origin.y = max(
-            selection.minY,
-            min(frame.origin.y, selection.maxY - frame.height)
+        frame = CaptureGeometry.textEditorFrame(
+            for: CGPoint(
+                x: frame.minX,
+                y: textEditorVerticalCenter ?? frame.midY
+            ),
+            size: frame.size,
+            within: selection
         )
         editor.frame = frame
         textAnchor = textAnchor(for: frame, font: font)
@@ -2009,9 +2005,13 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
             font: font,
             maximum: selection.maxX - frame.minX
         )
-        frame.origin.y = max(
-            selection.minY,
-            min(frame.origin.y, selection.maxY - frame.height)
+        frame = CaptureGeometry.textEditorFrame(
+            for: CGPoint(
+                x: frame.minX,
+                y: textEditorVerticalCenter ?? frame.midY
+            ),
+            size: frame.size,
+            within: selection
         )
         editor.frame = frame
         textAnchor = textAnchor(for: frame, font: font)

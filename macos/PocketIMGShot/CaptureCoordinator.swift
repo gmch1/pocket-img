@@ -13,7 +13,6 @@ final class CaptureCoordinator: NSObject, CaptureOverlayViewDelegate, NSWindowDe
     private var windows: [CaptureWindow] = []
     private var captureTask: Task<Void, Never>?
     private var keyMonitor: Any?
-    private var onReady: (() -> Void)?
     private var onFinish: ((UploadPayload, CaptureAction) -> Void)?
     private var onCancel: (() -> Void)?
     private var onError: ((Error) -> Void)?
@@ -23,13 +22,11 @@ final class CaptureCoordinator: NSObject, CaptureOverlayViewDelegate, NSWindowDe
         annotationStyle: AnnotationStylePreferences,
         uploadEnabled: Bool,
         onAnnotationStyleChange: @escaping (AnnotationStylePreferences) -> Void,
-        onReady: @escaping () -> Void,
         onFinish: @escaping (UploadPayload, CaptureAction) -> Void,
         onCancel: @escaping () -> Void,
         onError: @escaping (Error) -> Void
     ) {
         cancel(notify: false)
-        self.onReady = onReady
         self.onFinish = onFinish
         self.onCancel = onCancel
         self.onError = onError
@@ -61,9 +58,6 @@ final class CaptureCoordinator: NSObject, CaptureOverlayViewDelegate, NSWindowDe
                 )
                 captureTask = nil
                 DiagnosticLog.record("capture overlays ready displays=\(displays.count)")
-                let completion = self.onReady
-                self.onReady = nil
-                completion?()
             } catch is CancellationError {
                 // Cancellation already tears down the preparation windows and callbacks.
             } catch {
@@ -216,7 +210,6 @@ final class CaptureCoordinator: NSObject, CaptureOverlayViewDelegate, NSWindowDe
             NSEvent.removeMonitor(keyMonitor)
             self.keyMonitor = nil
         }
-        onReady = nil
         onFinish = nil
         onCancel = nil
         onError = nil
