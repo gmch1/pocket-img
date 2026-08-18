@@ -263,6 +263,14 @@ final class ConfigurationTests: XCTestCase {
     func testExplicitLanguageResourcesAndShortcutLabels() {
         XCTAssertEqual(L10n.text("settings.save", language: .simplifiedChinese), "保存")
         XCTAssertEqual(L10n.text("settings.save", language: .english), "Save")
+        XCTAssertEqual(
+            L10n.text("settings.server_address.help", language: .simplifiedChinese),
+            "局域网地址支持 HTTP。"
+        )
+        XCTAssertEqual(
+            L10n.text("settings.hotkey.help", language: .english),
+            "Click and press a new shortcut. Some Macs also require Fn."
+        )
         let space = HotKey(keyCode: UInt32(kVK_Space), modifiers: 0, keyLabel: "Space")
         XCTAssertEqual(space.localizedDisplayName(language: .simplifiedChinese), "空格")
         XCTAssertEqual(space.localizedDisplayName(language: .english), "Space")

@@ -282,9 +282,16 @@ final class CaptureCoordinator: NSObject, CaptureOverlayViewDelegate, NSWindowDe
             false,
             onScreenWindowsOnly: true
         )
-        let ownApplications = content.applications.filter {
-            $0.bundleIdentifier == Bundle.main.bundleIdentifier
+        let captureWindowIDs = Set(windows.compactMap { window -> CGWindowID? in
+            guard window.windowNumber > 0 else { return nil }
+            return CGWindowID(window.windowNumber)
+        })
+        let excludedWindows = content.windows.filter {
+            captureWindowIDs.contains($0.windowID)
         }
+        DiagnosticLog.record(
+            "capture excluded overlay windows=\(excludedWindows.count)"
+        )
         var captured: [CapturedDisplay] = []
 
         for screen in NSScreen.screens {
@@ -294,8 +301,7 @@ final class CaptureCoordinator: NSObject, CaptureOverlayViewDelegate, NSWindowDe
             }
             let filter = SCContentFilter(
                 display: display,
-                excludingApplications: ownApplications,
-                exceptingWindows: []
+                excludingWindows: excludedWindows
             )
             let configuration = SCStreamConfiguration()
             let captureSize = CaptureGeometry.capturePixelSize(
