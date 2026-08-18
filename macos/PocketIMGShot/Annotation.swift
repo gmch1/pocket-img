@@ -210,6 +210,20 @@ enum SelectionResizeHandle: CaseIterable, Hashable {
 }
 
 enum CaptureGeometry {
+    static func rectangleOutline(
+        _ rect: CGRect,
+        contains point: CGPoint,
+        tolerance: CGFloat
+    ) -> Bool {
+        guard rect.insetBy(dx: -tolerance, dy: -tolerance).contains(point) else {
+            return false
+        }
+        guard rect.width > tolerance * 2, rect.height > tolerance * 2 else {
+            return true
+        }
+        return !rect.insetBy(dx: tolerance, dy: tolerance).contains(point)
+    }
+
     static func textEditorFrame(
         for clickPoint: CGPoint,
         size: CGSize,
