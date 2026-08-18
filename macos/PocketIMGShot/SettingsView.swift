@@ -27,15 +27,23 @@ struct SettingsView: View {
             }
 
             Section(L10n.text("settings.service.section", language: settings.language)) {
-                TextField(text: $settings.serverAddress, prompt: Text("https://img.example.com")) {
+                HStack {
                     HStack(spacing: 5) {
                         Text(L10n.text("settings.server_address", language: settings.language))
-                        SettingsHelpIcon(
+                        SettingsHelpButton(
                             text: L10n.text("settings.server_address.help", language: settings.language)
                         )
                     }
+                    Spacer()
+                    TextField(
+                        "",
+                        text: $settings.serverAddress,
+                        prompt: Text("https://img.example.com")
+                    )
+                        .labelsHidden()
+                        .textFieldStyle(.roundedBorder)
+                        .frame(width: 240)
                 }
-                    .textFieldStyle(.roundedBorder)
                 SecureField("Token", text: $settings.token)
                     .textFieldStyle(.roundedBorder)
             }
@@ -43,7 +51,7 @@ struct SettingsView: View {
             Section(L10n.text("settings.capture.section", language: settings.language)) {
                 HStack {
                     Text(L10n.text("settings.global_hotkey", language: settings.language))
-                    SettingsHelpIcon(
+                    SettingsHelpButton(
                         text: L10n.text("settings.hotkey.help", language: settings.language)
                     )
                     Spacer()
@@ -76,13 +84,42 @@ struct SettingsView: View {
     }
 }
 
-private struct SettingsHelpIcon: View {
+private struct SettingsHelpButton: View {
     let text: String
+    @State private var isHovered = false
+    @State private var isExpanded = false
 
     var body: some View {
-        Image(systemName: "info.circle")
-            .foregroundStyle(.secondary)
-            .help(text)
-            .accessibilityLabel(text)
+        Button {
+            isExpanded.toggle()
+        } label: {
+            Image(systemName: "info.circle")
+                .foregroundStyle(isHovered || isExpanded ? Color.accentColor : Color.secondary)
+                .frame(width: 18, height: 18)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(text)
+        .onHover { hovering in
+            isHovered = hovering
+        }
+        .popover(isPresented: helpPresented, arrowEdge: .bottom) {
+            Text(text)
+                .font(.callout)
+                .frame(width: 220, alignment: .leading)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(12)
+        }
+    }
+
+    private var helpPresented: Binding<Bool> {
+        Binding(
+            get: { isHovered || isExpanded },
+            set: { presented in
+                guard !presented else { return }
+                isHovered = false
+                isExpanded = false
+            }
+        )
     }
 }
