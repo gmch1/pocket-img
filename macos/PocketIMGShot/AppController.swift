@@ -127,15 +127,12 @@ final class AppController: ObservableObject {
         }
 
         isCapturing = true
-        statusMessage = "正在准备截图…"
+        statusMessage = ""
         captureCoordinator.begin(
             annotationStyle: settings.annotationStyle,
             uploadEnabled: settings.hasUploadConfiguration,
             onAnnotationStyleChange: { [weak self] style in
                 self?.settings.updateAnnotationStyle(style)
-            },
-            onReady: { [weak self] in
-                self?.statusMessage = "拖拽选择截图区域"
             },
             onFinish: { [weak self] payload, action in
                 guard let self else { return }

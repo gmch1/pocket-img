@@ -75,6 +75,36 @@ final class AnnotationTests: XCTestCase {
         )
     }
 
+    func testTextEditorUsesClickAsVerticalCenterAndClampsToSelection() {
+        let selection = CGRect(x: 100, y: 80, width: 200, height: 200)
+        let size = CGSize(width: 80, height: 40)
+
+        XCTAssertEqual(
+            CaptureGeometry.textEditorFrame(
+                for: CGPoint(x: 140, y: 160),
+                size: size,
+                within: selection
+            ),
+            CGRect(x: 140, y: 140, width: 80, height: 40)
+        )
+        XCTAssertEqual(
+            CaptureGeometry.textEditorFrame(
+                for: CGPoint(x: 140, y: 85),
+                size: size,
+                within: selection
+            ),
+            CGRect(x: 140, y: 80, width: 80, height: 40)
+        )
+        XCTAssertEqual(
+            CaptureGeometry.textEditorFrame(
+                for: CGPoint(x: 280, y: 275),
+                size: size,
+                within: selection
+            ),
+            CGRect(x: 220, y: 240, width: 80, height: 40)
+        )
+    }
+
     func testMovesSelectionWithoutChangingSizeAndClampsToScreen() {
         let original = CGRect(x: 100, y: 80, width: 300, height: 200)
 

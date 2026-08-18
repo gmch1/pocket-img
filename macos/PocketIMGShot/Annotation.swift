@@ -210,6 +210,24 @@ enum SelectionResizeHandle: CaseIterable, Hashable {
 }
 
 enum CaptureGeometry {
+    static func textEditorFrame(
+        for clickPoint: CGPoint,
+        size: CGSize,
+        within bounds: CGRect
+    ) -> CGRect {
+        let maxOriginX = max(bounds.minX, bounds.maxX - size.width)
+        let maxOriginY = max(bounds.minY, bounds.maxY - size.height)
+        return CGRect(
+            x: min(max(clickPoint.x, bounds.minX), maxOriginX),
+            y: min(
+                max(clickPoint.y - size.height / 2, bounds.minY),
+                maxOriginY
+            ),
+            width: size.width,
+            height: size.height
+        )
+    }
+
     static func capturePixelSize(
         displayPointSize: CGSize,
         backingScaleFactor: CGFloat
