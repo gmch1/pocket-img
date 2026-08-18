@@ -140,6 +140,7 @@ final class CaptureCoordinator: NSObject, CaptureOverlayViewDelegate, NSWindowDe
         window.level = .screenSaver
         window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         window.acceptsMouseMovedEvents = true
+        window.ignoresMouseEvents = false
         window.isReleasedWhenClosed = false
         window.setFrame(screen.frame, display: true)
         return window
@@ -357,22 +358,6 @@ final class CapturePreparationView: NSView {
             return
         }
         super.keyDown(with: event)
-    }
-
-    override func draw(_ dirtyRect: NSRect) {
-        NSColor.black.withAlphaComponent(0.18).setFill()
-        NSBezierPath(rect: bounds).fill()
-
-        let message = "正在准备截图…"
-        let attributes: [NSAttributedString.Key: Any] = [
-            .font: NSFont.systemFont(ofSize: 15, weight: .medium),
-            .foregroundColor: NSColor.white,
-        ]
-        let size = message.size(withAttributes: attributes)
-        message.draw(
-            at: CGPoint(x: bounds.midX - size.width / 2, y: bounds.midY - size.height / 2),
-            withAttributes: attributes
-        )
     }
 }
 
