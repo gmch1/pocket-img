@@ -64,7 +64,6 @@ export function ImageCard({ image, selected, selectionMode, onOpen, onCopy, onDe
       onPointerMove={pointerMove}
       onPointerUp={cancelLongPress}
       onPointerCancel={cancelLongPress}
-      onContextMenu={(event) => event.preventDefault()}
       onClick={activate}
       onKeyDown={keyDown}
     >

@@ -30,6 +30,14 @@ export function CloseIcon(props: IconProps) {
   return <IconBase {...props}><path d="m6 6 12 12M18 6 6 18" /></IconBase>;
 }
 
+export function ChevronLeftIcon(props: IconProps) {
+  return <IconBase {...props}><path d="m15 18-6-6 6-6" /></IconBase>;
+}
+
+export function ChevronRightIcon(props: IconProps) {
+  return <IconBase {...props}><path d="m9 18 6-6-6-6" /></IconBase>;
+}
+
 export function CheckIcon(props: IconProps) {
   return <IconBase {...props}><path d="m5 12 4 4L19 6" /></IconBase>;
 }

@@ -207,6 +207,31 @@ describe("App", () => {
     expect(groups[1].querySelector(".timeline-group__label")?.textContent).toContain("1 张");
   });
 
+  test("navigates between images in the preview", async () => {
+    const nextImage = {
+      ...image,
+      id: "fedcba9876543210fedcba9876543210",
+      url: "/i/fedcba9876543210fedcba9876543210.webp",
+      thumbnail_url: "/t/fedcba9876543210fedcba9876543210.webp",
+    };
+    vi.mocked(listImages).mockResolvedValue(gallery([image, nextImage]));
+
+    const { container } = render(<App />);
+    await screen.findAllByRole("button", { name: "复制图片链接" });
+    const cards = container.querySelectorAll<HTMLElement>(".image-card");
+    fireEvent.click(cards[0]);
+
+    const previewImage = screen.getByRole("dialog", { name: "图片预览" }).querySelector("img");
+    expect(previewImage?.getAttribute("src")).toBe(image.url);
+    expect((screen.getByRole("button", { name: "上一张图片" }) as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: "下一张图片" }));
+    expect(previewImage?.getAttribute("src")).toBe(nextImage.url);
+    expect((screen.getByRole("button", { name: "下一张图片" }) as HTMLButtonElement).disabled).toBe(true);
+
+    fireEvent.keyDown(window, { key: "ArrowLeft" });
+    expect(previewImage?.getAttribute("src")).toBe(image.url);
+  });
+
   test("keeps the current gallery in place while changing the date range", async () => {
     let finishRefresh: ((result: GalleryResponse) => void) | undefined;
     vi.mocked(listImages)
@@ -253,7 +278,7 @@ describe("App", () => {
     expect(screen.queryByText("✓")).toBeNull();
   });
 
-  test("moves multi-select controls into the sticky header", async () => {
+  test("shows multi-select controls in a bottom floating toolbar", async () => {
     vi.mocked(listImages).mockResolvedValue(gallery([image]));
     const { container } = render(<App />);
     await screen.findByRole("button", { name: "复制图片链接" });
@@ -266,10 +291,23 @@ describe("App", () => {
     fireEvent.pointerUp(card!);
 
     const toolbar = screen.getByRole("toolbar", { name: "批量操作" });
-    expect(toolbar.closest("header")).toBeTruthy();
-    expect(screen.queryByRole("navigation", { name: "时间范围" })).toBeNull();
+    expect(toolbar.classList.contains("selection-toolbar")).toBe(true);
+    expect(toolbar.closest("header")).toBeNull();
+    expect(screen.getByRole("navigation", { name: "时间范围" })).toBeTruthy();
+    expect(screen.getByText("已选 1 张")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "完成" })).toBeTruthy();
     expect(container.querySelector(".selection-mark")).toBeTruthy();
-    expect(container.querySelector(".selection-toolbar")).toBeNull();
+  });
+
+  test("prevents the browser context menu across the page", async () => {
+    vi.mocked(listImages).mockResolvedValue(gallery([]));
+    render(<App />);
+    await screen.findByText("粘贴第一张图片");
+
+    const contextMenu = new MouseEvent("contextmenu", { bubbles: true, cancelable: true });
+    document.body.dispatchEvent(contextMenu);
+
+    expect(contextMenu.defaultPrevented).toBe(true);
   });
 
   test("selects multiple images by dragging across blank gallery space", async () => {
