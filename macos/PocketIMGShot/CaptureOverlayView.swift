@@ -252,8 +252,11 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
             }
             let controlIndex = hoveredAnnotationHit?.index ?? selectedAnnotationIndex
             if let controlIndex, annotations.indices.contains(controlIndex) {
-                for (_, frame) in annotationResizeHandles(for: annotations[controlIndex]) {
-                    addCursorRect(frame.insetBy(dx: -3, dy: -3), cursor: .crosshair)
+                for (handle, frame) in annotationResizeHandles(for: annotations[controlIndex]) {
+                    addCursorRect(
+                        frame.insetBy(dx: -3, dy: -3),
+                        cursor: cursor(for: handle)
+                    )
                 }
             }
             for (handle, frame) in selectionResizeHandleFrames(for: selection) {
@@ -1664,6 +1667,17 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
         }
     }
 
+    private func cursor(for handle: AnnotationResizeHandle) -> NSCursor {
+        switch handle {
+        case .rectangleTopLeft, .rectangleBottomRight, .textScale:
+            return northwestSoutheastResizeCursor
+        case .rectangleTopRight, .rectangleBottomLeft:
+            return northeastSouthwestResizeCursor
+        case .arrowStart, .arrowEnd:
+            return .crosshair
+        }
+    }
+
     private static func makeDiagonalResizeCursor(falling: Bool) -> NSCursor {
         let size = NSSize(width: 24, height: 24)
         let image = NSImage(size: size, flipped: false) { _ in
@@ -1721,11 +1735,7 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
 
         for index in annotations.indices.reversed() {
             let annotation = annotations[index]
-            if annotationContains(
-                annotation,
-                point: point,
-                useFilledBounds: index == selectedAnnotationIndex
-            ) {
+            if annotationContains(annotation, point: point) {
                 return AnnotationHit(index: index, resizeHandle: nil)
             }
         }
@@ -1745,7 +1755,7 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
             where frame.insetBy(dx: -4, dy: -4).contains(point) {
             return AnnotationHit(index: selectedAnnotationIndex, resizeHandle: handle)
         }
-        guard annotationContains(annotation, point: point, useFilledBounds: true) else {
+        guard annotationContains(annotation, point: point) else {
             return nil
         }
         return AnnotationHit(index: selectedAnnotationIndex, resizeHandle: nil)
@@ -1753,20 +1763,16 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
 
     private func annotationContains(
         _ annotation: Annotation,
-        point: CGPoint,
-        useFilledBounds: Bool
+        point: CGPoint
     ) -> Bool {
         switch annotation.tool {
         case .rectangle:
             let tolerance = max(6, annotation.resolvedStyleSize / 2 + 4)
-            let rect = annotation.rect
-            guard rect.insetBy(dx: -tolerance, dy: -tolerance).contains(point) else {
-                return false
-            }
-            if useFilledBounds || rect.width <= tolerance * 2 || rect.height <= tolerance * 2 {
-                return true
-            }
-            return !rect.insetBy(dx: tolerance, dy: tolerance).contains(point)
+            return CaptureGeometry.rectangleOutline(
+                annotation.rect,
+                contains: point,
+                tolerance: tolerance
+            )
         case .arrow:
             let tolerance = max(6, annotation.resolvedStyleSize / 2 + 4)
             return distance(from: point, toSegmentFrom: annotation.start, to: annotation.end)
