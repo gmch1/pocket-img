@@ -60,8 +60,14 @@ final class GlobalHotKey {
             { _, _, context in
                 guard let context else { return OSStatus(eventNotHandledErr) }
                 let owner = Unmanaged<GlobalHotKey>.fromOpaque(context).takeUnretainedValue()
-                Task { @MainActor in
-                    owner.action?()
+                if Thread.isMainThread {
+                    MainActor.assumeIsolated {
+                        owner.action?()
+                    }
+                } else {
+                    Task { @MainActor in
+                        owner.action?()
+                    }
                 }
                 return noErr
             },

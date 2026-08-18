@@ -17,6 +17,33 @@ final class ConfigurationTests: XCTestCase {
         XCTAssertTrue(view.acceptsFirstMouse(for: nil))
     }
 
+    @MainActor
+    func testCapturePreparationViewTakesImmediateInputAndCancelsWithEscape() throws {
+        var cancelled = false
+        let view = CapturePreparationView(frame: CGRect(x: 0, y: 0, width: 800, height: 600)) {
+            cancelled = true
+        }
+
+        XCTAssertTrue(view.acceptsFirstResponder)
+        XCTAssertTrue(view.acceptsFirstMouse(for: nil))
+
+        let escape = try XCTUnwrap(NSEvent.keyEvent(
+            with: .keyDown,
+            location: .zero,
+            modifierFlags: [],
+            timestamp: 0,
+            windowNumber: 0,
+            context: nil,
+            characters: "\u{1b}",
+            charactersIgnoringModifiers: "\u{1b}",
+            isARepeat: false,
+            keyCode: UInt16(kVK_Escape)
+        ))
+        view.keyDown(with: escape)
+
+        XCTAssertTrue(cancelled)
+    }
+
     func testAutomaticUpdateFeedUsesSignedHTTPSAppcast() throws {
         let info = Bundle.main.infoDictionary
 

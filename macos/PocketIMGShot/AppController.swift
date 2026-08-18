@@ -128,47 +128,41 @@ final class AppController: ObservableObject {
 
         isCapturing = true
         statusMessage = "正在准备截图…"
-        Task {
-            do {
-                try await captureCoordinator.begin(
-                    annotationStyle: settings.annotationStyle,
-                    uploadEnabled: settings.hasUploadConfiguration,
-                    onAnnotationStyleChange: { [weak self] style in
-                        self?.settings.updateAnnotationStyle(style)
-                    },
-                    onFinish: { [weak self] payload, action in
-                        guard let self else { return }
-                        self.isCapturing = false
-                        switch action {
-                        case .pin:
-                            self.pin(payload)
-                        case .copy:
-                            self.copy(payload)
-                        case .upload:
-                            self.upload(payload)
-                        }
-                    },
-                    onCancel: { [weak self] in
-                        self?.isCapturing = false
-                        self?.statusMessage = ""
-                    },
-                    onError: { [weak self] error in
-                        guard let self else { return }
-                        self.isCapturing = false
-                        self.statusMessage = "截图生成失败"
-                        self.showError(
-                            title: "无法生成截图",
-                            message: error.localizedDescription + "\n\n诊断日志：~/Library/Logs/PocketIMGShot.log"
-                        )
-                    }
+        captureCoordinator.begin(
+            annotationStyle: settings.annotationStyle,
+            uploadEnabled: settings.hasUploadConfiguration,
+            onAnnotationStyleChange: { [weak self] style in
+                self?.settings.updateAnnotationStyle(style)
+            },
+            onReady: { [weak self] in
+                self?.statusMessage = "拖拽选择截图区域"
+            },
+            onFinish: { [weak self] payload, action in
+                guard let self else { return }
+                self.isCapturing = false
+                switch action {
+                case .pin:
+                    self.pin(payload)
+                case .copy:
+                    self.copy(payload)
+                case .upload:
+                    self.upload(payload)
+                }
+            },
+            onCancel: { [weak self] in
+                self?.isCapturing = false
+                self?.statusMessage = ""
+            },
+            onError: { [weak self] error in
+                guard let self else { return }
+                self.isCapturing = false
+                self.statusMessage = "截图生成失败"
+                self.showError(
+                    title: "无法生成截图",
+                    message: error.localizedDescription + "\n\n诊断日志：~/Library/Logs/PocketIMGShot.log"
                 )
-                statusMessage = "拖拽选择截图区域"
-            } catch {
-                isCapturing = false
-                statusMessage = ""
-                showError(title: "无法开始截图", message: error.localizedDescription)
             }
-        }
+        )
     }
 
     private func upload(_ payload: UploadPayload) {
