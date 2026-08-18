@@ -4,13 +4,16 @@ import CoreVideo
 import ScreenCaptureKit
 
 @MainActor
-final class CaptureCoordinator: NSObject, CaptureOverlayViewDelegate {
+final class CaptureCoordinator: NSObject, CaptureOverlayViewDelegate, NSWindowDelegate {
     private struct CapturedDisplay {
         let screen: NSScreen
         let image: CGImage
     }
 
     private var windows: [CaptureWindow] = []
+    private var captureTask: Task<Void, Never>?
+    private var keyMonitor: Any?
+    private var onReady: (() -> Void)?
     private var onFinish: ((UploadPayload, CaptureAction) -> Void)?
     private var onCancel: (() -> Void)?
     private var onError: ((Error) -> Void)?
@@ -20,21 +23,75 @@ final class CaptureCoordinator: NSObject, CaptureOverlayViewDelegate {
         annotationStyle: AnnotationStylePreferences,
         uploadEnabled: Bool,
         onAnnotationStyleChange: @escaping (AnnotationStylePreferences) -> Void,
+        onReady: @escaping () -> Void,
         onFinish: @escaping (UploadPayload, CaptureAction) -> Void,
         onCancel: @escaping () -> Void,
         onError: @escaping (Error) -> Void
-    ) async throws {
+    ) {
         cancel(notify: false)
+        self.onReady = onReady
         self.onFinish = onFinish
         self.onCancel = onCancel
         self.onError = onError
         finished = false
+        installKeyMonitor()
+        showPreparationWindows()
 
-        let displays = try await captureDisplays()
-        guard !displays.isEmpty else {
-            throw CaptureError.noDisplays
+        captureTask = Task { [weak self] in
+            guard let self else { return }
+            do {
+                let displays = try await captureDisplays()
+                try Task.checkCancellation()
+                guard !displays.isEmpty else {
+                    throw CaptureError.noDisplays
+                }
+                if NSEvent.pressedMouseButtons != 0 {
+                    DiagnosticLog.record("capture waiting for an active mouse gesture to finish")
+                }
+                while NSEvent.pressedMouseButtons != 0 {
+                    try await Task.sleep(for: .milliseconds(16))
+                }
+                try Task.checkCancellation()
+                guard !finished else { return }
+                showCaptureWindows(
+                    displays,
+                    annotationStyle: annotationStyle,
+                    uploadEnabled: uploadEnabled,
+                    onAnnotationStyleChange: onAnnotationStyleChange
+                )
+                captureTask = nil
+                DiagnosticLog.record("capture overlays ready displays=\(displays.count)")
+                let completion = self.onReady
+                self.onReady = nil
+                completion?()
+            } catch is CancellationError {
+                // Cancellation already tears down the preparation windows and callbacks.
+            } catch {
+                failCapture(error)
+            }
         }
+    }
 
+    private func showPreparationWindows() {
+        windows = NSScreen.screens.map { screen in
+            let view = CapturePreparationView(
+                frame: NSRect(origin: .zero, size: screen.frame.size)
+            ) { [weak self] in
+                self?.cancel()
+            }
+            return makeWindow(for: screen, contentView: view, opaque: false)
+        }
+        DiagnosticLog.record("capture preparation windows shown count=\(windows.count)")
+        activateWindows()
+    }
+
+    private func showCaptureWindows(
+        _ displays: [CapturedDisplay],
+        annotationStyle: AnnotationStylePreferences,
+        uploadEnabled: Bool,
+        onAnnotationStyleChange: @escaping (AnnotationStylePreferences) -> Void
+    ) {
+        let preparationWindows = windows
         windows = displays.map { display in
             let view = CaptureOverlayView(frame: NSRect(origin: .zero, size: display.screen.frame.size))
             view.annotationStyle = annotationStyle
@@ -43,40 +100,122 @@ final class CaptureCoordinator: NSObject, CaptureOverlayViewDelegate {
             view.screenshot = display.image
             view.delegate = self
 
-            let window = CaptureWindow(
-                contentRect: display.screen.frame,
-                styleMask: [.borderless],
-                backing: .buffered,
-                defer: false,
-                screen: display.screen
-            )
+            let window = preparationWindows.first {
+                $0.screen?.displayID == display.screen.displayID
+            } ?? makeWindow(for: display.screen, contentView: view, opaque: true)
             window.contentView = view
             window.backgroundColor = .black
             window.isOpaque = true
-            window.hasShadow = false
-            window.level = .screenSaver
-            window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
-            window.acceptsMouseMovedEvents = true
-            window.isReleasedWhenClosed = false
             window.setFrame(display.screen.frame, display: true)
             return window
         }
 
+        let activeWindowIDs = Set(windows.map { ObjectIdentifier($0) })
+        for window in preparationWindows
+            where !activeWindowIDs.contains(ObjectIdentifier(window)) {
+            window.orderOut(nil)
+            window.contentView = nil
+            window.close()
+        }
+        activateWindows()
+    }
+
+    private func makeWindow(
+        for screen: NSScreen,
+        contentView: NSView,
+        opaque: Bool
+    ) -> CaptureWindow {
+        let window = CaptureWindow(
+            contentRect: screen.frame,
+            styleMask: [.borderless],
+            backing: .buffered,
+            defer: false,
+            screen: screen
+        )
+        window.contentView = contentView
+        window.delegate = self
+        window.backgroundColor = opaque ? .black : .clear
+        window.isOpaque = opaque
+        window.hasShadow = false
+        window.level = .screenSaver
+        window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+        window.acceptsMouseMovedEvents = true
+        window.isReleasedWhenClosed = false
+        window.setFrame(screen.frame, display: true)
+        return window
+    }
+
+    private func activateWindows(includeHidden: Bool = true) {
         NSApplication.shared.activate(ignoringOtherApps: true)
-        for window in windows {
+        let candidates = includeHidden ? windows : windows.filter(\.isVisible)
+        for window in candidates {
             window.orderFrontRegardless()
         }
         let pointer = NSEvent.mouseLocation
-        let preferred = windows.first { $0.frame.contains(pointer) } ?? windows.first
+        let preferred = candidates.first { $0.frame.contains(pointer) } ?? candidates.first
         preferred?.makeKeyAndOrderFront(nil)
         preferred?.makeFirstResponder(preferred?.contentView)
     }
 
+    func windowDidResignKey(_ notification: Notification) {
+        guard !finished else { return }
+        Task { @MainActor [weak self] in
+            await Task.yield()
+            self?.restoreCaptureFocusIfNeeded()
+        }
+    }
+
+    private func restoreCaptureFocusIfNeeded() {
+        guard !finished, !windows.isEmpty else { return }
+        if let keyWindow = NSApplication.shared.keyWindow,
+           windows.contains(where: { $0 === keyWindow }) {
+            return
+        }
+        DiagnosticLog.record("capture focus lost; restoring overlay focus")
+        activateWindows(includeHidden: false)
+    }
+
+    private func installKeyMonitor() {
+        if let keyMonitor {
+            NSEvent.removeMonitor(keyMonitor)
+        }
+        keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            MainActor.assumeIsolated {
+                guard let self, !self.finished, event.keyCode == 53 else { return event }
+                self.cancel()
+                return nil
+            }
+        }
+    }
+
     func cancel(notify: Bool = true) {
-        guard !finished || !windows.isEmpty else { return }
+        guard !finished || !windows.isEmpty || captureTask != nil else { return }
         finished = true
+        captureTask?.cancel()
+        captureTask = nil
         closeWindows()
-        if notify { onCancel?() }
+        let completion = onCancel
+        clearCallbacks()
+        if notify { completion?() }
+    }
+
+    private func failCapture(_ error: Error) {
+        guard !finished else { return }
+        finished = true
+        captureTask?.cancel()
+        captureTask = nil
+        closeWindows()
+        let completion = onError
+        clearCallbacks()
+        completion?(error)
+    }
+
+    private func clearCallbacks() {
+        if let keyMonitor {
+            NSEvent.removeMonitor(keyMonitor)
+            self.keyMonitor = nil
+        }
+        onReady = nil
         onFinish = nil
         onCancel = nil
         onError = nil
@@ -104,9 +243,7 @@ final class CaptureCoordinator: NSObject, CaptureOverlayViewDelegate {
         finished = true
         closeWindows()
         let completion = onFinish
-        onFinish = nil
-        onCancel = nil
-        onError = nil
+        clearCallbacks()
         completion?(payload, action)
     }
 
@@ -115,9 +252,7 @@ final class CaptureCoordinator: NSObject, CaptureOverlayViewDelegate {
         finished = true
         closeWindows()
         let completion = onError
-        onFinish = nil
-        onCancel = nil
-        onError = nil
+        clearCallbacks()
         completion?(error)
     }
 
@@ -127,6 +262,7 @@ final class CaptureCoordinator: NSObject, CaptureOverlayViewDelegate {
 
         for window in dismissedWindows {
             (window.contentView as? CaptureOverlayView)?.delegate = nil
+            window.delegate = nil
             window.orderOut(nil)
         }
 
@@ -185,6 +321,58 @@ final class CaptureCoordinator: NSObject, CaptureOverlayViewDelegate {
             captured.append(CapturedDisplay(screen: screen, image: image))
         }
         return captured
+    }
+}
+
+final class CapturePreparationView: NSView {
+    private var onCancel: (() -> Void)?
+
+    init(frame frameRect: NSRect, onCancel: @escaping () -> Void) {
+        self.onCancel = onCancel
+        super.init(frame: frameRect)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        nil
+    }
+
+    override var acceptsFirstResponder: Bool { true }
+
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
+        true
+    }
+
+    override func resetCursorRects() {
+        addCursorRect(bounds, cursor: .crosshair)
+    }
+
+    override func mouseDown(with event: NSEvent) {}
+    override func mouseDragged(with event: NSEvent) {}
+    override func mouseUp(with event: NSEvent) {}
+
+    override func keyDown(with event: NSEvent) {
+        if event.keyCode == 53 {
+            onCancel?()
+            return
+        }
+        super.keyDown(with: event)
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        NSColor.black.withAlphaComponent(0.18).setFill()
+        NSBezierPath(rect: bounds).fill()
+
+        let message = "正在准备截图…"
+        let attributes: [NSAttributedString.Key: Any] = [
+            .font: NSFont.systemFont(ofSize: 15, weight: .medium),
+            .foregroundColor: NSColor.white,
+        ]
+        let size = message.size(withAttributes: attributes)
+        message.draw(
+            at: CGPoint(x: bounds.midX - size.width / 2, y: bounds.midY - size.height / 2),
+            withAttributes: attributes
+        )
     }
 }
 
