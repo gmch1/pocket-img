@@ -105,23 +105,32 @@ final class AnnotationTests: XCTestCase {
         )
     }
 
-    func testRectangleAnnotationOnlyHitsItsOutline() {
+    func testRectangleAnnotationHitAreaTracksSelectionState() {
         let rectangle = CGRect(x: 100, y: 80, width: 200, height: 120)
 
-        XCTAssertTrue(CaptureGeometry.rectangleOutline(
+        XCTAssertTrue(CaptureGeometry.rectangleAnnotation(
             rectangle,
             contains: CGPoint(x: 103, y: 140),
-            tolerance: 6
+            tolerance: 6,
+            includesInterior: false
         ))
-        XCTAssertFalse(CaptureGeometry.rectangleOutline(
+        XCTAssertFalse(CaptureGeometry.rectangleAnnotation(
             rectangle,
             contains: CGPoint(x: 180, y: 140),
-            tolerance: 6
+            tolerance: 6,
+            includesInterior: false
         ))
-        XCTAssertFalse(CaptureGeometry.rectangleOutline(
+        XCTAssertTrue(CaptureGeometry.rectangleAnnotation(
+            rectangle,
+            contains: CGPoint(x: 180, y: 140),
+            tolerance: 6,
+            includesInterior: true
+        ))
+        XCTAssertFalse(CaptureGeometry.rectangleAnnotation(
             rectangle,
             contains: CGPoint(x: 80, y: 140),
-            tolerance: 6
+            tolerance: 6,
+            includesInterior: true
         ))
     }
 

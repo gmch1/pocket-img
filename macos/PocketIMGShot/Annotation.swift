@@ -210,14 +210,16 @@ enum SelectionResizeHandle: CaseIterable, Hashable {
 }
 
 enum CaptureGeometry {
-    static func rectangleOutline(
+    static func rectangleAnnotation(
         _ rect: CGRect,
         contains point: CGPoint,
-        tolerance: CGFloat
+        tolerance: CGFloat,
+        includesInterior: Bool
     ) -> Bool {
         guard rect.insetBy(dx: -tolerance, dy: -tolerance).contains(point) else {
             return false
         }
+        if includesInterior { return true }
         guard rect.width > tolerance * 2, rect.height > tolerance * 2 else {
             return true
         }

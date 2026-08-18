@@ -77,6 +77,41 @@ final class VerticallyCenteredTextFieldCell: NSTextFieldCell {
     }
 }
 
+final class AnnotationTextDragView: NSView {
+    var onDragBegan: ((CGPoint) -> Void)?
+    var onDragChanged: ((CGPoint) -> Void)?
+    var onDragEnded: (() -> Void)?
+
+    private var isDragging = false
+
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
+        true
+    }
+
+    override func resetCursorRects() {
+        addCursorRect(bounds, cursor: isDragging ? .closedHand : .openHand)
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        isDragging = true
+        window?.invalidateCursorRects(for: self)
+        NSCursor.closedHand.set()
+        onDragBegan?(event.locationInWindow)
+    }
+
+    override func mouseDragged(with event: NSEvent) {
+        NSCursor.closedHand.set()
+        onDragChanged?(event.locationInWindow)
+    }
+
+    override func mouseUp(with event: NSEvent) {
+        isDragging = false
+        window?.invalidateCursorRects(for: self)
+        NSCursor.openHand.set()
+        onDragEnded?()
+    }
+}
+
 enum CaptureAction: Sendable {
     case pin
     case copy
@@ -195,6 +230,9 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
     private var annotationAtDragStart: Annotation?
     private var annotationResizeHandle: AnnotationResizeHandle?
     private var textEditor: NSTextField?
+    private var textDragView: AnnotationTextDragView?
+    private var textEditorDragStart: CGPoint?
+    private var textEditorFrameAtDragStart: CGRect?
     private var textAnchor: CGPoint?
     private var textEditorVerticalCenter: CGFloat?
     private var textEditorSize: CGFloat?
@@ -1232,6 +1270,7 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
             fieldEditor.textColor = textColor
         }
         updateTextEditorFocus(true)
+        installTextDragView(for: editor)
     }
 
     static func makeEditableTextField(frame: CGRect, textColor: NSColor) -> NSTextField {
@@ -1267,6 +1306,7 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
         let anchor = textAnchor
         let styleSize = textEditorSize
         let color = textEditorColor ?? annotationColor
+        removeTextDragView()
         textEditor = nil
         textAnchor = nil
         textEditorVerticalCenter = nil
@@ -1291,6 +1331,7 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
 
     private func discardTextEditing() {
         guard let editor = textEditor else { return }
+        removeTextDragView()
         textEditor = nil
         textAnchor = nil
         textEditorVerticalCenter = nil
@@ -1362,6 +1403,7 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
             within: selection
         )
         editor.frame = frame
+        textDragView?.frame = frame
         textAnchor = textAnchor(for: frame, font: font)
     }
 
@@ -1735,7 +1777,11 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
 
         for index in annotations.indices.reversed() {
             let annotation = annotations[index]
-            if annotationContains(annotation, point: point) {
+            if annotationContains(
+                annotation,
+                point: point,
+                useFilledBounds: index == selectedAnnotationIndex
+            ) {
                 return AnnotationHit(index: index, resizeHandle: nil)
             }
         }
@@ -1755,7 +1801,7 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
             where frame.insetBy(dx: -4, dy: -4).contains(point) {
             return AnnotationHit(index: selectedAnnotationIndex, resizeHandle: handle)
         }
-        guard annotationContains(annotation, point: point) else {
+        guard annotationContains(annotation, point: point, useFilledBounds: true) else {
             return nil
         }
         return AnnotationHit(index: selectedAnnotationIndex, resizeHandle: nil)
@@ -1763,15 +1809,17 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
 
     private func annotationContains(
         _ annotation: Annotation,
-        point: CGPoint
+        point: CGPoint,
+        useFilledBounds: Bool
     ) -> Bool {
         switch annotation.tool {
         case .rectangle:
             let tolerance = max(6, annotation.resolvedStyleSize / 2 + 4)
-            return CaptureGeometry.rectangleOutline(
+            return CaptureGeometry.rectangleAnnotation(
                 annotation.rect,
                 contains: point,
-                tolerance: tolerance
+                tolerance: tolerance,
+                includesInterior: useFilledBounds
             )
         case .arrow:
             let tolerance = max(6, annotation.resolvedStyleSize / 2 + 4)
@@ -2020,7 +2068,58 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
             within: selection
         )
         editor.frame = frame
+        textDragView?.frame = frame
         textAnchor = textAnchor(for: frame, font: font)
+    }
+
+    private func installTextDragView(for editor: NSTextField) {
+        let dragView = AnnotationTextDragView(frame: editor.frame)
+        dragView.onDragBegan = { [weak self] locationInWindow in
+            self?.beginTextEditorDrag(at: locationInWindow)
+        }
+        dragView.onDragChanged = { [weak self] locationInWindow in
+            self?.moveTextEditor(to: locationInWindow)
+        }
+        dragView.onDragEnded = { [weak self] in
+            self?.textEditorDragStart = nil
+            self?.textEditorFrameAtDragStart = nil
+        }
+        addSubview(dragView, positioned: .above, relativeTo: editor)
+        textDragView = dragView
+    }
+
+    private func beginTextEditorDrag(at locationInWindow: CGPoint) {
+        guard let editor = textEditor else { return }
+        textEditorDragStart = constrained(convert(locationInWindow, from: nil))
+        textEditorFrameAtDragStart = editor.frame
+    }
+
+    private func moveTextEditor(to locationInWindow: CGPoint) {
+        guard let editor = textEditor,
+              let selection,
+              let font = editor.font,
+              let dragStart = textEditorDragStart,
+              let originalFrame = textEditorFrameAtDragStart else { return }
+        let point = constrained(convert(locationInWindow, from: nil))
+        let offset = CaptureGeometry.clampedMovementOffset(
+            moving: originalFrame,
+            from: dragStart,
+            to: point,
+            within: selection
+        )
+        let frame = originalFrame.offsetBy(dx: offset.x, dy: offset.y)
+        editor.frame = frame
+        textDragView?.frame = frame
+        textEditorVerticalCenter = frame.midY
+        textAnchor = textAnchor(for: frame, font: font)
+        needsDisplay = true
+    }
+
+    private func removeTextDragView() {
+        textDragView?.removeFromSuperview()
+        textDragView = nil
+        textEditorDragStart = nil
+        textEditorFrameAtDragStart = nil
     }
 
     private var currentAnnotationStyle: AnnotationStylePreferences {
