@@ -111,6 +111,7 @@ final class ConfigurationTests: XCTestCase {
         settings.serverAddress = "https://img.example.com/"
         settings.token = "test-token"
         settings.hotKey = HotKey(keyCode: 3, modifiers: 256, keyLabel: "F")
+        settings.persistLanguage(.english)
         settings.updateAnnotationStyle(AnnotationStylePreferences(
             rectangleLineWidth: 5.5,
             arrowLineWidth: 7,
@@ -123,6 +124,7 @@ final class ConfigurationTests: XCTestCase {
         XCTAssertEqual(restored.serverAddress, "https://img.example.com")
         XCTAssertEqual(restored.token, "test-token")
         XCTAssertEqual(restored.hotKey, settings.hotKey)
+        XCTAssertEqual(restored.language, .english)
         XCTAssertEqual(restored.annotationStyle, settings.annotationStyle)
         let attributes = try FileManager.default.attributesOfItem(atPath: settingsURL.path)
         let permissions = try XCTUnwrap(attributes[.posixPermissions] as? NSNumber)
@@ -155,7 +157,7 @@ final class ConfigurationTests: XCTestCase {
         let storedObject = try XCTUnwrap(
             JSONSerialization.jsonObject(with: Data(contentsOf: settingsURL)) as? [String: Any]
         )
-        XCTAssertEqual(storedObject["schemaVersion"] as? Int, 4)
+        XCTAssertEqual(storedObject["schemaVersion"] as? Int, 5)
         XCTAssertEqual(storedObject["hotKeyLabel"] as? String, "F1")
     }
 
@@ -254,6 +256,15 @@ final class ConfigurationTests: XCTestCase {
         let storedObject = try XCTUnwrap(
             JSONSerialization.jsonObject(with: Data(contentsOf: settingsURL)) as? [String: Any]
         )
-        XCTAssertEqual(storedObject["schemaVersion"] as? Int, 4)
+        XCTAssertEqual(storedObject["schemaVersion"] as? Int, 5)
+    }
+
+    @MainActor
+    func testExplicitLanguageResourcesAndShortcutLabels() {
+        XCTAssertEqual(L10n.text("settings.save", language: .simplifiedChinese), "保存")
+        XCTAssertEqual(L10n.text("settings.save", language: .english), "Save")
+        let space = HotKey(keyCode: UInt32(kVK_Space), modifiers: 0, keyLabel: "Space")
+        XCTAssertEqual(space.localizedDisplayName(language: .simplifiedChinese), "空格")
+        XCTAssertEqual(space.localizedDisplayName(language: .english), "Space")
     }
 }

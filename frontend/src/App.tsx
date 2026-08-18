@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
-import { APIError, absoluteImageURL, createSession, deleteImages, deleteSession, listImages, uploadImage } from "./api";
+import { APIError, absoluteImageURL, createSession, deleteImages, deleteSession, listImages, subscribeGalleryChanges, uploadImage } from "./api";
 import { copyText } from "./clipboard";
 import { prepareImageForUpload } from "./image-compression";
 import { ImageCard } from "./components/ImageCard";
@@ -145,26 +145,38 @@ export default function App() {
     setAccount(null);
   }, []);
 
-  const refresh = useCallback(async (nextRange: GalleryRange, signal?: AbortSignal): Promise<boolean> => {
-    setLoading(true);
-    setGalleryError("");
+  const refresh = useCallback(async (
+    nextRange: GalleryRange,
+    signal?: AbortSignal,
+    background = false,
+  ): Promise<boolean> => {
+    if (!background) {
+      setLoading(true);
+      setGalleryError("");
+    }
     try {
       const result = await listImages(nextRange, signal);
       setImages(result.images);
       setAccount(result.account);
       setAuth("authenticated");
-      setSelected(new Set());
+      setGalleryError("");
+      setSelected((current) => background
+        ? new Set([...current].filter((id) => result.images.some((image) => image.id === id)))
+        : new Set());
+      setPreview((current) => current
+        ? result.images.find((image) => image.id === current.id) ?? null
+        : null);
       return true;
     } catch (reason) {
       if (signal?.aborted) return false;
       if (reason instanceof APIError && reason.status === 401) {
         expireSession();
-      } else {
+      } else if (!background) {
         setGalleryError(reason instanceof Error ? reason.message : "图库加载失败");
       }
       return false;
     } finally {
-      if (!signal?.aborted) setLoading(false);
+      if (!background && !signal?.aborted) setLoading(false);
     }
   }, [expireSession]);
 
@@ -173,6 +185,31 @@ export default function App() {
     void refresh(range, controller.signal);
     return () => controller.abort();
   }, [range, refresh]);
+
+  useEffect(() => {
+    if (auth !== "authenticated") return;
+
+    let controller: AbortController | undefined;
+    let refreshTimer: number | undefined;
+    const requestBackgroundRefresh = () => {
+      if (document.visibilityState === "hidden") return;
+      if (refreshTimer !== undefined) window.clearTimeout(refreshTimer);
+      refreshTimer = window.setTimeout(() => {
+        controller?.abort();
+        controller = new AbortController();
+        void refresh(range, controller.signal, true);
+      }, 250);
+    };
+    const unsubscribe = subscribeGalleryChanges(requestBackgroundRefresh);
+    const pollingTimer = window.setInterval(requestBackgroundRefresh, 2 * 60 * 1000);
+
+    return () => {
+      unsubscribe();
+      window.clearInterval(pollingTimer);
+      if (refreshTimer !== undefined) window.clearTimeout(refreshTimer);
+      controller?.abort();
+    };
+  }, [auth, range, refresh]);
 
   useEffect(() => {
     let wasHidden = document.visibilityState === "hidden";

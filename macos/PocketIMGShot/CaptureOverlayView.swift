@@ -186,6 +186,7 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
     var uploadEnabled = true {
         didSet { needsDisplay = true }
     }
+    var language: AppLanguage = .system
 
     private enum Mode {
         case selecting
@@ -1243,7 +1244,12 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
         editor.drawsBackground = false
         editor.font = font
         editor.focusRingType = .none
-        Self.updateTextEditorPlaceholder(editor, font: font, textColor: textColor)
+        Self.updateTextEditorPlaceholder(
+            editor,
+            font: font,
+            textColor: textColor,
+            placeholder: textPlaceholder
+        )
         editor.delegate = self
         editor.cell?.isScrollable = true
         editor.cell?.wraps = false
@@ -1289,10 +1295,11 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
     static func updateTextEditorPlaceholder(
         _ editor: NSTextField,
         font: NSFont,
-        textColor: NSColor
+        textColor: NSColor,
+        placeholder: String = L10n.text("overlay.enter_text", language: .system)
     ) {
         editor.placeholderAttributedString = NSAttributedString(
-            string: "输入文字",
+            string: placeholder,
             attributes: [
                 .font: font,
                 .foregroundColor: textColor.withAlphaComponent(0.56),
@@ -2056,7 +2063,8 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
         Self.updateTextEditorPlaceholder(
             editor,
             font: font,
-            textColor: textEditorColor?.nsColor ?? annotationColor.nsColor
+            textColor: textEditorColor?.nsColor ?? annotationColor.nsColor,
+            placeholder: textPlaceholder
         )
         textEditorSize = fontSize
         guard let selection else { return }
@@ -2170,7 +2178,7 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
     }
 
     private func textEditorWidth(for value: String, font: NSFont, maximum: CGFloat) -> CGFloat {
-        let displayedValue = value.isEmpty ? "输入文字" : value
+        let displayedValue = value.isEmpty ? textPlaceholder : value
         let measuredWidth = ceil((displayedValue as NSString).size(withAttributes: [.font: font]).width)
         return min(max(measuredWidth + 12, 48), max(0, maximum))
     }
@@ -2181,5 +2189,9 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
             x: editorFrame.minX + 4,
             y: editorFrame.midY - lineHeight / 2
         )
+    }
+
+    private var textPlaceholder: String {
+        L10n.text("overlay.enter_text", language: language)
     }
 }

@@ -40,7 +40,9 @@ actor PocketIMGClient {
         guard (200..<300).contains(response.statusCode) else {
             throw apiError(status: response.statusCode, data: response.data)
         }
-        let decoded = try JSONDecoder().decode(UploadResponse.self, from: response.data)
+        guard let decoded = try? JSONDecoder().decode(UploadResponse.self, from: response.data) else {
+            throw PocketIMGClientError.invalidResponse
+        }
         guard let result = URL(string: decoded.image.url, relativeTo: configuration.baseURL)?.absoluteURL else {
             throw PocketIMGClientError.invalidResponse
         }
@@ -100,16 +102,20 @@ private struct HTTPResult {
     let data: Data
 }
 
-enum PocketIMGClientError: LocalizedError {
+enum PocketIMGClientError: LocalizedError, AppLocalizedError {
     case invalidResponse
     case requestFailed(status: Int, message: String?)
 
     var errorDescription: String? {
+        localizedMessage(language: .system)
+    }
+
+    func localizedMessage(language: AppLanguage) -> String {
         switch self {
         case .invalidResponse:
-            return "PocketIMG 返回了无法识别的响应。"
-        case .requestFailed(let status, let message):
-            return message ?? "PocketIMG 请求失败（HTTP \(status)）。"
+            return L10n.text("error.client.invalid_response", language: language)
+        case .requestFailed(let status, _):
+            return L10n.format("error.client.request_failed", language: language, status)
         }
     }
 }

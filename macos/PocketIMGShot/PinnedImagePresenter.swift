@@ -4,7 +4,7 @@ import AppKit
 final class PinnedImagePresenter: NSObject, NSWindowDelegate {
     private var windows: [PinnedImageWindow] = []
 
-    func show(_ payload: UploadPayload) throws {
+    func show(_ payload: UploadPayload, language: AppLanguage) throws {
         guard let image = NSImage(data: payload.data),
               let placementFrame = payload.placementFrame,
               placementFrame.width > 0,
@@ -39,6 +39,7 @@ final class PinnedImagePresenter: NSObject, NSWindowDelegate {
         )
         let imageView = PinnedImageView(frame: CGRect(origin: .zero, size: placementFrame.size))
         imageView.image = image
+        imageView.language = language
         imageView.imageScaling = .scaleAxesIndependently
         imageView.onClose = { [weak window] in window?.close() }
         imageView.wantsLayer = true
@@ -66,6 +67,12 @@ final class PinnedImagePresenter: NSObject, NSWindowDelegate {
         window.makeFirstResponder(imageView)
     }
 
+    func updateLanguage(_ language: AppLanguage) {
+        for window in windows {
+            (window.contentView as? PinnedImageView)?.language = language
+        }
+    }
+
     func windowWillClose(_ notification: Notification) {
         guard let closing = notification.object as? NSWindow else { return }
         windows.removeAll { $0 === closing }
@@ -79,6 +86,7 @@ private final class PinnedImageWindow: NSWindow {
 
 final class PinnedImageView: NSImageView {
     var onClose: (() -> Void)?
+    var language: AppLanguage = .system
 
     override var acceptsFirstResponder: Bool { true }
 
@@ -124,7 +132,7 @@ final class PinnedImageView: NSImageView {
     override func rightMouseDown(with event: NSEvent) {
         let menu = NSMenu()
         let closeItem = NSMenuItem(
-            title: "关闭贴图",
+            title: L10n.text("pinned.close", language: language),
             action: #selector(closePinnedImage),
             keyEquivalent: ""
         )
@@ -138,16 +146,20 @@ final class PinnedImageView: NSImageView {
     }
 }
 
-private enum PinnedImageError: LocalizedError {
+enum PinnedImageError: LocalizedError, AppLocalizedError {
     case invalidImage
     case noScreen
 
     var errorDescription: String? {
+        localizedMessage(language: .system)
+    }
+
+    func localizedMessage(language: AppLanguage) -> String {
         switch self {
         case .invalidImage:
-            return "无法读取截图图像。"
+            return L10n.text("error.pinned.invalid_image", language: language)
         case .noScreen:
-            return "没有找到可显示贴图的屏幕。"
+            return L10n.text("error.pinned.no_screen", language: language)
         }
     }
 }

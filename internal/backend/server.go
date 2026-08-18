@@ -47,6 +47,7 @@ type Server struct {
 	thumbnailStop context.CancelFunc
 	thumbnailWake chan struct{}
 	rateLimits    *rateLimiter
+	galleryEvents *galleryEvents
 	workerWG      sync.WaitGroup
 	thumbnailMu   sync.Mutex
 	closeOnce     sync.Once
@@ -139,6 +140,7 @@ func New(cfg Config) (*Server, error) {
 		thumbnailStop: thumbnailStop,
 		thumbnailWake: make(chan struct{}, 1),
 		rateLimits:    newRateLimiter(cfg.RateLimits),
+		galleryEvents: newGalleryEvents(),
 	}
 	legacyImages, err := server.store.hasLegacyImages(context.Background())
 	if err != nil {
@@ -307,6 +309,7 @@ func (s *Server) cleanupExpiredImages(now time.Time) {
 			return
 		}
 		failed := false
+		changedOwners := make(map[string]struct{})
 		for _, record := range records {
 			if s.thumbnailCtx.Err() != nil {
 				return
@@ -320,7 +323,12 @@ func (s *Server) cleanupExpiredImages(now time.Time) {
 			if err != nil && s.thumbnailCtx.Err() == nil {
 				failed = true
 				log.Printf("expired image cleanup failed for %s: %v", record.ID, err)
+			} else if err == nil {
+				changedOwners[record.OwnerID] = struct{}{}
 			}
+		}
+		for ownerID := range changedOwners {
+			s.galleryEvents.notify(ownerID)
 		}
 		if failed || len(records) < batchSize {
 			return
@@ -383,6 +391,8 @@ func (s *Server) processThumbnail(record imageRecord) {
 	}
 	if result != thumbnailCommitted {
 		_ = os.Remove(s.processor.thumbnailPath(record.OwnerID, record.ID))
+	} else {
+		s.galleryEvents.notify(record.OwnerID)
 	}
 }
 
@@ -392,6 +402,7 @@ func (s *Server) routes() http.Handler {
 	mux.HandleFunc("POST /api/auth/session", s.createSession)
 	mux.Handle("DELETE /api/auth/session", s.requireSession(http.HandlerFunc(s.deleteSession)))
 	mux.Handle("GET /api/images", s.requireSession(http.HandlerFunc(s.listImages)))
+	mux.Handle("GET /api/images/events", s.requireSession(http.HandlerFunc(s.streamGalleryEvents)))
 	mux.Handle("POST /api/images", s.requireSession(http.HandlerFunc(s.uploadImage)))
 	mux.Handle("DELETE /api/images", s.requireSession(http.HandlerFunc(s.deleteImages)))
 	mux.Handle("GET /api/admin/users", s.requireAdmin(http.HandlerFunc(s.listUsers)))
@@ -601,6 +612,7 @@ func (s *Server) uploadImage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.wakeThumbnailWorker()
+	s.galleryEvents.notify(ownerID)
 	writeJSON(w, http.StatusCreated, map[string]any{"image": record.response()})
 }
 
@@ -691,6 +703,48 @@ func (s *Server) listImages(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"images": images, "account": account.response()})
+}
+
+func (s *Server) streamGalleryEvents(w http.ResponseWriter, r *http.Request) {
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		writeError(w, http.StatusInternalServerError, "streaming unsupported")
+		return
+	}
+	updates, unsubscribe := s.galleryEvents.subscribe(authenticatedOwner(r))
+	defer unsubscribe()
+
+	// The process-wide write timeout is appropriate for uploads, but an SSE
+	// response intentionally remains open until the browser disconnects.
+	_ = http.NewResponseController(w).SetWriteDeadline(time.Time{})
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache, no-store")
+	w.Header().Set("Connection", "keep-alive")
+	w.Header().Set("X-Accel-Buffering", "no")
+	_, _ = io.WriteString(w, "retry: 5000\n\nevent: ready\ndata: {}\n\n")
+	flusher.Flush()
+
+	heartbeat := time.NewTicker(20 * time.Second)
+	defer heartbeat.Stop()
+
+	for {
+		select {
+		case <-r.Context().Done():
+			return
+		case <-s.thumbnailCtx.Done():
+			return
+		case <-updates:
+			if _, err := io.WriteString(w, "event: gallery\ndata: {}\n\n"); err != nil {
+				return
+			}
+			flusher.Flush()
+		case <-heartbeat.C:
+			if _, err := io.WriteString(w, ": keep-alive\n\n"); err != nil {
+				return
+			}
+			flusher.Flush()
+		}
+	}
 }
 
 func (s *Server) listUsers(w http.ResponseWriter, r *http.Request) {
@@ -812,6 +866,9 @@ func (s *Server) deleteImages(w http.ResponseWriter, r *http.Request) {
 	if err := s.store.deleteImages(r.Context(), ownerID, ids); err != nil {
 		writeError(w, http.StatusInternalServerError, "delete image metadata")
 		return
+	}
+	if len(records) > 0 {
+		s.galleryEvents.notify(ownerID)
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"deleted": len(records)})
 }

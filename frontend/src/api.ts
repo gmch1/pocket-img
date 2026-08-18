@@ -48,6 +48,16 @@ export async function listImages(range: GalleryRange, signal?: AbortSignal): Pro
   return (await response.json()) as GalleryResponse;
 }
 
+export function subscribeGalleryChanges(onChange: () => void): () => void {
+  if (typeof EventSource === "undefined") return () => undefined;
+  const source = new EventSource("/api/images/events", { withCredentials: true });
+  source.addEventListener("gallery", onChange);
+  return () => {
+    source.removeEventListener("gallery", onChange);
+    source.close();
+  };
+}
+
 export async function listUsers(): Promise<AccountInfo[]> {
   const response = await fetch("/api/admin/users", { credentials: "same-origin" });
   if (!response.ok) throw await responseError(response);

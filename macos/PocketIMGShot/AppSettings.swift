@@ -10,6 +10,7 @@ private struct StoredSettings: Codable {
     let hotKeyModifiers: UInt
     let hotKeyLabel: String
     let annotationStyle: AnnotationStylePreferences?
+    let language: AppLanguage?
 }
 
 private struct SettingsStore {
@@ -78,30 +79,35 @@ struct ServiceConfiguration: Equatable, Sendable {
     }
 }
 
-enum SettingsError: LocalizedError {
+enum SettingsError: LocalizedError, AppLocalizedError {
     case invalidServerAddress
     case serverAddressHasPath
     case missingToken
 
     var errorDescription: String? {
+        localizedMessage(language: .system)
+    }
+
+    func localizedMessage(language: AppLanguage) -> String {
         switch self {
         case .invalidServerAddress:
-            return "服务器地址必须是完整的 HTTP 或 HTTPS 地址。"
+            return L10n.text("error.invalid_server_address", language: language)
         case .serverAddressHasPath:
-            return "服务器地址不能包含路径，请只填写协议、域名和端口。"
+            return L10n.text("error.server_address_has_path", language: language)
         case .missingToken:
-            return "Token 不能为空。"
+            return L10n.text("error.missing_token", language: language)
         }
     }
 }
 
 @MainActor
 final class AppSettings: ObservableObject {
-    private static let currentSchemaVersion = 4
+    private static let currentSchemaVersion = 5
 
     @Published var serverAddress: String
     @Published var token: String
     @Published var hotKey: HotKey
+    @Published var language: AppLanguage
     @Published var hotKeyRegistrationError = ""
     private(set) var annotationStyle: AnnotationStylePreferences
 
@@ -141,6 +147,7 @@ final class AppSettings: ObservableObject {
             token = stored.token
             hotKey = resolvedHotKey
             annotationStyle = resolvedAnnotationStyle
+            language = stored.language ?? .system
 
             if stored.schemaVersion != Self.currentSchemaVersion
                 || shouldMigrateLegacyF2
@@ -152,7 +159,8 @@ final class AppSettings: ObservableObject {
                     hotKeyCode: resolvedHotKey.keyCode,
                     hotKeyModifiers: resolvedHotKey.modifiers,
                     hotKeyLabel: resolvedHotKey.keyLabel,
-                    annotationStyle: resolvedAnnotationStyle
+                    annotationStyle: resolvedAnnotationStyle,
+                    language: stored.language ?? .system
                 ))
             }
         } else {
@@ -160,6 +168,7 @@ final class AppSettings: ObservableObject {
             token = ""
             hotKey = .default
             annotationStyle = .default
+            language = .system
         }
     }
 
@@ -172,7 +181,8 @@ final class AppSettings: ObservableObject {
             hotKeyCode: hotKey.keyCode,
             hotKeyModifiers: hotKey.modifiers,
             hotKeyLabel: hotKey.keyLabel,
-            annotationStyle: annotationStyle
+            annotationStyle: annotationStyle,
+            language: language
         ))
         serverAddress = configuration.baseURL.absoluteString
         token = configuration.token
@@ -189,10 +199,30 @@ final class AppSettings: ObservableObject {
                 hotKeyCode: value.keyCode,
                 hotKeyModifiers: value.modifiers,
                 hotKeyLabel: value.keyLabel,
-                annotationStyle: stored?.annotationStyle ?? annotationStyle
+                annotationStyle: stored?.annotationStyle ?? annotationStyle,
+                language: stored?.language ?? language
             ))
         } catch {
             DiagnosticLog.record(error, phase: "save hotkey")
+        }
+    }
+
+    func persistLanguage(_ value: AppLanguage) {
+        language = value
+        do {
+            let stored = try store.load()
+            try store.save(StoredSettings(
+                schemaVersion: Self.currentSchemaVersion,
+                serverAddress: stored?.serverAddress ?? serverAddress,
+                token: stored?.token ?? token,
+                hotKeyCode: stored?.hotKeyCode ?? hotKey.keyCode,
+                hotKeyModifiers: stored?.hotKeyModifiers ?? hotKey.modifiers,
+                hotKeyLabel: stored?.hotKeyLabel ?? hotKey.keyLabel,
+                annotationStyle: stored?.annotationStyle ?? annotationStyle,
+                language: value
+            ))
+        } catch {
+            DiagnosticLog.record(error, phase: "save language")
         }
     }
 
@@ -222,7 +252,8 @@ final class AppSettings: ObservableObject {
                 hotKeyCode: stored?.hotKeyCode ?? hotKey.keyCode,
                 hotKeyModifiers: stored?.hotKeyModifiers ?? hotKey.modifiers,
                 hotKeyLabel: stored?.hotKeyLabel ?? hotKey.keyLabel,
-                annotationStyle: annotationStyle
+                annotationStyle: annotationStyle,
+                language: stored?.language ?? language
             ))
         } catch {
             DiagnosticLog.record(error, phase: "save annotation style")

@@ -1,0 +1,72 @@
+"language.system" = "Follow System";
+"language.simplified_chinese" = "Simplified Chinese";
+"language.english" = "English";
+
+"menu.capture" = "Capture (%@)";
+"menu.check_updates" = "Check for Updates…";
+"menu.settings" = "Settings…";
+"menu.quit" = "Quit PocketIMG Shot";
+
+"settings.general.section" = "General";
+"settings.language" = "Language";
+"settings.language.hint" = "Changes apply immediately. Follow System uses the current macOS language.";
+"settings.service.section" = "PocketIMG Service";
+"settings.server_address" = "Server Address";
+"settings.storage_hint" = "Settings are stored in ~/Library/Application Support/PocketIMGShot/settings.json without using Keychain, and remain after replacing the app. HTTP addresses are supported for local network debugging.";
+"settings.capture.section" = "Capture";
+"settings.global_hotkey" = "Global Shortcut";
+"settings.hotkey_hint" = "Click the shortcut field, then press a new combination. The default is F1; some Mac keyboards also require Fn.";
+"settings.save" = "Save";
+
+"hotkey.recording" = "Press a new shortcut…";
+"hotkey.space" = "Space";
+"hotkey.return" = "Return";
+"hotkey.tab" = "Tab";
+"hotkey.delete" = "Delete";
+"hotkey.forward_delete" = "Forward Delete";
+
+"overlay.enter_text" = "Enter text";
+"pinned.close" = "Close Pinned Image";
+
+"toast.hotkey_registration_failed" = "Couldn’t register shortcut";
+"toast.settings_saved" = "Settings saved";
+"toast.capture_permission_granted" = "Screen capture access granted. Press %@ again.";
+"toast.uploading" = "Uploading…";
+"toast.upload_complete" = "Upload complete. Link copied.";
+"toast.screenshot_copied" = "Screenshot copied";
+"toast.screenshot_pinned" = "Screenshot pinned to the desktop. Double-click or press Esc to close.";
+
+"status.capture_failed" = "Capture failed";
+"status.uploading" = "Uploading…";
+"status.link_copied" = "Link copied";
+"status.upload_failed" = "Upload failed";
+"status.screenshot_copied" = "Screenshot copied";
+"status.screenshot_pinned" = "Screenshot pinned";
+"status.pin_failed" = "Pin failed";
+
+"alert.settings_save_failed" = "Couldn’t Save Settings";
+"alert.capture_failed" = "Couldn’t Create Screenshot";
+"alert.copy_failed" = "Couldn’t Copy Screenshot";
+"alert.pin_failed" = "Couldn’t Pin Screenshot";
+"alert.upload_failed" = "Screenshot Upload Failed";
+"alert.screen_permission_title" = "Screen Recording Permission Required";
+"alert.screen_permission_body" = "PocketIMG Shot reads only one static screen image when you press the shortcut and never records audio. Allow this app in System Settings → Privacy & Security → Screen & System Audio Recording, then reopen it.";
+
+"button.retry" = "Retry";
+"button.cancel" = "Cancel";
+"button.ok" = "OK";
+"button.open_system_settings" = "Open System Settings";
+
+"diagnostic_log" = "Diagnostic log: %@";
+"error.hotkey_registration" = "The shortcut is already in use, or macOS rejected it (%d).";
+"error.invalid_server_address" = "The server address must be a complete HTTP or HTTPS URL.";
+"error.server_address_has_path" = "The server address cannot contain a path. Enter only the scheme, host, and port.";
+"error.missing_token" = "Token cannot be empty.";
+"error.capture.no_displays" = "No display is available for capture.";
+"error.capture.encoding_failed" = "Couldn’t create the screenshot file.";
+"error.clipboard_write_failed" = "Couldn’t write to the system clipboard.";
+"error.pinned.invalid_image" = "Couldn’t read the screenshot image.";
+"error.pinned.no_screen" = "No display is available for the pinned image.";
+"error.client.invalid_response" = "PocketIMG returned an unrecognized response.";
+"error.client.request_failed" = "PocketIMG request failed (HTTP %d).";
+"error.network" = "Couldn’t connect to PocketIMG. Check the network and server address.";
