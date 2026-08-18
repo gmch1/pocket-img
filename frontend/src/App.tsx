@@ -7,7 +7,7 @@ import { ImagePreview } from "./components/ImagePreview";
 import { AdminPanel } from "./components/AdminPanel";
 import { TokenPanel } from "./components/TokenPanel";
 import { GlobalUploadProgress } from "./components/GlobalUploadProgress";
-import { AlertIcon, CloseIcon, ImageIcon, KeyIcon, LogoutIcon, TrashIcon, UsersIcon } from "./icons";
+import { AlertIcon, ImageIcon, KeyIcon, LogoutIcon, TrashIcon, UsersIcon } from "./icons";
 import type { AccountInfo, GalleryRange, ImageItem, UploadTask } from "./types";
 
 type AuthState = "checking" | "required" | "authenticated";
@@ -116,6 +116,7 @@ export default function App() {
   const gallerySelectionSurface = useRef<HTMLElement | null>(null);
   const marqueeGesture = useRef<MarqueeGesture | null>(null);
   const groupedImages = timelineGroups(images);
+  const previewIndex = preview ? images.findIndex((image) => image.id === preview.id) : -1;
   authRef.current = auth;
 
   const notify = useCallback((message: string, error = false) => {
@@ -126,6 +127,12 @@ export default function App() {
 
   useEffect(() => () => {
     if (toastTimer.current !== undefined) window.clearTimeout(toastTimer.current);
+  }, []);
+
+  useEffect(() => {
+    const preventDefaultContextMenu = (event: MouseEvent) => event.preventDefault();
+    document.addEventListener("contextmenu", preventDefaultContextMenu);
+    return () => document.removeEventListener("contextmenu", preventDefaultContextMenu);
   }, []);
 
   const expireSession = useCallback(() => {
@@ -398,26 +405,17 @@ export default function App() {
   }
 
   return (
-    <div className="app-shell">
+    <div className={`app-shell${selected.size > 0 ? " app-shell--selecting" : ""}`}>
       <GlobalUploadProgress tasks={uploadTasks} />
       <header className="topbar">
         <div className="brand"><ImageIcon /><span>图床</span></div>
-        {selected.size > 0 ? (
-          <div className="selection-controls" role="toolbar" aria-label="批量操作">
-            <strong aria-label={`已选择 ${selected.size} 张`}>{selected.size}</strong>
-            <button type="button" onClick={() => setSelected(new Set(images.map((image) => image.id)))}>全选</button>
-            <button className="icon-button icon-button--danger" type="button" aria-label="永久删除选中图片" onClick={() => void removeImages(Array.from(selected))}><TrashIcon /></button>
-            <button className="icon-button" type="button" aria-label="退出多选" onClick={() => setSelected(new Set())}><CloseIcon /></button>
-          </div>
-        ) : (
-          <nav className="range-switch" aria-label="时间范围">
-            {RANGE_OPTIONS.map((option) => (
-              <button key={option.value} type="button" className={range === option.value ? "is-active" : ""} onClick={() => setRange(option.value)}>
-                {option.label}
-              </button>
-            ))}
-          </nav>
-        )}
+        <nav className="range-switch" aria-label="时间范围">
+          {RANGE_OPTIONS.map((option) => (
+            <button key={option.value} type="button" className={range === option.value ? "is-active" : ""} onClick={() => setRange(option.value)}>
+              {option.label}
+            </button>
+          ))}
+        </nav>
         <div className="topbar__actions">
           {account?.is_admin ? <button className="icon-button" type="button" aria-label="用户管理" onClick={() => setAdminOpen(true)}><UsersIcon /></button> : null}
           <button className="icon-button" type="button" aria-label="设置 Token" onClick={() => setSettingsOpen(true)}><KeyIcon /></button>
@@ -495,7 +493,26 @@ export default function App() {
         {images.length === 100 ? <p className="list-limit">当前显示最近 100 张</p> : null}
       </main>
 
-      {preview ? <ImagePreview image={preview} onClose={() => setPreview(null)} onCopy={() => void copyImage(preview)} onDelete={() => void removeImages([preview.id])} /> : null}
+      {selected.size > 0 ? (
+        <div className="selection-toolbar" role="toolbar" aria-label="批量操作">
+          <strong aria-label={`已选择 ${selected.size} 张`}>已选 {selected.size} 张</strong>
+          <span className="selection-toolbar__divider" aria-hidden="true" />
+          <button type="button" disabled={selected.size === images.length} onClick={() => setSelected(new Set(images.map((image) => image.id)))}>全选</button>
+          <button className="selection-toolbar__danger" type="button" onClick={() => void removeImages(Array.from(selected))}><TrashIcon />删除</button>
+          <button type="button" onClick={() => setSelected(new Set())}>完成</button>
+        </div>
+      ) : null}
+
+      {preview ? (
+        <ImagePreview
+          image={preview}
+          onClose={() => setPreview(null)}
+          onCopy={() => void copyImage(preview)}
+          onDelete={() => void removeImages([preview.id])}
+          onPrevious={previewIndex > 0 ? () => setPreview(images[previewIndex - 1]) : undefined}
+          onNext={previewIndex >= 0 && previewIndex < images.length - 1 ? () => setPreview(images[previewIndex + 1]) : undefined}
+        />
+      ) : null}
       {settingsOpen ? <TokenPanel modal onClose={() => setSettingsOpen(false)} onAuthenticate={authenticate} /> : null}
       {adminOpen ? <AdminPanel onClose={() => setAdminOpen(false)} onSessionExpired={expireSession} onNotify={notify} /> : null}
       {toast ? <div key={toast.id} className={`toast${toast.error ? " toast--error" : ""}`} role="status">{toast.message}</div> : null}
