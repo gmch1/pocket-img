@@ -3,6 +3,7 @@ import CoreText
 import Foundation
 import ImageIO
 import UniformTypeIdentifiers
+import libwebp
 
 enum ScreenshotRenderer {
     enum Output {
@@ -90,11 +91,7 @@ enum ScreenshotRenderer {
             throw CaptureError.imageEncodingFailed
         }
         if output == .upload,
-           let webP = encode(
-               image,
-               type: .webP,
-               properties: [kCGImageDestinationLossyCompressionQuality: webPQuality]
-           ),
+           let webP = encodeWebP(image),
            webP.count <= maxPayloadBytes {
             return UploadPayload(
                 data: webP,
@@ -216,5 +213,62 @@ enum ScreenshotRenderer {
         CGImageDestinationAddImage(destination, image, properties as CFDictionary)
         guard CGImageDestinationFinalize(destination) else { return nil }
         return data as Data
+    }
+
+    private static func encodeWebP(_ image: CGImage) -> Data? {
+        guard image.width <= Int(Int32.max), image.height <= Int(Int32.max),
+              image.width <= Int(Int32.max) / 4 else {
+            return nil
+        }
+
+        let bytesPerRow = image.width * 4
+        var pixels = [UInt8](repeating: 0, count: bytesPerRow * image.height)
+        guard let colorSpace = CGColorSpace(name: CGColorSpace.sRGB) else {
+            return nil
+        }
+        let rendered = pixels.withUnsafeMutableBytes { buffer -> Bool in
+            guard let baseAddress = buffer.baseAddress,
+                  let context = CGContext(
+                      data: baseAddress,
+                      width: image.width,
+                      height: image.height,
+                      bitsPerComponent: 8,
+                      bytesPerRow: bytesPerRow,
+                      space: colorSpace,
+                      bitmapInfo: CGBitmapInfo.byteOrder32Big.rawValue
+                          | CGImageAlphaInfo.premultipliedLast.rawValue
+                  ) else {
+                return false
+            }
+            context.draw(
+                image,
+                in: CGRect(
+                    x: 0,
+                    y: 0,
+                    width: CGFloat(image.width),
+                    height: CGFloat(image.height)
+                )
+            )
+            return true
+        }
+        guard rendered else { return nil }
+
+        var encodedBytes: UnsafeMutablePointer<UInt8>?
+        let encodedSize = pixels.withUnsafeBytes { buffer -> Int in
+            guard let baseAddress = buffer.bindMemory(to: UInt8.self).baseAddress else {
+                return 0
+            }
+            return WebPEncodeRGBA(
+                baseAddress,
+                Int32(image.width),
+                Int32(image.height),
+                Int32(bytesPerRow),
+                Float(webPQuality * 100),
+                &encodedBytes
+            )
+        }
+        guard encodedSize > 0, let encodedBytes else { return nil }
+        defer { WebPFree(encodedBytes) }
+        return Data(bytes: encodedBytes, count: encodedSize)
     }
 }

@@ -32,6 +32,7 @@
 		B00000000000000000000206 /* ImageIO.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = F00000000000000000000206 /* ImageIO.framework */; };
 		B00000000000000000000207 /* CoreText.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = F00000000000000000000207 /* CoreText.framework */; };
 		B00000000000000000000208 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = P00000000000000000000001 /* Sparkle */; };
+		B00000000000000000000209 /* libwebp in Frameworks */ = {isa = PBXBuildFile; productRef = P00000000000000000000002 /* libwebp */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -81,6 +82,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				B00000000000000000000208 /* Sparkle in Frameworks */,
+				B00000000000000000000209 /* libwebp in Frameworks */,
 				B00000000000000000000201 /* AppKit.framework in Frameworks */,
 				B00000000000000000000202 /* SwiftUI.framework in Frameworks */,
 				B00000000000000000000203 /* ScreenCaptureKit.framework in Frameworks */,
@@ -184,6 +186,7 @@
 			name = PocketIMGShot;
 			packageProductDependencies = (
 				P00000000000000000000001 /* Sparkle */,
+				P00000000000000000000002 /* libwebp */,
 			);
 			productName = PocketIMGShot;
 			productReference = F00000000000000000000301 /* PocketIMGShot.app */;
@@ -237,6 +240,7 @@
 			mainGroup = G00000000000000000000000;
 			packageReferences = (
 				R00000000000000000000001 /* XCRemoteSwiftPackageReference "Sparkle" */,
+				R00000000000000000000002 /* XCRemoteSwiftPackageReference "libwebp-Xcode" */,
 			);
 			productRefGroup = G00000000000000000000004 /* Products */;
 			projectDirPath = "";
@@ -458,6 +462,14 @@
 				version = 2.9.4;
 			};
 		};
+		R00000000000000000000002 /* XCRemoteSwiftPackageReference "libwebp-Xcode" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/SDWebImage/libwebp-Xcode.git";
+			requirement = {
+				kind = exactVersion;
+				version = 1.6.0;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -465,6 +477,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = R00000000000000000000001 /* XCRemoteSwiftPackageReference "Sparkle" */;
 			productName = Sparkle;
+		};
+		P00000000000000000000002 /* libwebp */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = R00000000000000000000002 /* XCRemoteSwiftPackageReference "libwebp-Xcode" */;
+			productName = libwebp;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};
