@@ -1,0 +1,72 @@
+"language.system" = "跟随系统";
+"language.simplified_chinese" = "简体中文";
+"language.english" = "English";
+
+"menu.capture" = "截图（%@）";
+"menu.check_updates" = "检查更新…";
+"menu.settings" = "设置…";
+"menu.quit" = "退出 PocketIMG Shot";
+
+"settings.general.section" = "通用";
+"settings.language" = "语言";
+"settings.language.hint" = "更改后立即应用；“跟随系统”会使用当前 macOS 语言。";
+"settings.service.section" = "PocketIMG 服务";
+"settings.server_address" = "服务器地址";
+"settings.storage_hint" = "设置写入 ~/Library/Application Support/PocketIMGShot/settings.json，不访问钥匙串；替换 App 后仍会保留。局域网调试可以使用 HTTP 地址。";
+"settings.capture.section" = "截图";
+"settings.global_hotkey" = "全局快捷键";
+"settings.hotkey_hint" = "点击快捷键框后按下新组合。默认是 F1；部分 Mac 键盘需要同时按 Fn。";
+"settings.save" = "保存";
+
+"hotkey.recording" = "请按新的快捷键…";
+"hotkey.space" = "空格";
+"hotkey.return" = "回车";
+"hotkey.tab" = "制表键";
+"hotkey.delete" = "删除";
+"hotkey.forward_delete" = "向前删除";
+
+"overlay.enter_text" = "输入文字";
+"pinned.close" = "关闭贴图";
+
+"toast.hotkey_registration_failed" = "快捷键注册失败";
+"toast.settings_saved" = "设置已保存";
+"toast.capture_permission_granted" = "已获得截屏权限，请再次按 %@";
+"toast.uploading" = "正在上传…";
+"toast.upload_complete" = "上传完成，链接已复制";
+"toast.screenshot_copied" = "截图已复制";
+"toast.screenshot_pinned" = "截图已贴到桌面，双击或按 Esc 关闭";
+
+"status.capture_failed" = "截图生成失败";
+"status.uploading" = "正在上传…";
+"status.link_copied" = "链接已复制";
+"status.upload_failed" = "上传失败";
+"status.screenshot_copied" = "截图已复制";
+"status.screenshot_pinned" = "截图已置顶";
+"status.pin_failed" = "贴图失败";
+
+"alert.settings_save_failed" = "无法保存设置";
+"alert.capture_failed" = "无法生成截图";
+"alert.copy_failed" = "无法复制截图";
+"alert.pin_failed" = "无法创建贴图";
+"alert.upload_failed" = "截图上传失败";
+"alert.screen_permission_title" = "需要屏幕录制权限";
+"alert.screen_permission_body" = "PocketIMG Shot 只读取按下快捷键时的一张屏幕静态画面，不录制音频。请在“系统设置 → 隐私与安全性 → 屏幕与系统音频录制”中允许本应用，然后重新打开。";
+
+"button.retry" = "重试";
+"button.cancel" = "取消";
+"button.ok" = "好";
+"button.open_system_settings" = "打开系统设置";
+
+"diagnostic_log" = "诊断日志：%@";
+"error.hotkey_registration" = "快捷键已被其他应用占用，或系统拒绝注册（%d）。";
+"error.invalid_server_address" = "服务器地址必须是完整的 HTTP 或 HTTPS 地址。";
+"error.server_address_has_path" = "服务器地址不能包含路径，请只填写协议、域名和端口。";
+"error.missing_token" = "Token 不能为空。";
+"error.capture.no_displays" = "没有找到可截取的显示器。";
+"error.capture.encoding_failed" = "无法生成截图文件。";
+"error.clipboard_write_failed" = "系统剪贴板写入失败。";
+"error.pinned.invalid_image" = "无法读取截图图像。";
+"error.pinned.no_screen" = "没有找到可显示贴图的屏幕。";
+"error.client.invalid_response" = "PocketIMG 返回了无法识别的响应。";
+"error.client.request_failed" = "PocketIMG 请求失败（HTTP %d）。";
+"error.network" = "无法连接 PocketIMG，请检查网络和服务器地址。";

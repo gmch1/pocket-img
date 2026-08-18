@@ -21,6 +21,7 @@ final class CaptureCoordinator: NSObject, CaptureOverlayViewDelegate, NSWindowDe
     func begin(
         annotationStyle: AnnotationStylePreferences,
         uploadEnabled: Bool,
+        language: AppLanguage,
         onAnnotationStyleChange: @escaping (AnnotationStylePreferences) -> Void,
         onFinish: @escaping (UploadPayload, CaptureAction) -> Void,
         onCancel: @escaping () -> Void,
@@ -54,6 +55,7 @@ final class CaptureCoordinator: NSObject, CaptureOverlayViewDelegate, NSWindowDe
                     displays,
                     annotationStyle: annotationStyle,
                     uploadEnabled: uploadEnabled,
+                    language: language,
                     onAnnotationStyleChange: onAnnotationStyleChange
                 )
                 captureTask = nil
@@ -83,6 +85,7 @@ final class CaptureCoordinator: NSObject, CaptureOverlayViewDelegate, NSWindowDe
         _ displays: [CapturedDisplay],
         annotationStyle: AnnotationStylePreferences,
         uploadEnabled: Bool,
+        language: AppLanguage,
         onAnnotationStyleChange: @escaping (AnnotationStylePreferences) -> Void
     ) {
         let preparationWindows = windows
@@ -90,6 +93,7 @@ final class CaptureCoordinator: NSObject, CaptureOverlayViewDelegate, NSWindowDe
             let view = CaptureOverlayView(frame: NSRect(origin: .zero, size: display.screen.frame.size))
             view.annotationStyle = annotationStyle
             view.uploadEnabled = uploadEnabled
+            view.language = language
             view.onAnnotationStyleChange = onAnnotationStyleChange
             view.screenshot = display.image
             view.delegate = self
@@ -367,16 +371,20 @@ private extension NSScreen {
     }
 }
 
-enum CaptureError: LocalizedError {
+enum CaptureError: LocalizedError, AppLocalizedError {
     case noDisplays
     case imageEncodingFailed
 
     var errorDescription: String? {
+        localizedMessage(language: .system)
+    }
+
+    func localizedMessage(language: AppLanguage) -> String {
         switch self {
         case .noDisplays:
-            return "没有找到可截取的显示器。"
+            return L10n.text("error.capture.no_displays", language: language)
         case .imageEncodingFailed:
-            return "无法生成截图文件。"
+            return L10n.text("error.capture.encoding_failed", language: language)
         }
     }
 }

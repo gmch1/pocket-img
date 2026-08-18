@@ -4,12 +4,14 @@ import SwiftUI
 
 struct HotKeyRecorder: NSViewRepresentable {
     @Binding var hotKey: HotKey
+    var language: AppLanguage = .system
     var onChange: (HotKey) -> Void = { _ in }
     var onRecordingChanged: (Bool) -> Void = { _ in }
 
     func makeNSView(context: Context) -> HotKeyRecorderView {
         let view = HotKeyRecorderView()
         view.hotKey = hotKey
+        view.language = language
         view.onChange = { value in
             hotKey = value
             onChange(value)
@@ -20,12 +22,14 @@ struct HotKeyRecorder: NSViewRepresentable {
 
     func updateNSView(_ nsView: HotKeyRecorderView, context: Context) {
         nsView.hotKey = hotKey
+        nsView.language = language
         nsView.needsDisplay = true
     }
 }
 
 final class HotKeyRecorderView: NSView {
     var hotKey: HotKey = .default
+    var language: AppLanguage = .system
     var onChange: ((HotKey) -> Void)?
     var onRecordingChanged: ((Bool) -> Void)?
     private var recording = false
@@ -83,7 +87,9 @@ final class HotKeyRecorderView: NSView {
         path.lineWidth = recording ? 1.5 : 1
         path.stroke()
 
-        let text = recording ? "请按新的快捷键…" : hotKey.displayName
+        let text = recording
+            ? L10n.text("hotkey.recording", language: language)
+            : hotKey.localizedDisplayName(language: language)
         let attributes: [NSAttributedString.Key: Any] = [
             .font: NSFont.systemFont(ofSize: 13, weight: recording ? .regular : .medium),
             .foregroundColor: recording ? NSColor.secondaryLabelColor : NSColor.labelColor,

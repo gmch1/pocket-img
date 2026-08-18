@@ -12,28 +12,50 @@ struct SettingsView: View {
 
     var body: some View {
         Form {
-            Section("PocketIMG 服务") {
-                TextField("服务器地址", text: $settings.serverAddress, prompt: Text("https://img.example.com"))
-                    .textFieldStyle(.roundedBorder)
-                SecureField("Token", text: $settings.token)
-                    .textFieldStyle(.roundedBorder)
-                Text("设置写入 ~/Library/Application Support/PocketIMGShot/settings.json，不访问钥匙串；替换 App 后仍会保留。局域网调试可以使用 HTTP 地址。")
+            Section(L10n.text("settings.general.section", language: settings.language)) {
+                Picker(
+                    L10n.text("settings.language", language: settings.language),
+                    selection: Binding(
+                        get: { settings.language },
+                        set: controller.setLanguage
+                    )
+                ) {
+                    ForEach(AppLanguage.allCases) { language in
+                        Text(language.displayName(in: settings.language)).tag(language)
+                    }
+                }
+                Text(L10n.text("settings.language.hint", language: settings.language))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
 
-            Section("截图") {
+            Section(L10n.text("settings.service.section", language: settings.language)) {
+                TextField(
+                    L10n.text("settings.server_address", language: settings.language),
+                    text: $settings.serverAddress,
+                    prompt: Text("https://img.example.com")
+                )
+                    .textFieldStyle(.roundedBorder)
+                SecureField("Token", text: $settings.token)
+                    .textFieldStyle(.roundedBorder)
+                Text(L10n.text("settings.storage_hint", language: settings.language))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section(L10n.text("settings.capture.section", language: settings.language)) {
                 HStack {
-                    Text("全局快捷键")
+                    Text(L10n.text("settings.global_hotkey", language: settings.language))
                     Spacer()
                     HotKeyRecorder(
                         hotKey: $settings.hotKey,
+                        language: settings.language,
                         onChange: controller.persistHotKey,
                         onRecordingChanged: controller.setHotKeyRecording
                     )
                         .frame(width: 170, height: 28)
                 }
-                Text("点击快捷键框后按下新组合。默认是 F1；部分 Mac 键盘需要同时按 Fn。")
+                Text(L10n.text("settings.hotkey_hint", language: settings.language))
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 if !settings.hotKeyRegistrationError.isEmpty {
@@ -45,14 +67,14 @@ struct SettingsView: View {
 
             HStack {
                 Spacer()
-                Button("保存") {
+                Button(L10n.text("settings.save", language: settings.language)) {
                     controller.saveSettings()
                 }
                 .keyboardShortcut(.defaultAction)
             }
         }
         .formStyle(.grouped)
-        .frame(width: 480, height: 330)
+        .frame(width: 500, height: 430)
         .padding()
     }
 }

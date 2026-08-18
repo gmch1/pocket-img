@@ -1,6 +1,7 @@
 package backend
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"crypto/sha256"
@@ -127,6 +128,119 @@ func TestBrowserSecurityHeaders(t *testing.T) {
 	}
 	if !strings.Contains(response.Header.Get("Content-Security-Policy"), "frame-ancestors 'none'") {
 		t.Fatalf("Content-Security-Policy=%q", response.Header.Get("Content-Security-Policy"))
+	}
+}
+
+func TestGalleryEventSubscriptionsAreIsolatedAndCoalesced(t *testing.T) {
+	events := newGalleryEvents()
+	alice, unsubscribeAlice := events.subscribe("alice")
+	defer unsubscribeAlice()
+	bob, unsubscribeBob := events.subscribe("bob")
+	defer unsubscribeBob()
+
+	events.notify("alice")
+	events.notify("alice")
+	select {
+	case <-alice:
+	default:
+		t.Fatal("alice did not receive her gallery event")
+	}
+	select {
+	case <-alice:
+		t.Fatal("burst events were not coalesced")
+	default:
+	}
+	select {
+	case <-bob:
+		t.Fatal("bob received alice's gallery event")
+	default:
+	}
+}
+
+func TestGalleryEventStreamNotifiesAfterUpload(t *testing.T) {
+	backend := newTestBackend(t)
+
+	unauthorized, err := http.Get(backend.http.URL + "/api/images/events")
+	if err != nil {
+		t.Fatal(err)
+	}
+	unauthorized.Body.Close()
+	if unauthorized.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("unauthorized stream status=%d", unauthorized.StatusCode)
+	}
+
+	backend.login(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, backend.http.URL+"/api/images/events", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	response, err := backend.client.Do(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("stream status=%d", response.StatusCode)
+	}
+	if response.Header.Get("Content-Type") != "text/event-stream" {
+		t.Fatalf("stream content type=%q", response.Header.Get("Content-Type"))
+	}
+	if !strings.Contains(response.Header.Get("Cache-Control"), "no-store") {
+		t.Fatalf("stream cache control=%q", response.Header.Get("Cache-Control"))
+	}
+
+	reader := bufio.NewReader(response.Body)
+	for {
+		event, err := readSSEEvent(reader)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if strings.Contains(event, "event: ready") {
+			break
+		}
+	}
+
+	received := make(chan error, 1)
+	go func() {
+		for {
+			event, err := readSSEEvent(reader)
+			if err != nil {
+				received <- err
+				return
+			}
+			if strings.Contains(event, "event: gallery") {
+				received <- nil
+				return
+			}
+		}
+	}()
+	backend.upload(t, "sse.png", makePNG(t, 32, 24))
+	select {
+	case err := <-received:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("gallery event was not delivered after upload")
+	}
+}
+
+func readSSEEvent(reader *bufio.Reader) (string, error) {
+	var lines []string
+	for {
+		line, err := reader.ReadString('\n')
+		if err != nil {
+			return "", err
+		}
+		line = strings.TrimSuffix(strings.TrimSuffix(line, "\n"), "\r")
+		if line == "" && len(lines) > 0 {
+			return strings.Join(lines, "\n"), nil
+		}
+		if line != "" {
+			lines = append(lines, line)
+		}
 	}
 }
 

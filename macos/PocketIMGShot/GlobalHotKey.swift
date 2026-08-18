@@ -10,13 +10,26 @@ struct HotKey: Equatable {
     let keyLabel: String
 
     var displayName: String {
+        localizedDisplayName(language: .english)
+    }
+
+    func localizedDisplayName(language: AppLanguage) -> String {
         var value = ""
         let flags = NSEvent.ModifierFlags(rawValue: modifiers)
         if flags.contains(.control) { value += "⌃" }
         if flags.contains(.option) { value += "⌥" }
         if flags.contains(.shift) { value += "⇧" }
         if flags.contains(.command) { value += "⌘" }
-        return value + keyLabel
+        let localizedKeyLabel: String
+        switch keyLabel {
+        case "Space": localizedKeyLabel = L10n.text("hotkey.space", language: language)
+        case "Return": localizedKeyLabel = L10n.text("hotkey.return", language: language)
+        case "Tab": localizedKeyLabel = L10n.text("hotkey.tab", language: language)
+        case "Delete": localizedKeyLabel = L10n.text("hotkey.delete", language: language)
+        case "Forward Delete": localizedKeyLabel = L10n.text("hotkey.forward_delete", language: language)
+        default: localizedKeyLabel = keyLabel
+        }
+        return value + localizedKeyLabel
     }
 
     var carbonModifiers: UInt32 {
@@ -30,13 +43,17 @@ struct HotKey: Equatable {
     }
 }
 
-enum GlobalHotKeyError: LocalizedError {
+enum GlobalHotKeyError: LocalizedError, AppLocalizedError {
     case registrationFailed(OSStatus)
 
     var errorDescription: String? {
+        localizedMessage(language: .system)
+    }
+
+    func localizedMessage(language: AppLanguage) -> String {
         switch self {
         case .registrationFailed(let status):
-            return "快捷键已被其他应用占用，或系统拒绝注册（\(status)）。"
+            return L10n.format("error.hotkey_registration", language: language, status)
         }
     }
 }

@@ -132,6 +132,46 @@ describe("App", () => {
     expect(listImages).toHaveBeenCalledTimes(2);
   });
 
+  test("refreshes the gallery when the server announces a change", async () => {
+    let galleryListener: EventListener | undefined;
+    const close = vi.fn();
+    class MockEventSource {
+      constructor(readonly url: string, readonly options?: EventSourceInit) {}
+
+      addEventListener(type: string, listener: EventListener) {
+        if (type === "gallery") galleryListener = listener;
+      }
+
+      removeEventListener(type: string, listener: EventListener) {
+        if (type === "gallery" && galleryListener === listener) galleryListener = undefined;
+      }
+
+      close() {
+        close();
+      }
+    }
+    vi.stubGlobal("EventSource", MockEventSource);
+    const newest: ImageItem = {
+      ...image,
+      id: "abcdef0123456789abcdef0123456789",
+      thumbnail_url: "/t/abcdef0123456789abcdef0123456789.webp",
+      url: "/i/abcdef0123456789abcdef0123456789.webp",
+    };
+    vi.mocked(listImages)
+      .mockResolvedValueOnce(gallery([image]))
+      .mockResolvedValueOnce(gallery([newest]));
+
+    const { container, unmount } = render(<App />);
+    await screen.findByRole("button", { name: "复制图片链接" });
+    await waitFor(() => expect(galleryListener).toBeTypeOf("function"));
+    galleryListener?.(new MessageEvent("gallery", { data: "{}" }));
+
+    await waitFor(() => expect(listImages).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(container.querySelector(".image-card img")?.getAttribute("src")).toBe(newest.thumbnail_url));
+    unmount();
+    expect(close).toHaveBeenCalledOnce();
+  });
+
   test("shows a friendly gallery error and retries the request", async () => {
     vi.mocked(listImages)
       .mockResolvedValueOnce(gallery([]))

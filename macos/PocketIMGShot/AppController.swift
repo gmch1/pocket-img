@@ -55,8 +55,8 @@ final class AppController: ObservableObject {
             }
             settings.hotKeyRegistrationError = ""
         } catch {
-            settings.hotKeyRegistrationError = error.localizedDescription
-            toast.show("快捷键注册失败")
+            settings.hotKeyRegistrationError = localizedDescription(for: error)
+            toast.show(L10n.text("toast.hotkey_registration_failed", language: settings.language))
         }
     }
 
@@ -78,15 +78,26 @@ final class AppController: ObservableObject {
         settings.persistHotKey(value)
     }
 
+    func setLanguage(_ language: AppLanguage) {
+        settings.persistLanguage(language)
+        pinnedImages.updateLanguage(language)
+        if !settings.hotKeyRegistrationError.isEmpty {
+            registerHotKey()
+        }
+    }
+
     func saveSettings() {
         do {
             try settings.save()
             client = nil
             clientConfiguration = nil
             registerHotKey()
-            toast.show("设置已保存")
+            toast.show(L10n.text("toast.settings_saved", language: settings.language))
         } catch {
-            showError(title: "无法保存设置", message: error.localizedDescription)
+            showError(
+                title: L10n.text("alert.settings_save_failed", language: settings.language),
+                message: localizedDescription(for: error)
+            )
         }
     }
 
@@ -122,7 +133,11 @@ final class AppController: ObservableObject {
                 showScreenCapturePermissionHelp()
                 return
             }
-            toast.show("已获得截屏权限，请再次按 \(settings.hotKey.displayName)")
+            toast.show(L10n.format(
+                "toast.capture_permission_granted",
+                language: settings.language,
+                settings.hotKey.localizedDisplayName(language: settings.language)
+            ))
             return
         }
 
@@ -131,6 +146,7 @@ final class AppController: ObservableObject {
         captureCoordinator.begin(
             annotationStyle: settings.annotationStyle,
             uploadEnabled: settings.hasUploadConfiguration,
+            language: settings.language,
             onAnnotationStyleChange: { [weak self] style in
                 self?.settings.updateAnnotationStyle(style)
             },
@@ -153,10 +169,10 @@ final class AppController: ObservableObject {
             onError: { [weak self] error in
                 guard let self else { return }
                 self.isCapturing = false
-                self.statusMessage = "截图生成失败"
+                self.statusMessage = L10n.text("status.capture_failed", language: self.settings.language)
                 self.showError(
-                    title: "无法生成截图",
-                    message: error.localizedDescription + "\n\n诊断日志：~/Library/Logs/PocketIMGShot.log"
+                    title: L10n.text("alert.capture_failed", language: self.settings.language),
+                    message: self.messageWithDiagnosticLog(self.localizedDescription(for: error))
                 )
             }
         )
@@ -166,8 +182,8 @@ final class AppController: ObservableObject {
         DiagnosticLog.record("upload started bytes=\(payload.data.count) type=\(payload.contentType)")
         pendingUpload = payload
         isUploading = true
-        statusMessage = "正在上传…"
-        toast.show("正在上传…", duration: 60)
+        statusMessage = L10n.text("status.uploading", language: settings.language)
+        toast.show(L10n.text("toast.uploading", language: settings.language), duration: 60)
 
         Task {
             do {
@@ -185,14 +201,15 @@ final class AppController: ObservableObject {
                 NSPasteboard.general.setString(url.absoluteString, forType: .string)
                 pendingUpload = nil
                 isUploading = false
-                statusMessage = "链接已复制"
+                let completedStatus = L10n.text("status.link_copied", language: settings.language)
+                statusMessage = completedStatus
                 DiagnosticLog.record("upload finished")
-                toast.show("上传完成，链接已复制")
-                clearStatusLater(expected: "链接已复制")
+                toast.show(L10n.text("toast.upload_complete", language: settings.language))
+                clearStatusLater(expected: completedStatus)
             } catch {
                 DiagnosticLog.record(error, phase: "upload")
                 isUploading = false
-                statusMessage = "上传失败"
+                statusMessage = L10n.text("status.upload_failed", language: settings.language)
                 toast.dismiss()
                 offerUploadRetry(error: error)
             }
@@ -201,39 +218,50 @@ final class AppController: ObservableObject {
 
     private func copy(_ payload: UploadPayload) {
         guard let image = NSImage(data: payload.data) else {
-            showError(title: "无法复制截图", message: CaptureError.imageEncodingFailed.localizedDescription)
+            showError(
+                title: L10n.text("alert.copy_failed", language: settings.language),
+                message: CaptureError.imageEncodingFailed.localizedMessage(language: settings.language)
+            )
             return
         }
         let pasteboard = NSPasteboard.general
         pasteboard.clearContents()
         guard pasteboard.writeObjects([image]) else {
-            showError(title: "无法复制截图", message: "系统剪贴板写入失败。")
+            showError(
+                title: L10n.text("alert.copy_failed", language: settings.language),
+                message: L10n.text("error.clipboard_write_failed", language: settings.language)
+            )
             return
         }
-        statusMessage = "截图已复制"
-        toast.show("截图已复制")
-        clearStatusLater(expected: "截图已复制")
+        let copiedStatus = L10n.text("status.screenshot_copied", language: settings.language)
+        statusMessage = copiedStatus
+        toast.show(L10n.text("toast.screenshot_copied", language: settings.language))
+        clearStatusLater(expected: copiedStatus)
     }
 
     private func pin(_ payload: UploadPayload) {
         do {
-            try pinnedImages.show(payload)
-            statusMessage = "截图已置顶"
-            toast.show("截图已贴到桌面，双击或按 Esc 关闭")
-            clearStatusLater(expected: "截图已置顶")
+            try pinnedImages.show(payload, language: settings.language)
+            let pinnedStatus = L10n.text("status.screenshot_pinned", language: settings.language)
+            statusMessage = pinnedStatus
+            toast.show(L10n.text("toast.screenshot_pinned", language: settings.language))
+            clearStatusLater(expected: pinnedStatus)
         } catch {
-            statusMessage = "贴图失败"
-            showError(title: "无法创建贴图", message: error.localizedDescription)
+            statusMessage = L10n.text("status.pin_failed", language: settings.language)
+            showError(
+                title: L10n.text("alert.pin_failed", language: settings.language),
+                message: localizedDescription(for: error)
+            )
         }
     }
 
     private func offerUploadRetry(error: Error) {
         let alert = NSAlert()
         alert.alertStyle = .warning
-        alert.messageText = "截图上传失败"
-        alert.informativeText = error.localizedDescription + "\n\n诊断日志：~/Library/Logs/PocketIMGShot.log"
-        alert.addButton(withTitle: "重试")
-        alert.addButton(withTitle: "取消")
+        alert.messageText = L10n.text("alert.upload_failed", language: settings.language)
+        alert.informativeText = messageWithDiagnosticLog(localizedDescription(for: error))
+        alert.addButton(withTitle: L10n.text("button.retry", language: settings.language))
+        alert.addButton(withTitle: L10n.text("button.cancel", language: settings.language))
         NSApplication.shared.activate(ignoringOtherApps: true)
         if alert.runModal() == .alertFirstButtonReturn, let pendingUpload {
             upload(pendingUpload)
@@ -255,10 +283,10 @@ final class AppController: ObservableObject {
     private func showScreenCapturePermissionHelp() {
         let alert = NSAlert()
         alert.alertStyle = .warning
-        alert.messageText = "需要屏幕录制权限"
-        alert.informativeText = "PocketIMG Shot 只读取按下快捷键时的一张屏幕静态画面，不录制音频。请在“系统设置 → 隐私与安全性 → 屏幕与系统音频录制”中允许本应用，然后重新打开。"
-        alert.addButton(withTitle: "打开系统设置")
-        alert.addButton(withTitle: "取消")
+        alert.messageText = L10n.text("alert.screen_permission_title", language: settings.language)
+        alert.informativeText = L10n.text("alert.screen_permission_body", language: settings.language)
+        alert.addButton(withTitle: L10n.text("button.open_system_settings", language: settings.language))
+        alert.addButton(withTitle: L10n.text("button.cancel", language: settings.language))
         NSApplication.shared.activate(ignoringOtherApps: true)
         if alert.runModal() == .alertFirstButtonReturn,
            let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture") {
@@ -271,8 +299,26 @@ final class AppController: ObservableObject {
         alert.alertStyle = .warning
         alert.messageText = title
         alert.informativeText = message
-        alert.addButton(withTitle: "好")
+        alert.addButton(withTitle: L10n.text("button.ok", language: settings.language))
         NSApplication.shared.activate(ignoringOtherApps: true)
         alert.runModal()
+    }
+
+    private func localizedDescription(for error: Error) -> String {
+        if let localized = error as? AppLocalizedError {
+            return localized.localizedMessage(language: settings.language)
+        }
+        if error is URLError {
+            return L10n.text("error.network", language: settings.language)
+        }
+        return error.localizedDescription
+    }
+
+    private func messageWithDiagnosticLog(_ message: String) -> String {
+        message + "\n\n" + L10n.format(
+            "diagnostic_log",
+            language: settings.language,
+            "~/Library/Logs/PocketIMGShot.log"
+        )
     }
 }

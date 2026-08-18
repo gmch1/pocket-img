@@ -6,10 +6,15 @@ import SwiftUI
 struct PocketIMGShotApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @ObservedObject private var controller = AppController.shared
+    @ObservedObject private var settings = AppController.shared.settings
 
     var body: some Scene {
         MenuBarExtra {
-            Button("截图（\(controller.settings.hotKey.displayName)）") {
+            Button(L10n.format(
+                "menu.capture",
+                language: settings.language,
+                settings.hotKey.localizedDisplayName(language: settings.language)
+            )) {
                 controller.startCapture()
             }
             .disabled(controller.isCapturing || controller.isUploading)
@@ -20,12 +25,12 @@ struct PocketIMGShotApp: App {
             }
 
             Divider()
-            Button("检查更新…") {
+            Button(L10n.text("menu.check_updates", language: settings.language)) {
                 controller.checkForUpdates()
             }
             .disabled(!controller.canCheckForUpdates)
-            SettingsMenuButton(controller: controller)
-            Button("退出 PocketIMG Shot") {
+            SettingsMenuButton(controller: controller, language: settings.language)
+            Button(L10n.text("menu.quit", language: settings.language)) {
                 NSApplication.shared.terminate(nil)
             }
         } label: {
@@ -45,10 +50,11 @@ struct PocketIMGShotApp: App {
 
 private struct SettingsMenuButton: View {
     @ObservedObject var controller: AppController
+    let language: AppLanguage
     @Environment(\.openSettings) private var openSettings
 
     var body: some View {
-        Button("设置…") {
+        Button(L10n.text("menu.settings", language: language)) {
             NSApplication.shared.activate(ignoringOtherApps: true)
             openSettings()
             controller.bringSettingsToFront()

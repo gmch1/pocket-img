@@ -22,6 +22,8 @@
 		B0000000000000000000000E /* DiagnosticLog.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0000000000000000000000F /* DiagnosticLog.swift */; };
 		B0000000000000000000000F /* PinnedImagePresenter.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000010 /* PinnedImagePresenter.swift */; };
 		B00000000000000000000010 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000012 /* Assets.xcassets */; };
+		B00000000000000000000011 /* Localization.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000013 /* Localization.swift */; };
+		B00000000000000000000012 /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = V00000000000000000000001 /* Localizable.strings */; };
 		B00000000000000000000101 /* AnnotationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000101 /* AnnotationTests.swift */; };
 		B00000000000000000000102 /* ConfigurationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000102 /* ConfigurationTests.swift */; };
 		B00000000000000000000103 /* ScreenshotRendererTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000103 /* ScreenshotRendererTests.swift */; };
@@ -63,6 +65,9 @@
 		F00000000000000000000010 /* PinnedImagePresenter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PinnedImagePresenter.swift; sourceTree = "<group>"; };
 		F00000000000000000000011 /* PocketIMGShot.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = PocketIMGShot.entitlements; sourceTree = "<group>"; };
 		F00000000000000000000012 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		F00000000000000000000013 /* Localization.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Localization.swift; sourceTree = "<group>"; };
+		F00000000000000000000014 /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = en.lproj/Localizable.strings; sourceTree = "<group>"; };
+		F00000000000000000000015 /* zh-Hans */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = "zh-Hans"; path = "zh-Hans.lproj/Localizable.strings"; sourceTree = "<group>"; };
 		F00000000000000000000101 /* AnnotationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnnotationTests.swift; sourceTree = "<group>"; };
 		F00000000000000000000102 /* ConfigurationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfigurationTests.swift; sourceTree = "<group>"; };
 		F00000000000000000000103 /* ScreenshotRendererTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenshotRendererTests.swift; sourceTree = "<group>"; };
@@ -131,6 +136,8 @@
 				F00000000000000000000010 /* PinnedImagePresenter.swift */,
 				F00000000000000000000011 /* PocketIMGShot.entitlements */,
 				F00000000000000000000012 /* Assets.xcassets */,
+				F00000000000000000000013 /* Localization.swift */,
+				V00000000000000000000001 /* Localizable.strings */,
 				F0000000000000000000000D /* Info.plist */,
 			);
 			path = PocketIMGShot;
@@ -236,6 +243,7 @@
 			knownRegions = (
 				en,
 				Base,
+				"zh-Hans",
 			);
 			mainGroup = G00000000000000000000000;
 			packageReferences = (
@@ -258,6 +266,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				B00000000000000000000010 /* Assets.xcassets in Resources */,
+				B00000000000000000000012 /* Localizable.strings in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -289,6 +298,7 @@
 				B0000000000000000000000D /* ScreenshotRenderer.swift in Sources */,
 				B0000000000000000000000E /* DiagnosticLog.swift in Sources */,
 				B0000000000000000000000F /* PinnedImagePresenter.swift in Sources */,
+				B00000000000000000000011 /* Localization.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -484,6 +494,18 @@
 			productName = libwebp;
 		};
 /* End XCSwiftPackageProductDependency section */
+
+/* Begin PBXVariantGroup section */
+		V00000000000000000000001 /* Localizable.strings */ = {
+			isa = PBXVariantGroup;
+			children = (
+				F00000000000000000000014 /* en */,
+				F00000000000000000000015 /* zh-Hans */,
+			);
+			name = Localizable.strings;
+			sourceTree = "<group>";
+		};
+/* End PBXVariantGroup section */
 	};
 	rootObject = A00000000000000000000000 /* Project object */;
 }
