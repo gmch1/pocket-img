@@ -80,6 +80,23 @@ final class ScreenshotRendererTests: XCTestCase {
         XCTAssertEqual((properties[kCGImagePropertyPixelHeight] as? NSNumber)?.intValue, 2480)
     }
 
+    func testEncodesUploadPayloadAsWebP() throws {
+        let source = try makeImage(width: 1920, height: 1080)
+        let payload = try ScreenshotRenderer.render(
+            screenshot: source,
+            viewBounds: CGRect(x: 0, y: 0, width: 1920, height: 1080),
+            selection: CGRect(x: 0, y: 0, width: 1920, height: 1080),
+            annotations: [],
+            output: .upload
+        )
+
+        XCTAssertEqual(payload.fileName, "screenshot.webp")
+        XCTAssertEqual(payload.contentType, "image/webp")
+        XCTAssertEqual(Array(payload.data.prefix(4)), Array("RIFF".utf8))
+        XCTAssertEqual(Array(payload.data.dropFirst(8).prefix(4)), Array("WEBP".utf8))
+        XCTAssertNotNil(CGImageSourceCreateWithData(payload.data as CFData, nil))
+    }
+
     private func makeImage(
         width: Int,
         height: Int,

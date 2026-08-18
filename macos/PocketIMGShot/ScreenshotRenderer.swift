@@ -5,14 +5,21 @@ import ImageIO
 import UniformTypeIdentifiers
 
 enum ScreenshotRenderer {
+    enum Output {
+        case local
+        case upload
+    }
+
     private static let maxPixels: CGFloat = 19_000_000
     private static let maxPayloadBytes = 24 * 1024 * 1024
+    private static let webPQuality = 0.82
 
     static func render(
         screenshot: CGImage,
         viewBounds: CGRect,
         selection: CGRect,
-        annotations: [Annotation]
+        annotations: [Annotation],
+        output: Output = .local
     ) throws -> UploadPayload {
         guard viewBounds.width > 0, viewBounds.height > 0,
               selection.width > 0, selection.height > 0 else {
@@ -81,6 +88,20 @@ enum ScreenshotRenderer {
 
         guard let image = context.makeImage() else {
             throw CaptureError.imageEncodingFailed
+        }
+        if output == .upload,
+           let webP = encode(
+               image,
+               type: .webP,
+               properties: [kCGImageDestinationLossyCompressionQuality: webPQuality]
+           ),
+           webP.count <= maxPayloadBytes {
+            return UploadPayload(
+                data: webP,
+                fileName: "screenshot.webp",
+                contentType: "image/webp",
+                displaySize: selection.size
+            )
         }
         if let png = encode(image, type: .png, properties: [:]), png.count <= maxPayloadBytes {
             return UploadPayload(

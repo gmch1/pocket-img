@@ -1459,6 +1459,13 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
         isFinishing = true
         let viewBounds = bounds
         let annotations = annotations
+        let output: ScreenshotRenderer.Output
+        switch action {
+        case .upload:
+            output = .upload
+        case .pin, .copy:
+            output = .local
+        }
         let placementFrame = window.map { captureWindow in
             CaptureGeometry.screenFrame(for: selection, in: captureWindow.frame)
         }
@@ -1474,7 +1481,8 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
                         screenshot: screenshot,
                         viewBounds: viewBounds,
                         selection: selection,
-                        annotations: annotations
+                        annotations: annotations,
+                        output: output
                     )
                 }.value
                 let payload = placementFrame.map { rendered.placed(in: $0) } ?? rendered
