@@ -9,13 +9,12 @@
 
 "settings.general.section" = "General";
 "settings.language" = "Language";
-"settings.language.hint" = "Changes apply immediately. Follow System uses the current macOS language.";
 "settings.service.section" = "PocketIMG Service";
 "settings.server_address" = "Server Address";
-"settings.storage_hint" = "Settings are stored in ~/Library/Application Support/PocketIMGShot/settings.json without using Keychain, and remain after replacing the app. HTTP addresses are supported for local network debugging.";
+"settings.server_address.help" = "HTTP is supported for local network addresses.";
 "settings.capture.section" = "Capture";
 "settings.global_hotkey" = "Global Shortcut";
-"settings.hotkey_hint" = "Click the shortcut field, then press a new combination. The default is F1; some Mac keyboards also require Fn.";
+"settings.hotkey.help" = "Click and press a new shortcut. Some Macs also require Fn.";
 "settings.save" = "Save";
 
 "hotkey.recording" = "Press a new shortcut…";

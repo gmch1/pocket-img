@@ -9,13 +9,12 @@
 
 "settings.general.section" = "通用";
 "settings.language" = "语言";
-"settings.language.hint" = "更改后立即应用；“跟随系统”会使用当前 macOS 语言。";
 "settings.service.section" = "PocketIMG 服务";
 "settings.server_address" = "服务器地址";
-"settings.storage_hint" = "设置写入 ~/Library/Application Support/PocketIMGShot/settings.json，不访问钥匙串；替换 App 后仍会保留。局域网调试可以使用 HTTP 地址。";
+"settings.server_address.help" = "局域网地址支持 HTTP。";
 "settings.capture.section" = "截图";
 "settings.global_hotkey" = "全局快捷键";
-"settings.hotkey_hint" = "点击快捷键框后按下新组合。默认是 F1；部分 Mac 键盘需要同时按 Fn。";
+"settings.hotkey.help" = "点击后按下新快捷键，部分 Mac 需配合 Fn。";
 "settings.save" = "保存";
 
 "hotkey.recording" = "请按新的快捷键…";

@@ -24,28 +24,28 @@ struct SettingsView: View {
                         Text(language.displayName(in: settings.language)).tag(language)
                     }
                 }
-                Text(L10n.text("settings.language.hint", language: settings.language))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
             }
 
             Section(L10n.text("settings.service.section", language: settings.language)) {
-                TextField(
-                    L10n.text("settings.server_address", language: settings.language),
-                    text: $settings.serverAddress,
-                    prompt: Text("https://img.example.com")
-                )
+                TextField(text: $settings.serverAddress, prompt: Text("https://img.example.com")) {
+                    HStack(spacing: 5) {
+                        Text(L10n.text("settings.server_address", language: settings.language))
+                        SettingsHelpIcon(
+                            text: L10n.text("settings.server_address.help", language: settings.language)
+                        )
+                    }
+                }
                     .textFieldStyle(.roundedBorder)
                 SecureField("Token", text: $settings.token)
                     .textFieldStyle(.roundedBorder)
-                Text(L10n.text("settings.storage_hint", language: settings.language))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
             }
 
             Section(L10n.text("settings.capture.section", language: settings.language)) {
                 HStack {
                     Text(L10n.text("settings.global_hotkey", language: settings.language))
+                    SettingsHelpIcon(
+                        text: L10n.text("settings.hotkey.help", language: settings.language)
+                    )
                     Spacer()
                     HotKeyRecorder(
                         hotKey: $settings.hotKey,
@@ -55,9 +55,6 @@ struct SettingsView: View {
                     )
                         .frame(width: 170, height: 28)
                 }
-                Text(L10n.text("settings.hotkey_hint", language: settings.language))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
                 if !settings.hotKeyRegistrationError.isEmpty {
                     Text(settings.hotKeyRegistrationError)
                         .font(.caption)
@@ -76,5 +73,16 @@ struct SettingsView: View {
         .formStyle(.grouped)
         .frame(width: 500, height: 430)
         .padding()
+    }
+}
+
+private struct SettingsHelpIcon: View {
+    let text: String
+
+    var body: some View {
+        Image(systemName: "info.circle")
+            .foregroundStyle(.secondary)
+            .help(text)
+            .accessibilityLabel(text)
     }
 }
