@@ -69,17 +69,23 @@ jobs:
           -derivedDataPath "${RUNNER_TEMP}/PocketIMGShotTests"
           test
 
-      - name: Build universal macOS client
+      - name: Build Apple Silicon macOS client
         run: >-
           xcodebuild
           -project macos/PocketIMGShot.xcodeproj
           -scheme PocketIMGShot
           -configuration Release
           -derivedDataPath "${RUNNER_TEMP}/PocketIMGShotBuild"
-          ARCHS='arm64 x86_64'
+          ARCHS=arm64
           ONLY_ACTIVE_ARCH=NO
           CODE_SIGNING_ALLOWED=NO
           build
+
+      - name: Verify Apple Silicon bundle
+        shell: bash
+        run: >-
+          scripts/prepare_macos_arm64_bundle.sh
+          "${RUNNER_TEMP}/PocketIMGShotBuild/Build/Products/Release/PocketIMGShot.app"
 
       - name: Verify app icon resources
         shell: bash

@@ -8,7 +8,7 @@ Go 后端内嵌 React 管理网页，可作为 Linux 单文件服务运行，也
 
 核心的登录、上传、浏览、复制链接、删除、用户隔离和自动清理链路已经实现。
 
-Linux x86_64 后端、Android ARM64 App 和 macOS 通用客户端均可通过 GitHub Release 获取。
+Linux x86_64 后端、Android ARM64 App 和 macOS Apple Silicon 客户端均可通过 GitHub Release 获取。
 
 项目已经在 Android 13 / Linux 4.14 设备上完成浏览器到真机的端到端验证。
 
@@ -62,7 +62,7 @@ Linux x86_64 后端、Android ARM64 App 和 macOS 通用客户端均可通过 Gi
 
 ### macOS 截图客户端
 
-- 原生 macOS 14+ 菜单栏应用，不显示 Dock 图标。
+- 面向 Apple Silicon（`arm64`）的原生 macOS 14+ 菜单栏应用，不显示 Dock 图标；不再发布 Intel 版本。
 - 默认全局快捷键为 `F1`，支持用户手动修改。
 - 支持多显示器区域截图、对应屏幕原位置贴图和 Retina 原生像素输出。
 - 截图完成后可直接拖动选区，并可拖动边框或八个控制点二次调整范围；标注工具需要手动选择并可再次点击取消。

@@ -27,13 +27,13 @@ jobs:
           fi
           gh release download "${RELEASE_TAG}" \
             --repo "${GITHUB_REPOSITORY}" \
-            --pattern 'PocketIMGShot-*-macos-universal.zip*' \
+            --pattern 'PocketIMGShot-*-macos-arm64.zip*' \
             --dir "${RUNNER_TEMP}/release"
 
       - name: Verify and launch release app
         shell: bash
         run: |
-          archive="$(find "${RUNNER_TEMP}/release" -type f -name 'PocketIMGShot-*-macos-universal.zip' -print -quit)"
+          archive="$(find "${RUNNER_TEMP}/release" -type f -name 'PocketIMGShot-*-macos-arm64.zip' -print -quit)"
           checksum="${archive}.sha256"
           test -f "${archive}"
           test -f "${checksum}"
@@ -45,6 +45,7 @@ jobs:
           app="${RUNNER_TEMP}/unpacked/PocketIMGShot.app"
           binary="${app}/Contents/MacOS/PocketIMGShot"
           codesign --verify --deep --strict "${app}"
+          [[ "$(lipo -archs "${binary}")" == "arm64" ]]
 
           launch_log="${RUNNER_TEMP}/PocketIMGShot-launch.log"
           "${binary}" > "${launch_log}" 2>&1 &

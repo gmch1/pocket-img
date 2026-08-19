@@ -132,7 +132,7 @@ jobs:
           -derivedDataPath "${RUNNER_TEMP}/PocketIMGShotTests"
           test
 
-      - name: Build universal macOS client
+      - name: Build Apple Silicon macOS client
         env:
           RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
           RELEASE_BUILD_NUMBER: ${{ needs.prepare.outputs.build-number }}
@@ -142,7 +142,7 @@ jobs:
           -scheme PocketIMGShot
           -configuration Release
           -derivedDataPath "${RUNNER_TEMP}/PocketIMGShotBuild"
-          ARCHS='arm64 x86_64'
+          ARCHS=arm64
           ONLY_ACTIVE_ARCH=NO
           CODE_SIGNING_ALLOWED=NO
           MARKETING_VERSION="${RELEASE_VERSION}"
@@ -170,6 +170,7 @@ jobs:
           sparkle_framework="${app}/Contents/Frameworks/Sparkle.framework"
           sparkle_version="${sparkle_framework}/Versions/B"
           test -d "${sparkle_version}"
+          scripts/prepare_macos_arm64_bundle.sh "${app}"
           codesign \
             --force \
             --sign "${MACOS_SIGNING_IDENTITY}" \
@@ -242,11 +243,8 @@ jobs:
             exit 1
           fi
           grep -Fq 'com.apple.security.cs.disable-library-validation' <<< "${entitlements}"
-          architectures="$(lipo -archs "${binary}")"
-          [[ "${architectures}" == *arm64* ]]
-          [[ "${architectures}" == *x86_64* ]]
           install -d release
-          archive_name="PocketIMGShot-${RELEASE_VERSION}-macos-universal.zip"
+          archive_name="PocketIMGShot-${RELEASE_VERSION}-macos-arm64.zip"
           archive="release/${archive_name}"
           ditto -c -k --sequesterRsrc --keepParent "${app}" "${archive}"
           (
@@ -283,6 +281,7 @@ jobs:
             '    <item>' \
             "      <title>PocketIMG Shot ${RELEASE_VERSION}</title>" \
             "      <pubDate>${published_at}</pubDate>" \
+            '      <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>' \
             '      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>' \
             "      <enclosure url=\"https://github.com/gmch1/pocket-img/releases/download/${RELEASE_TAG}/${archive_name}\" sparkle:version=\"${RELEASE_BUILD_NUMBER}\" sparkle:shortVersionString=\"${RELEASE_VERSION}\" sparkle:edSignature=\"${update_signature}\" length=\"${update_length}\" type=\"application/octet-stream\" />" \
             '    </item>' \

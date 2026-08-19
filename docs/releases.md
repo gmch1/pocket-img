@@ -6,7 +6,7 @@ PocketIMG 的 Linux Server、Android App 和 macOS Shot 使用独立发布通道
 | --- | --- | --- | --- |
 | Linux Server | `server-v<version>` | `release-server.yml` | Linux amd64 二进制与 SHA-256 |
 | Android App | `android-v<version>` | `release-android.yml` | 签名 ARM64 APK 与 SHA-256 |
-| macOS Shot | `macos-v<version>` | `release-macos.yml` | 通用应用 ZIP、SHA-256 与签名 appcast |
+| macOS Shot | `macos-v<version>` | `release-macos.yml` | Apple Silicon（arm64）应用 ZIP、SHA-256 与签名 appcast |
 
 版本必须是三个非负整数，例如 `0.4.41`。发布标签不接受预发布后缀。首轮组件化发布以旧的全平台 `v0.4.40` 作为 Release Notes 比较基线，之后每个工作流只比较同组件的上一个标签。
 
@@ -57,3 +57,5 @@ https://github.com/gmch1/pocket-img/releases/download/macos-appcast/appcast.xml
 ```
 
 macOS 工作流先发布版本化归档，再更新 `macos-appcast` 预发布中的滚动签名清单，避免 appcast 暂时指向尚不存在的文件。`macos-appcast` 不匹配 `macos-v*`，更新该资产不会递归触发发布。
+
+macOS Release 只构建并发布 Apple Silicon（`arm64`）版本，归档命名为 `PocketIMGShot-<version>-macos-arm64.zip`，不再提供 Intel 或 Universal 产物。appcast 使用 `sparkle:hardwareRequirements=arm64` 标记硬件要求；已安装旧 Universal 版本的 Intel Mac 会保留现有版本，但不会下载或安装不兼容的新版本。
