@@ -238,7 +238,7 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
     private var textEditorVerticalCenter: CGFloat?
     private var textEditorSize: CGFloat?
     private var textEditorColor: AnnotationColor?
-    private var hoverPoint: CGPoint?
+    private(set) var hoverPoint: CGPoint?
     private var pressedToolbarAction: ToolbarAction?
     private var rectangleLineWidth: CGFloat = 2
     private var arrowLineWidth: CGFloat = 2
@@ -627,6 +627,15 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
             window?.invalidateCursorRects(for: self)
             needsDisplay = true
         }
+    }
+
+    func initializeHoverPoint(atScreenPoint screenPoint: CGPoint) {
+        guard mode == .selecting, let window else { return }
+        let windowPoint = window.convertPoint(fromScreen: screenPoint)
+        let point = convert(windowPoint, from: nil)
+        guard bounds.contains(point) else { return }
+        hoverPoint = constrained(point)
+        needsDisplay = true
     }
 
     override func draw(_ dirtyRect: NSRect) {

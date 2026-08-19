@@ -154,6 +154,9 @@ final class CaptureCoordinator: NSObject, CaptureOverlayViewDelegate, NSWindowDe
         let preferred = candidates.first { $0.frame.contains(pointer) } ?? candidates.first
         preferred?.makeKeyAndOrderFront(nil)
         preferred?.makeFirstResponder(preferred?.contentView)
+        if let overlay = preferred?.contentView as? CaptureOverlayView {
+            overlay.initializeHoverPoint(atScreenPoint: pointer)
+        }
     }
 
     func windowDidResignKey(_ notification: Notification) {
