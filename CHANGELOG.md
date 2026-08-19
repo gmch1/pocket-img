@@ -6,6 +6,7 @@
 
 - macOS Release 改为只发布 Apple Silicon（arm64）版本，并在 Sparkle appcast 中声明硬件要求；Intel Mac 会停留在最后一个兼容版本，不会下载不兼容更新。
 - macOS 发布归档由 `macos-universal.zip` 改名为 `macos-arm64.zip`，CI 与发布冒烟测试同步校验主程序及 Sparkle 内嵌组件只包含 arm64 架构。
+- macOS Release 保留 ZIP 供手动下载，并新增体积更小的 tar.xz 供 Sparkle 自动更新；两种归档分别生成 SHA-256，tar.xz 发布前会再次解包验证代码签名。
 
 ## 0.4.17 - 2026-08-14
 

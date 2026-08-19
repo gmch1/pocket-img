@@ -27,25 +27,35 @@ jobs:
           fi
           gh release download "${RELEASE_TAG}" \
             --repo "${GITHUB_REPOSITORY}" \
-            --pattern 'PocketIMGShot-*-macos-arm64.zip*' \
+            --pattern 'PocketIMGShot-*-macos-arm64.*' \
             --dir "${RUNNER_TEMP}/release"
 
       - name: Verify and launch release app
         shell: bash
         run: |
-          archive="$(find "${RUNNER_TEMP}/release" -type f -name 'PocketIMGShot-*-macos-arm64.zip' -print -quit)"
-          checksum="${archive}.sha256"
-          test -f "${archive}"
-          test -f "${checksum}"
-          (
-            cd "$(dirname "${archive}")"
-            shasum -a 256 -c "$(basename "${checksum}")"
-          )
-          ditto -x -k "${archive}" "${RUNNER_TEMP}/unpacked"
+          manual_archive="$(find "${RUNNER_TEMP}/release" -type f -name 'PocketIMGShot-*-macos-arm64.zip' -print -quit)"
+          update_archive="$(find "${RUNNER_TEMP}/release" -type f -name 'PocketIMGShot-*-macos-arm64.tar.xz' -print -quit)"
+          for archive in "${manual_archive}" "${update_archive}"; do
+            checksum="${archive}.sha256"
+            test -f "${archive}"
+            test -f "${checksum}"
+            (
+              cd "$(dirname "${archive}")"
+              shasum -a 256 -c "$(basename "${checksum}")"
+            )
+          done
+
+          ditto -x -k "${manual_archive}" "${RUNNER_TEMP}/unpacked"
           app="${RUNNER_TEMP}/unpacked/PocketIMGShot.app"
           binary="${app}/Contents/MacOS/PocketIMGShot"
           codesign --verify --deep --strict "${app}"
           [[ "$(lipo -archs "${binary}")" == "arm64" ]]
+
+          install -d "${RUNNER_TEMP}/update-unpacked"
+          tar -xJf "${update_archive}" -C "${RUNNER_TEMP}/update-unpacked"
+          update_app="${RUNNER_TEMP}/update-unpacked/PocketIMGShot.app"
+          codesign --verify --deep --strict "${update_app}"
+          [[ "$(lipo -archs "${update_app}/Contents/MacOS/PocketIMGShot")" == "arm64" ]]
 
           launch_log="${RUNNER_TEMP}/PocketIMGShot-launch.log"
           "${binary}" > "${launch_log}" 2>&1 &
