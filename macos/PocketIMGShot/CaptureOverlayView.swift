@@ -255,6 +255,10 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
     override var isFlipped: Bool { true }
     override var acceptsFirstResponder: Bool { true }
 
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
+        true
+    }
+
     override func resetCursorRects() {
         if mode == .selecting {
             addCursorRect(bounds, cursor: .crosshair)
@@ -635,6 +639,8 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
         let point = convert(windowPoint, from: nil)
         guard bounds.contains(point) else { return }
         hoverPoint = constrained(point)
+        window.invalidateCursorRects(for: self)
+        NSCursor.crosshair.set()
         needsDisplay = true
     }
 

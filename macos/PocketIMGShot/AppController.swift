@@ -15,7 +15,7 @@ final class AppController: ObservableObject {
 
     let settings = AppSettings()
 
-    private let hotKey = GlobalHotKey()
+    private let hotKey = GlobalHotKey(identifier: 1)
     private let captureCoordinator = CaptureCoordinator()
     private let pinnedImages = PinnedImagePresenter()
     private let toast = ToastPresenter()

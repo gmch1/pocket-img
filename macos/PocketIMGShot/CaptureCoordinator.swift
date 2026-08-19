@@ -1,4 +1,5 @@
 import AppKit
+import Carbon.HIToolbox
 import CoreGraphics
 import CoreVideo
 import ScreenCaptureKit
@@ -12,7 +13,9 @@ final class CaptureCoordinator: NSObject, CaptureOverlayViewDelegate, NSWindowDe
 
     private var windows: [CaptureWindow] = []
     private var captureTask: Task<Void, Never>?
+    private var focusRecoveryTask: Task<Void, Never>?
     private var keyMonitor: Any?
+    private let escapeHotKey = GlobalHotKey(identifier: 2)
     private var onFinish: ((UploadPayload, CaptureAction) -> Void)?
     private var onCancel: (() -> Void)?
     private var onError: ((Error) -> Void)?
@@ -33,6 +36,7 @@ final class CaptureCoordinator: NSObject, CaptureOverlayViewDelegate, NSWindowDe
         self.onError = onError
         finished = false
         installKeyMonitor()
+        installEscapeHotKey()
         showPreparationWindows()
 
         captureTask = Task { [weak self] in
@@ -145,17 +149,67 @@ final class CaptureCoordinator: NSObject, CaptureOverlayViewDelegate, NSWindowDe
     }
 
     private func activateWindows(includeHidden: Bool = true) {
-        NSApplication.shared.activate(ignoringOtherApps: true)
+        focusRecoveryTask?.cancel()
+        applyCaptureFocus(includeHidden: includeHidden)
+        scheduleFocusVerification()
+    }
+
+    private func applyCaptureFocus(includeHidden: Bool) {
+        let application = NSApplication.shared
         let candidates = includeHidden ? windows : windows.filter(\.isVisible)
+        guard !candidates.isEmpty else { return }
         for window in candidates {
             window.orderFrontRegardless()
         }
         let pointer = NSEvent.mouseLocation
         let preferred = candidates.first { $0.frame.contains(pointer) } ?? candidates.first
+        application.activate(ignoringOtherApps: true)
         preferred?.makeKeyAndOrderFront(nil)
         preferred?.makeFirstResponder(preferred?.contentView)
         if let overlay = preferred?.contentView as? CaptureOverlayView {
             overlay.initializeHoverPoint(atScreenPoint: pointer)
+        } else if preferred?.contentView is CapturePreparationView {
+            NSCursor.crosshair.set()
+        }
+    }
+
+    private var hasCaptureFocus: Bool {
+        let application = NSApplication.shared
+        guard application.isActive, let keyWindow = application.keyWindow else { return false }
+        return windows.contains(where: { $0 === keyWindow })
+    }
+
+    private func scheduleFocusVerification() {
+        focusRecoveryTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            let retryDelaysMilliseconds: [Int64] = [0, 25, 75, 150, 300]
+            for (attempt, delay) in retryDelaysMilliseconds.enumerated() {
+                if delay == 0 {
+                    await Task.yield()
+                } else {
+                    try? await Task.sleep(for: .milliseconds(delay))
+                }
+                guard !Task.isCancelled, !finished, !windows.isEmpty else { return }
+                if hasCaptureFocus {
+                    if attempt > 0 {
+                        DiagnosticLog.record("capture focus restored attempt=\(attempt)")
+                    }
+                    return
+                }
+                let keyWindow = NSApplication.shared.keyWindow
+                let captureWindowIsKey = keyWindow.map { keyWindow in
+                    windows.contains(where: { $0 === keyWindow })
+                } ?? false
+                DiagnosticLog.record(
+                    "capture focus retry attempt=\(attempt + 1) " +
+                    "appActive=\(NSApplication.shared.isActive) " +
+                    "captureWindowIsKey=\(captureWindowIsKey)"
+                )
+                applyCaptureFocus(includeHidden: false)
+            }
+            if !hasCaptureFocus {
+                DiagnosticLog.record("capture focus unavailable after retries")
+            }
         }
     }
 
@@ -190,6 +244,23 @@ final class CaptureCoordinator: NSObject, CaptureOverlayViewDelegate, NSWindowDe
         }
     }
 
+    private func installEscapeHotKey() {
+        do {
+            try escapeHotKey.register(
+                HotKey(keyCode: UInt32(kVK_Escape), modifiers: 0, keyLabel: "Escape")
+            ) { [weak self] in
+                guard let self, !self.finished else { return }
+                // Let the Carbon callback unwind before unregistering its handler.
+                Task { @MainActor [weak self] in
+                    await Task.yield()
+                    self?.cancel()
+                }
+            }
+        } catch {
+            DiagnosticLog.record(error, phase: "register capture escape hotkey")
+        }
+    }
+
     func cancel(notify: Bool = true) {
         guard !finished || !windows.isEmpty || captureTask != nil else { return }
         finished = true
@@ -213,10 +284,13 @@ final class CaptureCoordinator: NSObject, CaptureOverlayViewDelegate, NSWindowDe
     }
 
     private func clearCallbacks() {
+        focusRecoveryTask?.cancel()
+        focusRecoveryTask = nil
         if let keyMonitor {
             NSEvent.removeMonitor(keyMonitor)
             self.keyMonitor = nil
         }
+        escapeHotKey.unregister()
         onFinish = nil
         onCancel = nil
         onError = nil
@@ -266,6 +340,7 @@ final class CaptureCoordinator: NSObject, CaptureOverlayViewDelegate, NSWindowDe
             window.delegate = nil
             window.orderOut(nil)
         }
+        NSCursor.arrow.set()
 
         // The delegate callback originates from a toolbar mouse event owned by the
         // capture view. Releasing that view and its window synchronously can tear

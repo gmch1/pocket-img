@@ -59,10 +59,15 @@ enum GlobalHotKeyError: LocalizedError, AppLocalizedError {
 }
 
 final class GlobalHotKey {
-    private static let signature: OSType = 0x5049_4853 // PIHS
+    static let signature: OSType = 0x5049_4853 // PIHS
+    private let identifier: UInt32
     private var eventHandler: EventHandlerRef?
     private var hotKeyRef: EventHotKeyRef?
     private var action: (@MainActor () -> Void)?
+
+    init(identifier: UInt32) {
+        self.identifier = identifier
+    }
 
     func register(_ hotKey: HotKey, action: @escaping @MainActor () -> Void) throws {
         unregister()
@@ -74,9 +79,23 @@ final class GlobalHotKey {
         )
         let handlerStatus = InstallEventHandler(
             GetApplicationEventTarget(),
-            { _, _, context in
-                guard let context else { return OSStatus(eventNotHandledErr) }
+            { _, event, context in
+                guard let event, let context else { return OSStatus(eventNotHandledErr) }
                 let owner = Unmanaged<GlobalHotKey>.fromOpaque(context).takeUnretainedValue()
+                var eventIdentifier = EventHotKeyID(signature: 0, id: 0)
+                let parameterStatus = GetEventParameter(
+                    event,
+                    EventParamName(kEventParamDirectObject),
+                    EventParamType(typeEventHotKeyID),
+                    nil,
+                    MemoryLayout<EventHotKeyID>.size,
+                    nil,
+                    &eventIdentifier
+                )
+                guard parameterStatus == noErr,
+                      owner.matches(eventIdentifier) else {
+                    return OSStatus(eventNotHandledErr)
+                }
                 if Thread.isMainThread {
                     MainActor.assumeIsolated {
                         owner.action?()
@@ -98,7 +117,7 @@ final class GlobalHotKey {
             throw GlobalHotKeyError.registrationFailed(handlerStatus)
         }
 
-        let identifier = EventHotKeyID(signature: Self.signature, id: 1)
+        let identifier = EventHotKeyID(signature: Self.signature, id: self.identifier)
         let registerStatus = RegisterEventHotKey(
             hotKey.keyCode,
             hotKey.carbonModifiers,
@@ -111,6 +130,10 @@ final class GlobalHotKey {
             unregister()
             throw GlobalHotKeyError.registrationFailed(registerStatus)
         }
+    }
+
+    func matches(_ eventIdentifier: EventHotKeyID) -> Bool {
+        eventIdentifier.signature == Self.signature && eventIdentifier.id == identifier
     }
 
     func unregister() {
