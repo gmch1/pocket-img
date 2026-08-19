@@ -55,6 +55,7 @@ final class ConfigurationTests: XCTestCase {
         let view = CaptureOverlayView(frame: CGRect(x: 0, y: 0, width: 800, height: 600))
         window.contentView = view
 
+        XCTAssertTrue(view.acceptsFirstMouse(for: nil))
         view.initializeHoverPoint(atScreenPoint: CGPoint(x: 340, y: 440))
 
         XCTAssertEqual(view.hoverPoint, CGPoint(x: 240, y: 360))
@@ -93,6 +94,20 @@ final class ConfigurationTests: XCTestCase {
         XCTAssertEqual(HotKey.default.keyCode, UInt32(kVK_F1))
         XCTAssertEqual(HotKey.default.displayName, "F1")
         XCTAssertEqual(HotKey.default.modifiers, 0)
+    }
+
+    func testGlobalHotKeysOnlyHandleTheirOwnCarbonIdentifier() {
+        let captureHotKey = GlobalHotKey(identifier: 1)
+        let escapeHotKey = GlobalHotKey(identifier: 2)
+        let captureIdentifier = EventHotKeyID(signature: GlobalHotKey.signature, id: 1)
+        let escapeIdentifier = EventHotKeyID(signature: GlobalHotKey.signature, id: 2)
+        let foreignIdentifier = EventHotKeyID(signature: 0, id: 1)
+
+        XCTAssertTrue(captureHotKey.matches(captureIdentifier))
+        XCTAssertFalse(captureHotKey.matches(escapeIdentifier))
+        XCTAssertFalse(captureHotKey.matches(foreignIdentifier))
+        XCTAssertTrue(escapeHotKey.matches(escapeIdentifier))
+        XCTAssertFalse(escapeHotKey.matches(captureIdentifier))
     }
 
     @MainActor

@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Fixed
+
+- 修复从浏览器等前台应用按 F1 截图时，覆盖层偶尔保留原应用鼠标样式且无法用 `Escape` 退出的问题；截图层现在会立即设置十字光标、校验并重试键盘焦点，同时在截图期间注册独立的全局取消热键作为兜底。
+
 ### Changed
 
 - macOS Release 改为只发布 Apple Silicon（arm64）版本，并在 Sparkle appcast 中声明硬件要求；Intel Mac 会停留在最后一个兼容版本，不会下载不兼容更新。
