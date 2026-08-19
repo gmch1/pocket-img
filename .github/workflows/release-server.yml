@@ -1,0 +1,189 @@
+name: Release PocketIMG Server
+
+on:
+  push:
+    tags:
+      - "server-v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Server version, for example 0.4.41"
+        required: true
+        type: string
+  workflow_call:
+    inputs:
+      version:
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pocketimg-server-release-${{ github.ref }}-${{ inputs.version }}
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - name: Resolve server version
+        id: version
+        shell: bash
+        env:
+          DISPATCH_VERSION: ${{ inputs.version }}
+        run: |
+          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+            release_tag="${GITHUB_REF_NAME}"
+          else
+            release_tag="server-v${DISPATCH_VERSION}"
+          fi
+          if [[ ! "${release_tag}" =~ ^server-v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Server release tag must look like server-v0.4.41" >&2
+            exit 1
+          fi
+          echo "tag=${release_tag}" >> "${GITHUB_OUTPUT}"
+          echo "version=${release_tag#server-v}" >> "${GITHUB_OUTPUT}"
+
+  build:
+    needs: prepare
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Build and test web app
+        working-directory: frontend
+        run: |
+          npm ci
+          npm test
+          npm run build
+
+      - name: Test Go backend
+        run: go test -tags=nodynamic ./...
+
+      - name: Build Linux amd64 backend
+        shell: bash
+        env:
+          RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          install -d release
+          binary="release/PocketIMG-${RELEASE_VERSION}-linux-amd64"
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
+            -tags=nodynamic \
+            -trimpath \
+            -ldflags='-s -w' \
+            -o "${binary}" \
+            ./cmd/server
+          chmod 755 "${binary}"
+
+          file "${binary}" | grep -Fq 'ELF 64-bit LSB executable, x86-64'
+          readelf -h "${binary}" | grep -Eq 'Machine:[[:space:]]+Advanced Micro Devices X86-64'
+          if readelf -d "${binary}" | grep -q '(NEEDED)'; then
+            echo "Linux amd64 backend unexpectedly depends on shared libraries" >&2
+            exit 1
+          fi
+
+          smoke_data="${RUNNER_TEMP}/pocketimg-linux-amd64-smoke"
+          PIH_TOKEN='release-smoke-token' \
+          PIH_COOKIE_SECURE=false \
+          PIH_ADDR='127.0.0.1:18080' \
+          PIH_DATA_DIR="${smoke_data}" \
+            "${binary}" >"${RUNNER_TEMP}/pocketimg-linux-amd64.log" 2>&1 &
+          server_pid=$!
+          trap 'kill "${server_pid}" 2>/dev/null || true' EXIT
+          for attempt in $(seq 1 50); do
+            if curl --fail --silent --show-error http://127.0.0.1:18080/healthz; then
+              break
+            fi
+            if [[ "${attempt}" -eq 50 ]]; then
+              cat "${RUNNER_TEMP}/pocketimg-linux-amd64.log" >&2
+              exit 1
+            fi
+            sleep 0.1
+          done
+          kill "${server_pid}"
+          wait "${server_pid}"
+          trap - EXIT
+
+          (
+            cd release
+            sha256sum "PocketIMG-${RELEASE_VERSION}-linux-amd64" > \
+              "PocketIMG-${RELEASE_VERSION}-linux-amd64.sha256"
+          )
+
+      - name: Upload server artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: release-server
+          path: release/*
+          if-no-files-found: error
+          compression-level: 0
+
+  publish:
+    needs: [prepare, build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Check out source and tags
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+
+      - name: Download server artifact
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        with:
+          name: release-server
+          path: release
+
+      - name: Publish server release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.prepare.outputs.tag }}
+          RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          if gh release view "${RELEASE_TAG}" >/dev/null 2>&1; then
+            gh release upload "${RELEASE_TAG}" release/* --clobber
+            exit 0
+          fi
+
+          previous_tag="$(
+            git tag --list 'server-v*' --sort=-version:refname \
+              | grep -Fxv "${RELEASE_TAG}" \
+              | head -n 1 \
+              || true
+          )"
+          if [[ -z "${previous_tag}" ]] && git rev-parse --verify --quiet v0.4.40 >/dev/null; then
+            previous_tag='v0.4.40'
+          fi
+          notes=(--generate-notes)
+          if [[ -n "${previous_tag}" ]]; then
+            notes+=(--notes-start-tag "${previous_tag}")
+          fi
+          tag_args=(--target "${GITHUB_SHA}")
+          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+            tag_args=(--verify-tag)
+          fi
+          gh release create "${RELEASE_TAG}" release/* \
+            "${tag_args[@]}" \
+            "${notes[@]}" \
+            --latest=false \
+            --title "PocketIMG Server ${RELEASE_VERSION}"

@@ -65,7 +65,7 @@ final class ConfigurationTests: XCTestCase {
 
         XCTAssertEqual(
             info?["SUFeedURL"] as? String,
-            "https://github.com/gmch1/pocket-img/releases/latest/download/appcast.xml"
+            "https://github.com/gmch1/pocket-img/releases/download/macos-appcast/appcast.xml"
         )
         XCTAssertEqual(info?["SUEnableAutomaticChecks"] as? Bool, true)
         XCTAssertEqual(info?["SUVerifyUpdateBeforeExtraction"] as? Bool, true)

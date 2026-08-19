@@ -94,6 +94,7 @@ Linux x86_64 后端、Android ARM64 App 和 macOS 通用客户端均可通过 Gi
 - [Linux x86_64 后端部署](docs/linux-amd64.md)
 - [Android 管理 App](docs/android-app.md)
 - [macOS 截图上传客户端](docs/macos-shot.md)
+- [组件发布流程](docs/releases.md)
 - [前端实现与开发](docs/frontend.md)
 - [内网 HTTP 开发部署](docs/lan-development.md)
 - [外部 HTTPS 反向代理契约](docs/reverse-proxy.md)

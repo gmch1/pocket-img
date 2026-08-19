@@ -1,0 +1,370 @@
+name: Release PocketIMG macOS
+
+on:
+  push:
+    tags:
+      - "macos-v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "macOS version, for example 0.4.41"
+        required: true
+        type: string
+  workflow_call:
+    inputs:
+      version:
+        required: true
+        type: string
+    secrets:
+      MACOS_SIGNING_CERTIFICATE_P12:
+        required: true
+      MACOS_SIGNING_CERTIFICATE_PASSWORD:
+        required: true
+      MACOS_UPDATE_ED25519_PRIVATE_KEY:
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pocketimg-macos-release-${{ github.ref }}-${{ inputs.version }}
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
+      version: ${{ steps.version.outputs.version }}
+      build-number: ${{ steps.version.outputs.build-number }}
+    steps:
+      - name: Resolve macOS version
+        id: version
+        shell: bash
+        env:
+          DISPATCH_VERSION: ${{ inputs.version }}
+        run: |
+          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+            release_tag="${GITHUB_REF_NAME}"
+          else
+            release_tag="macos-v${DISPATCH_VERSION}"
+          fi
+          if [[ ! "${release_tag}" =~ ^macos-v([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
+            echo "macOS release tag must look like macos-v0.4.41" >&2
+            exit 1
+          fi
+          major=$((10#${BASH_REMATCH[1]}))
+          minor=$((10#${BASH_REMATCH[2]}))
+          patch=$((10#${BASH_REMATCH[3]}))
+          if (( minor > 999 || patch > 999 )); then
+            echo "macOS minor and patch versions must not exceed 999" >&2
+            exit 1
+          fi
+          build_number=$((major * 1000000 + minor * 1000 + patch))
+          if (( build_number < 1 || build_number > 2100000000 )); then
+            echo "macOS version produces an invalid build number: ${build_number}" >&2
+            exit 1
+          fi
+          echo "tag=${release_tag}" >> "${GITHUB_OUTPUT}"
+          echo "version=${release_tag#macos-v}" >> "${GITHUB_OUTPUT}"
+          echo "build-number=${build_number}" >> "${GITHUB_OUTPUT}"
+
+  build:
+    needs: prepare
+    runs-on: macos-15
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Show Xcode environment
+        run: |
+          sw_vers
+          xcodebuild -version
+
+      - name: Install stable macOS signing identity
+        shell: bash
+        env:
+          SIGNING_P12_BASE64: ${{ secrets.MACOS_SIGNING_CERTIFICATE_P12 }}
+          SIGNING_P12_PASSWORD: ${{ secrets.MACOS_SIGNING_CERTIFICATE_PASSWORD }}
+        run: |
+          if [[ -z "${SIGNING_P12_BASE64}" || -z "${SIGNING_P12_PASSWORD}" ]]; then
+            echo "Stable macOS signing secrets are not configured" >&2
+            exit 1
+          fi
+
+          certificate_file="${RUNNER_TEMP}/PocketIMGShot-Release.p12"
+          keychain_path="${RUNNER_TEMP}/pocketimg-signing.keychain-db"
+          keychain_password="$(openssl rand -hex 32)"
+          printf '%s' "${SIGNING_P12_BASE64}" | openssl base64 -d -A -out "${certificate_file}"
+          chmod 600 "${certificate_file}"
+
+          security create-keychain -p "${keychain_password}" "${keychain_path}"
+          security set-keychain-settings -lut 21600 "${keychain_path}"
+          security unlock-keychain -p "${keychain_password}" "${keychain_path}"
+          security list-keychains -d user -s "${keychain_path}"
+          security import "${certificate_file}" \
+            -k "${keychain_path}" \
+            -P "${SIGNING_P12_PASSWORD}" \
+            -T /usr/bin/codesign \
+            -T /usr/bin/security
+          security set-key-partition-list \
+            -S apple-tool:,apple:,codesign: \
+            -s \
+            -k "${keychain_password}" \
+            "${keychain_path}"
+
+          signing_identity="$(openssl x509 -in macos/signing/PocketIMGShot-Release.pem -outform DER | shasum | awk '{ print $1 }')"
+          imported_certificate="$(security find-certificate -c 'PocketIMG Shot Local Release' -Z "${keychain_path}" | awk '/SHA-1 hash:/ { print tolower($3); exit }')"
+          if [[ ! "${signing_identity}" =~ ^[0-9a-f]{40}$ || "${imported_certificate}" != "${signing_identity}" ]]; then
+            echo "Imported macOS signing identity does not match the pinned certificate" >&2
+            exit 1
+          fi
+          echo "MACOS_SIGNING_IDENTITY=${signing_identity}" >> "${GITHUB_ENV}"
+          echo "MACOS_KEYCHAIN_PATH=${keychain_path}" >> "${GITHUB_ENV}"
+
+      - name: Test macOS client
+        run: >-
+          xcodebuild
+          -project macos/PocketIMGShot.xcodeproj
+          -scheme PocketIMGShot
+          -configuration Debug
+          -destination 'platform=macOS'
+          -derivedDataPath "${RUNNER_TEMP}/PocketIMGShotTests"
+          test
+
+      - name: Build universal macOS client
+        env:
+          RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
+          RELEASE_BUILD_NUMBER: ${{ needs.prepare.outputs.build-number }}
+        run: >-
+          xcodebuild
+          -project macos/PocketIMGShot.xcodeproj
+          -scheme PocketIMGShot
+          -configuration Release
+          -derivedDataPath "${RUNNER_TEMP}/PocketIMGShotBuild"
+          ARCHS='arm64 x86_64'
+          ONLY_ACTIVE_ARCH=NO
+          CODE_SIGNING_ALLOWED=NO
+          MARKETING_VERSION="${RELEASE_VERSION}"
+          CURRENT_PROJECT_VERSION="${RELEASE_BUILD_NUMBER}"
+          build
+
+      - name: Verify and package macOS client
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ needs.prepare.outputs.tag }}
+          RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
+          RELEASE_BUILD_NUMBER: ${{ needs.prepare.outputs.build-number }}
+          SPARKLE_PRIVATE_KEY: ${{ secrets.MACOS_UPDATE_ED25519_PRIVATE_KEY }}
+        run: |
+          if [[ -z "${SPARKLE_PRIVATE_KEY}" ]]; then
+            echo "macOS update signing key is not configured" >&2
+            exit 1
+          fi
+          app="${RUNNER_TEMP}/PocketIMGShotBuild/Build/Products/Release/PocketIMGShot.app"
+          binary="${app}/Contents/MacOS/PocketIMGShot"
+          test -d "${app}"
+          signing_certificate_sha1="$(openssl x509 -in macos/signing/PocketIMGShot-Release.pem -outform DER | shasum | awk '{ print $1 }')"
+          stable_requirement="designated => identifier \"com.gmch.pocketimg.shot\" and certificate leaf = H\"${signing_certificate_sha1}\""
+
+          sparkle_framework="${app}/Contents/Frameworks/Sparkle.framework"
+          sparkle_version="${sparkle_framework}/Versions/B"
+          test -d "${sparkle_version}"
+          codesign \
+            --force \
+            --sign "${MACOS_SIGNING_IDENTITY}" \
+            --keychain "${MACOS_KEYCHAIN_PATH}" \
+            --options runtime \
+            "${sparkle_version}/XPCServices/Installer.xpc"
+          codesign \
+            --force \
+            --sign "${MACOS_SIGNING_IDENTITY}" \
+            --keychain "${MACOS_KEYCHAIN_PATH}" \
+            --options runtime \
+            --preserve-metadata=entitlements \
+            "${sparkle_version}/XPCServices/Downloader.xpc"
+          codesign \
+            --force \
+            --sign "${MACOS_SIGNING_IDENTITY}" \
+            --keychain "${MACOS_KEYCHAIN_PATH}" \
+            --options runtime \
+            "${sparkle_version}/Autoupdate"
+          codesign \
+            --force \
+            --sign "${MACOS_SIGNING_IDENTITY}" \
+            --keychain "${MACOS_KEYCHAIN_PATH}" \
+            --options runtime \
+            "${sparkle_version}/Updater.app"
+          codesign \
+            --force \
+            --sign "${MACOS_SIGNING_IDENTITY}" \
+            --keychain "${MACOS_KEYCHAIN_PATH}" \
+            --options runtime \
+            "${sparkle_framework}"
+          codesign \
+            --force \
+            --sign "${MACOS_SIGNING_IDENTITY}" \
+            --keychain "${MACOS_KEYCHAIN_PATH}" \
+            --options runtime \
+            --entitlements macos/PocketIMGShot/PocketIMGShot.entitlements \
+            --requirements "=${stable_requirement}" \
+            --timestamp=none \
+            "${app}"
+          codesign --verify --deep --strict "${app}"
+
+          signature_details="$(codesign -dvvv "${app}" 2>&1)"
+          if grep -Fq 'Signature=adhoc' <<< "${signature_details}"; then
+            echo "macOS release unexpectedly used an ad-hoc signature" >&2
+            exit 1
+          fi
+          grep -Fq 'Authority=PocketIMG Shot Local Release' <<< "${signature_details}"
+
+          certificate_prefix="${RUNNER_TEMP}/PocketIMGShot-signing-cert-"
+          codesign -d --extract-certificates="${certificate_prefix}" "${app}"
+          expected_certificate_sha256="$(openssl x509 -in macos/signing/PocketIMGShot-Release.pem -outform DER | shasum -a 256 | awk '{ print $1 }')"
+          actual_certificate_sha256="$(shasum -a 256 "${certificate_prefix}0" | awk '{ print $1 }')"
+          if [[ "${actual_certificate_sha256}" != "${expected_certificate_sha256}" ]]; then
+            echo "macOS release signing certificate does not match the pinned identity" >&2
+            exit 1
+          fi
+
+          designated_requirement="$(codesign -d -r- "${app}" 2>&1)"
+          grep -Fq 'identifier "com.gmch.pocketimg.shot"' <<< "${designated_requirement}"
+          grep -Fiq "certificate leaf = H\"${signing_certificate_sha1}\"" <<< "${designated_requirement}"
+          if grep -Fq 'cdhash' <<< "${designated_requirement}"; then
+            echo "macOS release has an unstable code-hash designated requirement" >&2
+            exit 1
+          fi
+
+          entitlements="$(codesign -d --entitlements :- "${app}" 2>/dev/null || true)"
+          if grep -Eq 'com\.apple\.security\.app-sandbox|keychain-access-groups' <<< "${entitlements}"; then
+            echo "Unexpected sandbox or keychain entitlement in macOS release" >&2
+            exit 1
+          fi
+          grep -Fq 'com.apple.security.cs.disable-library-validation' <<< "${entitlements}"
+          architectures="$(lipo -archs "${binary}")"
+          [[ "${architectures}" == *arm64* ]]
+          [[ "${architectures}" == *x86_64* ]]
+          install -d release
+          archive_name="PocketIMGShot-${RELEASE_VERSION}-macos-universal.zip"
+          archive="release/${archive_name}"
+          ditto -c -k --sequesterRsrc --keepParent "${app}" "${archive}"
+          (
+            cd release
+            shasum -a 256 "${archive_name}" > "${archive_name}.sha256"
+          )
+
+          sign_update="$(find "${RUNNER_TEMP}/PocketIMGShotBuild/SourcePackages" -type f -name sign_update -print -quit)"
+          if [[ -z "${sign_update}" || ! -x "${sign_update}" ]]; then
+            echo "Sparkle sign_update tool was not found" >&2
+            exit 1
+          fi
+          update_key_file="${RUNNER_TEMP}/pocketimg-update-ed25519-key"
+          printf '%s' "${SPARKLE_PRIVATE_KEY}" > "${update_key_file}"
+          chmod 600 "${update_key_file}"
+          signature_output="$("${sign_update}" --ed-key-file "${update_key_file}" "${archive}")"
+          update_signature="$(sed -n 's/.*sparkle:edSignature="\([^"]*\)".*/\1/p' <<< "${signature_output}")"
+          update_length="$(stat -f '%z' "${archive}")"
+          if [[ -z "${update_signature}" || ! "${update_length}" =~ ^[0-9]+$ ]]; then
+            echo "Unable to sign macOS update archive" >&2
+            exit 1
+          fi
+
+          appcast="release/appcast.xml"
+          published_at="$(LC_ALL=C date -u '+%a, %d %b %Y %H:%M:%S +0000')"
+          printf '%s\n' \
+            '<?xml version="1.0" encoding="utf-8"?>' \
+            '<rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle">' \
+            '  <channel>' \
+            '    <title>PocketIMG Shot 更新</title>' \
+            '    <link>https://github.com/gmch1/pocket-img/releases</link>' \
+            '    <description>PocketIMG Shot 稳定版本更新</description>' \
+            '    <language>zh-CN</language>' \
+            '    <item>' \
+            "      <title>PocketIMG Shot ${RELEASE_VERSION}</title>" \
+            "      <pubDate>${published_at}</pubDate>" \
+            '      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>' \
+            "      <enclosure url=\"https://github.com/gmch1/pocket-img/releases/download/${RELEASE_TAG}/${archive_name}\" sparkle:version=\"${RELEASE_BUILD_NUMBER}\" sparkle:shortVersionString=\"${RELEASE_VERSION}\" sparkle:edSignature=\"${update_signature}\" length=\"${update_length}\" type=\"application/octet-stream\" />" \
+            '    </item>' \
+            '  </channel>' \
+            '</rss>' \
+            > "${appcast}"
+          "${sign_update}" --ed-key-file "${update_key_file}" "${appcast}"
+          "${sign_update}" --verify --ed-key-file "${update_key_file}" "${appcast}"
+          rm "${update_key_file}"
+
+      - name: Upload macOS artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: release-macos
+          path: release/*
+          if-no-files-found: error
+          compression-level: 0
+
+      - name: Remove temporary signing keychain
+        if: always()
+        shell: bash
+        run: security delete-keychain "${MACOS_KEYCHAIN_PATH}" || true
+
+  publish:
+    needs: [prepare, build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Check out source and tags
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+
+      - name: Download macOS artifact
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        with:
+          name: release-macos
+          path: release
+
+      - name: Publish macOS release and update feed
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.prepare.outputs.tag }}
+          RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          if gh release view "${RELEASE_TAG}" >/dev/null 2>&1; then
+            gh release upload "${RELEASE_TAG}" release/* --clobber
+            gh release edit "${RELEASE_TAG}" --latest
+          else
+            previous_tag="$(
+              git tag --list 'macos-v*' --sort=-version:refname \
+                | grep -Fxv "${RELEASE_TAG}" \
+                | head -n 1 \
+                || true
+            )"
+            if [[ -z "${previous_tag}" ]] && git rev-parse --verify --quiet v0.4.40 >/dev/null; then
+              previous_tag='v0.4.40'
+            fi
+            notes=(--generate-notes)
+            if [[ -n "${previous_tag}" ]]; then
+              notes+=(--notes-start-tag "${previous_tag}")
+            fi
+            tag_args=(--target "${GITHUB_SHA}")
+            if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+              tag_args=(--verify-tag)
+            fi
+            gh release create "${RELEASE_TAG}" release/* \
+              "${tag_args[@]}" \
+              "${notes[@]}" \
+              --latest \
+              --title "PocketIMG Shot ${RELEASE_VERSION}"
+          fi
+
+          if gh release view macos-appcast >/dev/null 2>&1; then
+            gh release upload macos-appcast release/appcast.xml --clobber
+          else
+            gh release create macos-appcast release/appcast.xml \
+              --target "${GITHUB_SHA}" \
+              --prerelease \
+              --latest=false \
+              --title "PocketIMG Shot update feed" \
+              --notes "Rolling signed appcast used by PocketIMG Shot automatic updates."
+          fi

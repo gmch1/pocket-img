@@ -38,7 +38,7 @@
 	<key>SUEnableAutomaticChecks</key>
 	<true/>
 	<key>SUFeedURL</key>
-	<string>https://github.com/gmch1/pocket-img/releases/latest/download/appcast.xml</string>
+	<string>https://github.com/gmch1/pocket-img/releases/download/macos-appcast/appcast.xml</string>
 	<key>SUPublicEDKey</key>
 	<string>dJRxr9O/Tz6oy3osLACHixePxxUYanrpXeclryBhsgs=</string>
 	<key>SURequireSignedFeed</key>
