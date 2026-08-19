@@ -44,6 +44,22 @@ final class ConfigurationTests: XCTestCase {
         XCTAssertTrue(cancelled)
     }
 
+    @MainActor
+    func testCaptureOverlayInitializesPixelInspectorWithoutMouseMovement() {
+        let window = NSWindow(
+            contentRect: CGRect(x: 100, y: 200, width: 800, height: 600),
+            styleMask: [.borderless],
+            backing: .buffered,
+            defer: false
+        )
+        let view = CaptureOverlayView(frame: CGRect(x: 0, y: 0, width: 800, height: 600))
+        window.contentView = view
+
+        view.initializeHoverPoint(atScreenPoint: CGPoint(x: 340, y: 440))
+
+        XCTAssertEqual(view.hoverPoint, CGPoint(x: 240, y: 360))
+    }
+
     func testAutomaticUpdateFeedUsesSignedHTTPSAppcast() throws {
         let info = Bundle.main.infoDictionary
 
