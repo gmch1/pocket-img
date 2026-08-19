@@ -39,4 +39,4 @@ macos-test:
 	cd macos && xcodebuild -project PocketIMGShot.xcodeproj -scheme PocketIMGShot -configuration Debug test
 
 macos-build:
-	cd macos && xcodebuild -project PocketIMGShot.xcodeproj -scheme PocketIMGShot -configuration Release build
+	cd macos && xcodebuild -project PocketIMGShot.xcodeproj -scheme PocketIMGShot -configuration Release ARCHS=arm64 ONLY_ACTIVE_ARCH=NO build

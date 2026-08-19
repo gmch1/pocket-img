@@ -6,7 +6,7 @@
 F1 → 拖拽选择区域 → 方框/箭头/文字标注 → 贴图置顶、复制图片或上传并复制公开 URL
 ```
 
-客户端要求 macOS 14 或更高版本，使用 ScreenCaptureKit 截图，通过现有 `POST /api/auth/session` 和 `POST /api/images` 接口上传，不需要单独部署桌面端 API。
+客户端要求 Apple Silicon（`arm64`）和 macOS 14 或更高版本，使用 ScreenCaptureKit 截图，通过现有 `POST /api/auth/session` 和 `POST /api/images` 接口上传，不需要单独部署桌面端 API。正式版本不再提供 Intel 或 Universal 归档。
 
 ## 当前能力
 
@@ -66,6 +66,8 @@ make macos-build
 自动更新从 `0.4.17` 开始提供。`0.4.16` 及更早版本没有更新器，因此需要最后一次从 GitHub Release 手动下载并覆盖安装；安装 `0.4.17` 或更高版本后，后续升级可以在应用内完成。更新不会修改 `~/Library/Application Support/PocketIMGShot/settings.json`，服务地址、Token、快捷键与标注样式会继续复用。
 
 macOS 从组件化发布开始使用 `macos-v<version>` 标签。版本化 Release 保存应用归档，固定的 `macos-appcast` Release 只维护当前签名更新清单，因此 Server 或 Android 发布不会改变客户端看到的更新源。完整标签与发布规则见[组件发布流程](releases.md)。
+
+macOS 新版本只支持 Apple Silicon。更新清单显式标记 `arm64` 硬件要求，已安装旧 Universal 版本的 Intel Mac 会继续停留在最后一个兼容版本，不会下载或安装无法运行的新版本。
 
 截图生成和上传阶段会把不含 Token、服务 URL 和图片内容的诊断记录写入 `~/Library/Logs/PocketIMGShot.log`。发生错误时应用会显示错误窗口并给出该路径。
 
