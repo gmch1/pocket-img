@@ -16,6 +16,8 @@ GitHub Release 提供以下两个文件：
 - `PocketIMG-<version>-linux-amd64`
 - `PocketIMG-<version>-linux-amd64.sha256`
 
+正式服务端版本使用 `server-v<version>` 标签独立发布，不会同时构建 Android 或 macOS。完整规则见[组件发布流程](releases.md)。
+
 下载到同一目录后执行：
 
 ```bash

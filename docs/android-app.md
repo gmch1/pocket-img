@@ -119,4 +119,4 @@ make android-release
 56:CB:C5:B4:2A:80:53:B6:F7:C7:8C:96:57:F6:A5:2B:53:88:6C:A7:EC:86:78:4D:DA:63:54:38:91:C3:D2:63
 ```
 
-推送 `v*` 标签会运行前端测试、Go 测试和 Android 单元测试，构建签名 APK，并发布 APK 与 SHA-256 校验文件到 GitHub Releases。Actions 页面也可以手动输入版本标签触发发布。
+推送 `android-v*` 标签会运行前端测试、Go 测试和 Android 单元测试，构建签名 APK，并发布 APK 与 SHA-256 校验文件到独立的 GitHub Release。标签格式和全平台手动发布方式见[组件发布流程](releases.md)。

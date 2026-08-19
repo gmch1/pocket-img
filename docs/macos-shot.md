@@ -33,7 +33,7 @@ F1 → 拖拽选择区域 → 方框/箭头/文字标注 → 贴图置顶、复�
 - 贴图不会上传或修改剪贴板，会在原截图选区的位置和尺寸创建带轻微强调色边缘的置顶图片；可同时保留多张，支持拖动和鼠标滚轮按比例缩放，双击、`Escape` 或右键菜单关闭。
 - 复制会把合成标注后的截图图片写入系统剪贴板，不会上传。
 - 上传成功后把公开 URL 写入系统剪贴板。
-- 启动后每天在后台检查一次 GitHub Release；菜单栏也提供“检查更新…”。发现新版后由应用下载、验证、替换并重启，不需要手动解压覆盖。
+- 启动后每天通过 macOS 专用的滚动 appcast 检查一次 GitHub Release；菜单栏也提供“检查更新…”。发现新版后由应用下载、验证、替换并重启，不需要手动解压覆盖。
 - 更新归档和 appcast 均使用独立 Ed25519 密钥签名，应用在解压前验证签名；发布工作流缺少更新私钥时会直接失败。
 - 服务地址、Token 和快捷键保存在 `~/Library/Application Support/PocketIMGShot/settings.json`，目录权限为 `0700`、文件权限为 `0600`，不访问钥匙串；Session Cookie 只保存在当前进程。
 - 设置页可选择跟随系统、简体中文或 English；语言选择写入同一配置文件，菜单栏、快捷键录制、截图文字输入、贴图菜单、状态提示和错误窗口会立即使用所选语言。
@@ -64,6 +64,8 @@ make macos-build
 从 `0.4.5` 开始，GitHub Release 固定使用同一份长期自签名证书，Bundle ID 保持为 `com.gmch.pocketimg.shot`。由 `0.4.4` 或更早的 ad-hoc 版本升级到 `0.4.5` 时，代码身份发生最后一次切换，macOS 仍可能要求重新授予一次屏幕录制权限；后续使用同一证书签名的版本应当复用这次授权。该证书不是 Apple Developer ID，因此不能消除首次启动时的 Gatekeeper 提示，也不能进行 Apple 公证。
 
 自动更新从 `0.4.17` 开始提供。`0.4.16` 及更早版本没有更新器，因此需要最后一次从 GitHub Release 手动下载并覆盖安装；安装 `0.4.17` 或更高版本后，后续升级可以在应用内完成。更新不会修改 `~/Library/Application Support/PocketIMGShot/settings.json`，服务地址、Token、快捷键与标注样式会继续复用。
+
+macOS 从组件化发布开始使用 `macos-v<version>` 标签。版本化 Release 保存应用归档，固定的 `macos-appcast` Release 只维护当前签名更新清单，因此 Server 或 Android 发布不会改变客户端看到的更新源。完整标签与发布规则见[组件发布流程](releases.md)。
 
 截图生成和上传阶段会把不含 Token、服务 URL 和图片内容的诊断记录写入 `~/Library/Logs/PocketIMGShot.log`。发生错误时应用会显示错误窗口并给出该路径。
 

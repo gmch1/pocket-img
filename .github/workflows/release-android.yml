@@ -1,0 +1,203 @@
+name: Release PocketIMG Android
+
+on:
+  push:
+    tags:
+      - "android-v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Android version, for example 0.4.41"
+        required: true
+        type: string
+  workflow_call:
+    inputs:
+      version:
+        required: true
+        type: string
+    secrets:
+      ANDROID_KEYSTORE_BASE64:
+        required: true
+      ANDROID_KEYSTORE_PASSWORD:
+        required: true
+      ANDROID_KEY_ALIAS:
+        required: true
+      ANDROID_KEY_PASSWORD:
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pocketimg-android-release-${{ github.ref }}-${{ inputs.version }}
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
+      version: ${{ steps.version.outputs.version }}
+      build-number: ${{ steps.version.outputs.build-number }}
+    steps:
+      - name: Resolve Android version
+        id: version
+        shell: bash
+        env:
+          DISPATCH_VERSION: ${{ inputs.version }}
+        run: |
+          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+            release_tag="${GITHUB_REF_NAME}"
+          else
+            release_tag="android-v${DISPATCH_VERSION}"
+          fi
+          if [[ ! "${release_tag}" =~ ^android-v([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
+            echo "Android release tag must look like android-v0.4.41" >&2
+            exit 1
+          fi
+          major=$((10#${BASH_REMATCH[1]}))
+          minor=$((10#${BASH_REMATCH[2]}))
+          patch=$((10#${BASH_REMATCH[3]}))
+          if (( minor > 999 || patch > 999 )); then
+            echo "Android minor and patch versions must not exceed 999" >&2
+            exit 1
+          fi
+          build_number=$((major * 1000000 + minor * 1000 + patch))
+          if (( build_number < 1 || build_number > 2100000000 )); then
+            echo "Android version produces an invalid versionCode: ${build_number}" >&2
+            exit 1
+          fi
+          echo "tag=${release_tag}" >> "${GITHUB_OUTPUT}"
+          echo "version=${release_tag#android-v}" >> "${GITHUB_OUTPUT}"
+          echo "build-number=${build_number}" >> "${GITHUB_OUTPUT}"
+
+  build:
+    needs: prepare
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Set up Java
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: gradle
+
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Build and test web app
+        working-directory: frontend
+        run: |
+          npm ci
+          npm test
+          npm run build
+
+      - name: Test Go backend
+        run: go test -tags=nodynamic ./...
+
+      - name: Restore Android signing key
+        shell: bash
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          if [[ -z "${KEYSTORE_BASE64}" ]]; then
+            echo "ANDROID_KEYSTORE_BASE64 is not configured" >&2
+            exit 1
+          fi
+          install -d -m 700 "${RUNNER_TEMP}/pocketimg-signing"
+          printf '%s' "${KEYSTORE_BASE64}" | base64 --decode > "${RUNNER_TEMP}/pocketimg-signing/release.jks"
+          chmod 600 "${RUNNER_TEMP}/pocketimg-signing/release.jks"
+
+      - name: Build signed Android APK
+        working-directory: android
+        env:
+          ANDROID_KEYSTORE_PATH: ${{ runner.temp }}/pocketimg-signing/release.jks
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          PIH_ANDROID_VERSION_CODE: ${{ needs.prepare.outputs.build-number }}
+          PIH_ANDROID_VERSION_NAME: ${{ needs.prepare.outputs.version }}
+        run: ./gradlew testDebugUnitTest assembleRelease --no-daemon
+
+      - name: Prepare Android release files
+        shell: bash
+        env:
+          RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          install -d release
+          cp android/app/build/outputs/apk/release/app-release.apk "release/PocketIMG-${RELEASE_VERSION}-arm64.apk"
+          cd release
+          sha256sum "PocketIMG-${RELEASE_VERSION}-arm64.apk" > "PocketIMG-${RELEASE_VERSION}-arm64.apk.sha256"
+
+      - name: Upload Android artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: release-android
+          path: release/*
+          if-no-files-found: error
+          compression-level: 0
+
+  publish:
+    needs: [prepare, build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Check out source and tags
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+
+      - name: Download Android artifact
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        with:
+          name: release-android
+          path: release
+
+      - name: Publish Android release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.prepare.outputs.tag }}
+          RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          if gh release view "${RELEASE_TAG}" >/dev/null 2>&1; then
+            gh release upload "${RELEASE_TAG}" release/* --clobber
+            exit 0
+          fi
+
+          previous_tag="$(
+            git tag --list 'android-v*' --sort=-version:refname \
+              | grep -Fxv "${RELEASE_TAG}" \
+              | head -n 1 \
+              || true
+          )"
+          if [[ -z "${previous_tag}" ]] && git rev-parse --verify --quiet v0.4.40 >/dev/null; then
+            previous_tag='v0.4.40'
+          fi
+          notes=(--generate-notes)
+          if [[ -n "${previous_tag}" ]]; then
+            notes+=(--notes-start-tag "${previous_tag}")
+          fi
+          tag_args=(--target "${GITHUB_SHA}")
+          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+            tag_args=(--verify-tag)
+          fi
+          gh release create "${RELEASE_TAG}" release/* \
+            "${tag_args[@]}" \
+            "${notes[@]}" \
+            --latest=false \
+            --title "PocketIMG Android ${RELEASE_VERSION}"
