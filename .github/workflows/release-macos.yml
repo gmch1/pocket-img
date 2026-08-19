@@ -244,13 +244,25 @@ jobs:
           fi
           grep -Fq 'com.apple.security.cs.disable-library-validation' <<< "${entitlements}"
           install -d release
-          archive_name="PocketIMGShot-${RELEASE_VERSION}-macos-arm64.zip"
-          archive="release/${archive_name}"
-          ditto -c -k --sequesterRsrc --keepParent "${app}" "${archive}"
+          manual_archive_name="PocketIMGShot-${RELEASE_VERSION}-macos-arm64.zip"
+          manual_archive="release/${manual_archive_name}"
+          update_archive_name="PocketIMGShot-${RELEASE_VERSION}-macos-arm64.tar.xz"
+          update_archive="release/${update_archive_name}"
+          ditto -c -k --sequesterRsrc --keepParent "${app}" "${manual_archive}"
+          COPYFILE_DISABLE=1 tar \
+            -cJf "${GITHUB_WORKSPACE}/${update_archive}" \
+            -C "$(dirname "${app}")" \
+            "$(basename "${app}")"
           (
             cd release
-            shasum -a 256 "${archive_name}" > "${archive_name}.sha256"
+            shasum -a 256 "${manual_archive_name}" > "${manual_archive_name}.sha256"
+            shasum -a 256 "${update_archive_name}" > "${update_archive_name}.sha256"
           )
+
+          update_verification_dir="${RUNNER_TEMP}/PocketIMGShotTarVerification"
+          install -d "${update_verification_dir}"
+          tar -xJf "${update_archive}" -C "${update_verification_dir}"
+          codesign --verify --deep --strict "${update_verification_dir}/PocketIMGShot.app"
 
           sign_update="$(find "${RUNNER_TEMP}/PocketIMGShotBuild/SourcePackages" -type f -name sign_update -print -quit)"
           if [[ -z "${sign_update}" || ! -x "${sign_update}" ]]; then
@@ -260,9 +272,9 @@ jobs:
           update_key_file="${RUNNER_TEMP}/pocketimg-update-ed25519-key"
           printf '%s' "${SPARKLE_PRIVATE_KEY}" > "${update_key_file}"
           chmod 600 "${update_key_file}"
-          signature_output="$("${sign_update}" --ed-key-file "${update_key_file}" "${archive}")"
+          signature_output="$("${sign_update}" --ed-key-file "${update_key_file}" "${update_archive}")"
           update_signature="$(sed -n 's/.*sparkle:edSignature="\([^"]*\)".*/\1/p' <<< "${signature_output}")"
-          update_length="$(stat -f '%z' "${archive}")"
+          update_length="$(stat -f '%z' "${update_archive}")"
           if [[ -z "${update_signature}" || ! "${update_length}" =~ ^[0-9]+$ ]]; then
             echo "Unable to sign macOS update archive" >&2
             exit 1
@@ -283,7 +295,7 @@ jobs:
             "      <pubDate>${published_at}</pubDate>" \
             '      <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>' \
             '      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>' \
-            "      <enclosure url=\"https://github.com/gmch1/pocket-img/releases/download/${RELEASE_TAG}/${archive_name}\" sparkle:version=\"${RELEASE_BUILD_NUMBER}\" sparkle:shortVersionString=\"${RELEASE_VERSION}\" sparkle:edSignature=\"${update_signature}\" length=\"${update_length}\" type=\"application/octet-stream\" />" \
+            "      <enclosure url=\"https://github.com/gmch1/pocket-img/releases/download/${RELEASE_TAG}/${update_archive_name}\" sparkle:version=\"${RELEASE_BUILD_NUMBER}\" sparkle:shortVersionString=\"${RELEASE_VERSION}\" sparkle:edSignature=\"${update_signature}\" length=\"${update_length}\" type=\"application/octet-stream\" />" \
             '    </item>' \
             '  </channel>' \
             '</rss>' \
