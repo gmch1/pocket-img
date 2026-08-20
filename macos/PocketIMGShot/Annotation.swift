@@ -210,9 +210,83 @@ enum SelectionResizeHandle: CaseIterable, Hashable {
 }
 
 enum CaptureGeometry {
+    enum RecordingHUDMode: Equatable {
+        case interactiveOutside
+        case passiveInside
+    }
+
+    struct RecordingHUDLayout: Equatable {
+        let frame: CGRect
+        let mode: RecordingHUDMode
+    }
+
     struct RecordingBorderLayout: Equatable {
         let windowFrame: CGRect
         let captureFrame: CGRect
+    }
+
+    static func recordingHUDLayout(
+        interactiveSize: CGSize,
+        passiveSize: CGSize,
+        selectionFrame: CGRect,
+        visibleFrame: CGRect,
+        gap: CGFloat = 10
+    ) -> RecordingHUDLayout {
+        let selection = selectionFrame.standardized
+        let visible = visibleFrame.standardized
+        let safeGap = max(0, gap)
+        let interactiveFrames = [
+            CGRect(
+                x: selection.midX - interactiveSize.width / 2,
+                y: selection.maxY + safeGap,
+                width: interactiveSize.width,
+                height: interactiveSize.height
+            ),
+            CGRect(
+                x: selection.midX - interactiveSize.width / 2,
+                y: selection.minY - interactiveSize.height - safeGap,
+                width: interactiveSize.width,
+                height: interactiveSize.height
+            ),
+            CGRect(
+                x: selection.maxX + safeGap,
+                y: selection.midY - interactiveSize.height / 2,
+                width: interactiveSize.width,
+                height: interactiveSize.height
+            ),
+            CGRect(
+                x: selection.minX - interactiveSize.width - safeGap,
+                y: selection.midY - interactiveSize.height / 2,
+                width: interactiveSize.width,
+                height: interactiveSize.height
+            ),
+        ]
+
+        if let frame = interactiveFrames.first(where: {
+            visible.contains($0) && !$0.intersects(selection)
+        }) {
+            return RecordingHUDLayout(frame: frame, mode: .interactiveOutside)
+        }
+
+        let passiveFrame = constrainedFrame(
+            CGRect(
+                x: selection.midX - passiveSize.width / 2,
+                y: selection.maxY - passiveSize.height - safeGap,
+                width: passiveSize.width,
+                height: passiveSize.height
+            ),
+            within: visible
+        )
+        return RecordingHUDLayout(frame: passiveFrame, mode: .passiveInside)
+    }
+
+    private static func constrainedFrame(_ frame: CGRect, within bounds: CGRect) -> CGRect {
+        CGRect(
+            x: min(max(frame.minX, bounds.minX), max(bounds.minX, bounds.maxX - frame.width)),
+            y: min(max(frame.minY, bounds.minY), max(bounds.minY, bounds.maxY - frame.height)),
+            width: min(frame.width, bounds.width),
+            height: min(frame.height, bounds.height)
+        )
     }
 
     static func recordingBorderLayout(

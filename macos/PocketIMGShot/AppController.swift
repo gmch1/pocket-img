@@ -230,6 +230,9 @@ final class AppController: ObservableObject {
         statusMessage = L10n.text("status.gif.selecting", language: settings.language)
         gifRecordingCoordinator.begin(
             language: settings.language,
+            stopShortcutDisplayName: settings.gifHotKey.localizedDisplayName(
+                language: settings.language
+            ),
             onStateChange: { [weak self] state in
                 self?.handleGIFStateChange(state)
             },
@@ -275,6 +278,9 @@ final class AppController: ObservableObject {
         case .stopping:
             transition(to: .gif(state))
             statusMessage = L10n.text("status.gif.stopping", language: settings.language)
+        case .editing:
+            transition(to: .gif(state))
+            statusMessage = L10n.text("status.gif.editing", language: settings.language)
         case .encoding:
             transition(to: .gif(state))
             statusMessage = L10n.text("status.gif.encoding", language: settings.language)

@@ -138,6 +138,96 @@ final class AnnotationTests: XCTestCase {
         )
     }
 
+    func testRecordingHUDUsesInteractivePanelAboveSelectionWhenItFits() {
+        let layout = CaptureGeometry.recordingHUDLayout(
+            interactiveSize: CGSize(width: 250, height: 52),
+            passiveSize: CGSize(width: 220, height: 36),
+            selectionFrame: CGRect(x: 300, y: 300, width: 400, height: 200),
+            visibleFrame: CGRect(x: 0, y: 0, width: 1200, height: 800)
+        )
+
+        XCTAssertEqual(layout.mode, .interactiveOutside)
+        XCTAssertEqual(layout.frame, CGRect(x: 375, y: 510, width: 250, height: 52))
+    }
+
+    func testRecordingHUDFallsBackToSideWithoutOverlappingTallSelection() {
+        let selection = CGRect(x: 100, y: 10, width: 400, height: 780)
+        let layout = CaptureGeometry.recordingHUDLayout(
+            interactiveSize: CGSize(width: 250, height: 52),
+            passiveSize: CGSize(width: 220, height: 36),
+            selectionFrame: selection,
+            visibleFrame: CGRect(x: 0, y: 0, width: 1200, height: 800)
+        )
+
+        XCTAssertEqual(layout.mode, .interactiveOutside)
+        XCTAssertEqual(layout.frame, CGRect(x: 510, y: 374, width: 250, height: 52))
+        XCTAssertFalse(layout.frame.intersects(selection))
+    }
+
+    func testRecordingHUDUsesInteractivePanelBelowTopEdgeSelection() {
+        let layout = CaptureGeometry.recordingHUDLayout(
+            interactiveSize: CGSize(width: 250, height: 52),
+            passiveSize: CGSize(width: 220, height: 36),
+            selectionFrame: CGRect(x: 300, y: 720, width: 400, height: 80),
+            visibleFrame: CGRect(x: 0, y: 0, width: 1200, height: 800)
+        )
+
+        XCTAssertEqual(layout.mode, .interactiveOutside)
+        XCTAssertEqual(layout.frame, CGRect(x: 375, y: 658, width: 250, height: 52))
+    }
+
+    func testRecordingHUDUsesInteractivePanelLeftOfRightEdgeSelection() {
+        let layout = CaptureGeometry.recordingHUDLayout(
+            interactiveSize: CGSize(width: 250, height: 52),
+            passiveSize: CGSize(width: 220, height: 36),
+            selectionFrame: CGRect(x: 700, y: 10, width: 400, height: 780),
+            visibleFrame: CGRect(x: 0, y: 0, width: 1200, height: 800)
+        )
+
+        XCTAssertEqual(layout.mode, .interactiveOutside)
+        XCTAssertEqual(layout.frame, CGRect(x: 440, y: 374, width: 250, height: 52))
+    }
+
+    func testRecordingHUDIsPassiveInsideFullScreenSelection() {
+        let visible = CGRect(x: 0, y: 0, width: 1200, height: 800)
+        let layout = CaptureGeometry.recordingHUDLayout(
+            interactiveSize: CGSize(width: 250, height: 52),
+            passiveSize: CGSize(width: 220, height: 36),
+            selectionFrame: visible,
+            visibleFrame: visible
+        )
+
+        XCTAssertEqual(layout.mode, .passiveInside)
+        XCTAssertEqual(layout.frame, CGRect(x: 490, y: 754, width: 220, height: 36))
+        XCTAssertTrue(visible.contains(layout.frame))
+    }
+
+    func testRecordingHUDPassiveFallbackSupportsNegativeDisplayCoordinates() {
+        let visible = CGRect(x: -1920, y: -1080, width: 1920, height: 1080)
+        let layout = CaptureGeometry.recordingHUDLayout(
+            interactiveSize: CGSize(width: 250, height: 52),
+            passiveSize: CGSize(width: 220, height: 36),
+            selectionFrame: visible,
+            visibleFrame: visible
+        )
+
+        XCTAssertEqual(layout.mode, .passiveInside)
+        XCTAssertEqual(layout.frame, CGRect(x: -1070, y: -46, width: 220, height: 36))
+        XCTAssertTrue(visible.contains(layout.frame))
+    }
+
+    func testRecordingHUDPassiveFallbackClampsBelowMenuBar() {
+        let layout = CaptureGeometry.recordingHUDLayout(
+            interactiveSize: CGSize(width: 250, height: 52),
+            passiveSize: CGSize(width: 220, height: 36),
+            selectionFrame: CGRect(x: 0, y: 0, width: 1200, height: 800),
+            visibleFrame: CGRect(x: 0, y: 23, width: 1200, height: 753)
+        )
+
+        XCTAssertEqual(layout.mode, .passiveInside)
+        XCTAssertEqual(layout.frame, CGRect(x: 490, y: 740, width: 220, height: 36))
+    }
+
     func testCapturePixelSizeUsesRetinaBackingScale() {
         XCTAssertEqual(
             CaptureGeometry.capturePixelSize(
