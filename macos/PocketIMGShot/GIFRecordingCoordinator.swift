@@ -60,16 +60,19 @@ final class GIFRecordingCoordinator: NSObject, NSWindowDelegate {
     private struct SelectionContext {
         let region: GIFCaptureRegion
         let screenFrame: CGRect
+        let displayFrame: CGRect
         let screenVisibleFrame: CGRect
     }
 
     private static let countdownSeconds = 3
     private static let maximumRecordingDuration: TimeInterval = 30
+    private static let recordingBorderWidth: CGFloat = 2
 
     private var phase: Phase = .idle
     private(set) var state: GIFRecordingState = .idle
     private var selectionWindows: [GIFRecordingWindow] = []
     private var countdownWindow: NSPanel?
+    private var recordingBorderWindow: NSPanel?
     private var recordingHUDWindow: NSPanel?
     private var captureTask: Task<Void, Never>?
     private var countdownTask: Task<Void, Never>?
@@ -173,6 +176,7 @@ final class GIFRecordingCoordinator: NSObject, NSWindowDelegate {
         maximumDurationTask = nil
         hudUpdateTask?.cancel()
         hudUpdateTask = nil
+        closeRecordingBorder()
         closeRecordingHUD()
 
         processingTask = Task { [weak self] in
@@ -555,6 +559,7 @@ final class GIFRecordingCoordinator: NSObject, NSWindowDelegate {
                 for: sourceRect,
                 in: window.frame
             ),
+            displayFrame: window.frame,
             screenVisibleFrame: window.screen?.visibleFrame ?? window.frame
         )
         selectionContext = context
@@ -563,6 +568,7 @@ final class GIFRecordingCoordinator: NSObject, NSWindowDelegate {
         focusRecoveryTask = nil
         closeSelectionWindows()
         restorePreviouslyActiveApplication()
+        showRecordingBorder(context: context)
         showCountdownWindow(context: context, value: Self.countdownSeconds)
         publish(.countdown(Self.countdownSeconds))
         DiagnosticLog.record(
@@ -671,6 +677,28 @@ final class GIFRecordingCoordinator: NSObject, NSWindowDelegate {
 
     private func updateCountdown(_ value: Int) {
         (countdownWindow?.contentView as? GIFCountdownView)?.value = value
+    }
+
+    private func showRecordingBorder(context: SelectionContext) {
+        closeRecordingBorder()
+        let layout = CaptureGeometry.recordingBorderLayout(
+            selectionFrame: context.screenFrame,
+            displayFrame: context.displayFrame,
+            borderWidth: Self.recordingBorderWidth
+        )
+        guard !layout.windowFrame.isEmpty else { return }
+        let panel = makeAuxiliaryPanel(
+            frame: layout.windowFrame,
+            ignoresMouseEvents: true
+        )
+        panel.hasShadow = false
+        panel.contentView = GIFRecordingBorderView(
+            frame: CGRect(origin: .zero, size: layout.windowFrame.size),
+            captureFrame: layout.captureFrame,
+            lineWidth: Self.recordingBorderWidth
+        )
+        recordingBorderWindow = panel
+        panel.orderFrontRegardless()
     }
 
     private func showRecordingHUD(context: SelectionContext) {
@@ -860,6 +888,7 @@ final class GIFRecordingCoordinator: NSObject, NSWindowDelegate {
     private func closeAllWindows() {
         closeSelectionWindows()
         closeCountdownWindow()
+        closeRecordingBorder()
         closeRecordingHUD()
     }
 
@@ -883,6 +912,14 @@ final class GIFRecordingCoordinator: NSObject, NSWindowDelegate {
     private func closeCountdownWindow() {
         let window = countdownWindow
         countdownWindow = nil
+        window?.orderOut(nil)
+        window?.contentView = nil
+        window?.close()
+    }
+
+    private func closeRecordingBorder() {
+        let window = recordingBorderWindow
+        recordingBorderWindow = nil
         window?.orderOut(nil)
         window?.contentView = nil
         window?.close()
@@ -1548,6 +1585,76 @@ private final class GIFCountdownView: NSView {
             ),
             withAttributes: attributes
         )
+    }
+}
+
+@MainActor
+private final class GIFRecordingBorderView: NSView {
+    private let captureFrame: CGRect
+    private let lineWidth: CGFloat
+
+    init(
+        frame frameRect: NSRect,
+        captureFrame: CGRect,
+        lineWidth: CGFloat
+    ) {
+        self.captureFrame = captureFrame
+        self.lineWidth = lineWidth
+        super.init(frame: frameRect)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        nil
+    }
+
+    override var isOpaque: Bool { false }
+
+    override func draw(_ dirtyRect: NSRect) {
+        guard lineWidth > 0,
+              captureFrame.width > 0,
+              captureFrame.height > 0 else {
+            return
+        }
+
+        let leftOutside = min(lineWidth, max(0, captureFrame.minX - bounds.minX))
+        let rightOutside = min(lineWidth, max(0, bounds.maxX - captureFrame.maxX))
+        let bottomOutside = min(lineWidth, max(0, captureFrame.minY - bounds.minY))
+        let topOutside = min(lineWidth, max(0, bounds.maxY - captureFrame.maxY))
+        let horizontalMinX = captureFrame.minX - leftOutside
+        let horizontalWidth = captureFrame.width + leftOutside + rightOutside
+
+        let borderRects = [
+            CGRect(
+                x: captureFrame.minX - leftOutside,
+                y: captureFrame.minY,
+                width: lineWidth,
+                height: captureFrame.height
+            ),
+            CGRect(
+                x: captureFrame.maxX - (lineWidth - rightOutside),
+                y: captureFrame.minY,
+                width: lineWidth,
+                height: captureFrame.height
+            ),
+            CGRect(
+                x: horizontalMinX,
+                y: captureFrame.minY - bottomOutside,
+                width: horizontalWidth,
+                height: lineWidth
+            ),
+            CGRect(
+                x: horizontalMinX,
+                y: captureFrame.maxY - (lineWidth - topOutside),
+                width: horizontalWidth,
+                height: lineWidth
+            ),
+        ]
+
+        NSColor.systemRed.withAlphaComponent(0.96).setFill()
+        for rect in borderRects where rect.intersects(dirtyRect) {
+            NSBezierPath(rect: rect.intersection(bounds)).fill()
+        }
     }
 }
 
