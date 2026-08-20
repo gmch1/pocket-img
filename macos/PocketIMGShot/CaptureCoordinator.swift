@@ -168,8 +168,6 @@ final class CaptureCoordinator: NSObject, CaptureOverlayViewDelegate, NSWindowDe
         preferred?.makeFirstResponder(preferred?.contentView)
         if let overlay = preferred?.contentView as? CaptureOverlayView {
             overlay.initializeHoverPoint(atScreenPoint: pointer)
-        } else if preferred?.contentView is CapturePreparationView {
-            NSCursor.crosshair.set()
         }
     }
 
@@ -191,6 +189,7 @@ final class CaptureCoordinator: NSObject, CaptureOverlayViewDelegate, NSWindowDe
                 }
                 guard !Task.isCancelled, !finished, !windows.isEmpty else { return }
                 if hasCaptureFocus {
+                    scheduleCaptureCursorSynchronization()
                     if attempt > 0 {
                         DiagnosticLog.record("capture focus restored attempt=\(attempt)")
                     }
@@ -213,6 +212,30 @@ final class CaptureCoordinator: NSObject, CaptureOverlayViewDelegate, NSWindowDe
         }
     }
 
+    func windowDidBecomeKey(_ notification: Notification) {
+        guard !finished,
+              let window = notification.object as? CaptureWindow,
+              windows.contains(where: { $0 === window }) else {
+            return
+        }
+        scheduleCaptureCursorSynchronization()
+    }
+
+    private func scheduleCaptureCursorSynchronization() {
+        RunLoop.main.perform { [weak self] in
+            MainActor.assumeIsolated {
+                guard let self, !self.finished, !self.windows.isEmpty else { return }
+                guard self.hasCaptureFocus else {
+                    DiagnosticLog.record("capture cursor sync skipped without key-window focus")
+                    return
+                }
+                if !self.synchronizeCaptureCursor() {
+                    DiagnosticLog.record("capture cursor sync skipped outside active key window")
+                }
+            }
+        }
+    }
+
     func windowDidResignKey(_ notification: Notification) {
         guard !finished else { return }
         Task { @MainActor [weak self] in
@@ -229,6 +252,25 @@ final class CaptureCoordinator: NSObject, CaptureOverlayViewDelegate, NSWindowDe
         }
         DiagnosticLog.record("capture focus lost; restoring overlay focus")
         activateWindows(includeHidden: false)
+    }
+
+    @discardableResult
+    private func synchronizeCaptureCursor() -> Bool {
+        let pointer = NSEvent.mouseLocation
+        guard let window = NSApplication.shared.keyWindow as? CaptureWindow,
+              windows.contains(where: { $0 === window }),
+              window.isVisible,
+              window.frame.contains(pointer) else {
+            return false
+        }
+        if let overlay = window.contentView as? CaptureOverlayView {
+            return overlay.synchronizeCursor(atScreenPoint: pointer)
+        } else if let preparationView = window.contentView as? CapturePreparationView {
+            window.invalidateCursorRects(for: preparationView)
+            NSCursor.crosshair.set()
+            return true
+        }
+        return false
     }
 
     private func installKeyMonitor() {

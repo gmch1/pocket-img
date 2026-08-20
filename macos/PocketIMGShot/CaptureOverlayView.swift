@@ -639,9 +639,18 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
         let point = convert(windowPoint, from: nil)
         guard bounds.contains(point) else { return }
         hoverPoint = constrained(point)
+        needsDisplay = true
+    }
+
+    @discardableResult
+    func synchronizeCursor(atScreenPoint screenPoint: CGPoint) -> Bool {
+        guard mode == .selecting, let window, window.isKeyWindow else { return false }
+        let windowPoint = window.convertPoint(fromScreen: screenPoint)
+        let point = convert(windowPoint, from: nil)
+        guard bounds.contains(point) else { return false }
         window.invalidateCursorRects(for: self)
         NSCursor.crosshair.set()
-        needsDisplay = true
+        return true
     }
 
     override func draw(_ dirtyRect: NSRect) {
