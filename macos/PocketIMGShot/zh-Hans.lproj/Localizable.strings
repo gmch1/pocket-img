@@ -3,6 +3,8 @@
 "language.english" = "English";
 
 "menu.capture" = "截图（%@）";
+"menu.record_gif" = "录制 GIF（%@）";
+"menu.stop_gif" = "停止 GIF 录制";
 "menu.check_updates" = "检查更新…";
 "menu.settings" = "设置…";
 "menu.quit" = "退出 PocketIMG Shot";
@@ -12,9 +14,12 @@
 "settings.service.section" = "PocketIMG 服务";
 "settings.server_address" = "服务器地址";
 "settings.server_address.help" = "局域网地址支持 HTTP。";
-"settings.capture.section" = "截图";
+"settings.capture.section" = "捕获快捷键";
 "settings.global_hotkey" = "全局快捷键";
+"settings.screenshot_hotkey" = "截图快捷键";
+"settings.gif_hotkey" = "录制 GIF 快捷键";
 "settings.hotkey.help" = "点击后按下新快捷键，部分 Mac 需配合 Fn。";
+"settings.hotkey_conflict" = "截图与 GIF 录制快捷键不能相同。";
 "settings.save" = "保存";
 
 "hotkey.recording" = "请按新的快捷键…";
@@ -25,7 +30,11 @@
 "hotkey.forward_delete" = "向前删除";
 
 "overlay.enter_text" = "输入文字";
+"overlay.gif.instructions" = "拖拽选择区域，按 Return 或双击开始录制；Esc 取消。";
 "pinned.close" = "关闭贴图";
+
+"gif.hud.recording" = "正在录制 %@ / 30 秒";
+"gif.hud.stop" = "停止";
 
 "toast.hotkey_registration_failed" = "快捷键注册失败";
 "toast.settings_saved" = "设置已保存";
@@ -34,6 +43,7 @@
 "toast.upload_complete" = "上传完成，链接已复制";
 "toast.screenshot_copied" = "截图已复制";
 "toast.screenshot_pinned" = "截图已贴到桌面，双击或按 Esc 关闭";
+"toast.gif_copied" = "GIF 已复制";
 
 "status.capture_failed" = "截图生成失败";
 "status.uploading" = "正在上传…";
@@ -42,21 +52,35 @@
 "status.screenshot_copied" = "截图已复制";
 "status.screenshot_pinned" = "截图已置顶";
 "status.pin_failed" = "贴图失败";
+"status.gif.selecting" = "请选择录制区域";
+"status.gif.countdown" = "GIF 录制即将开始…";
+"status.gif.recording" = "正在录制 GIF…";
+"status.gif.stopping" = "正在停止 GIF 录制…";
+"status.gif.encoding" = "正在生成 GIF…";
+"status.gif.copied" = "GIF 已复制";
 
 "alert.settings_save_failed" = "无法保存设置";
 "alert.capture_failed" = "无法生成截图";
 "alert.copy_failed" = "无法复制截图";
 "alert.pin_failed" = "无法创建贴图";
 "alert.upload_failed" = "截图上传失败";
+"alert.gif_upload_failed" = "GIF 上传失败";
+"alert.gif_failed" = "无法录制 GIF";
+"alert.gif_ready" = "GIF 已生成";
+"alert.gif_ready_body" = "时长：%@\n大小：%@";
+"alert.gif_ready_body_large" = "时长：%@\n大小：%@\n该实验版 GIF 超过 24 MiB，只能复制，不能上传。";
 "alert.screen_permission_title" = "需要屏幕录制权限";
-"alert.screen_permission_body" = "PocketIMG Shot 只读取按下快捷键时的一张屏幕静态画面，不录制音频。请在“系统设置 → 隐私与安全性 → 屏幕与系统音频录制”中允许本应用，然后重新打开。";
+"alert.screen_permission_body" = "PocketIMG Shot 截图时只捕获一张静态画面；仅在你主动开始 GIF 录制后持续捕获所选区域，并且始终不录制音频。请在“系统设置 → 隐私与安全性 → 屏幕与系统音频录制”中允许本应用，然后重新打开。";
 
 "button.retry" = "重试";
 "button.cancel" = "取消";
 "button.ok" = "好";
 "button.open_system_settings" = "打开系统设置";
+"button.copy_gif" = "复制 GIF";
+"button.upload_gif" = "上传 GIF";
 
 "diagnostic_log" = "诊断日志：%@";
+"gif_experiment_log" = "GIF 实验日志：%@";
 "error.hotkey_registration" = "快捷键已被其他应用占用，或系统拒绝注册（%d）。";
 "error.invalid_server_address" = "服务器地址必须是完整的 HTTP 或 HTTPS 地址。";
 "error.server_address_has_path" = "服务器地址不能包含路径，请只填写协议、域名和端口。";

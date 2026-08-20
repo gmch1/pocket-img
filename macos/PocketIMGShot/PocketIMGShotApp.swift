@@ -19,6 +19,19 @@ struct PocketIMGShotApp: App {
             }
             .disabled(controller.isCapturing || controller.isUploading)
 
+            Button(
+                controller.isGIFRecording
+                    ? L10n.text("menu.stop_gif", language: settings.language)
+                    : L10n.format(
+                        "menu.record_gif",
+                        language: settings.language,
+                        settings.gifHotKey.localizedDisplayName(language: settings.language)
+                    )
+            ) {
+                controller.toggleGIFRecording()
+            }
+            .disabled(!controller.canToggleGIFRecording)
+
             if !controller.statusMessage.isEmpty {
                 Divider()
                 Text(controller.statusMessage)
