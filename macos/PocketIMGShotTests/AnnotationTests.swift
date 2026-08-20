@@ -65,6 +65,79 @@ final class AnnotationTests: XCTestCase {
         XCTAssertEqual(localFrame, CGRect(x: 240, y: 180, width: 500, height: 300))
     }
 
+    func testRecordingBorderExpandsOutsideASelectionOnNegativeCoordinateDisplay() {
+        let selection = CGRect(x: -1820, y: 730, width: 500, height: 300)
+        let layout = CaptureGeometry.recordingBorderLayout(
+            selectionFrame: selection,
+            displayFrame: CGRect(x: -1920, y: 0, width: 1920, height: 1080),
+            borderWidth: 3
+        )
+
+        XCTAssertEqual(layout.windowFrame, CGRect(x: -1823, y: 727, width: 506, height: 306))
+        XCTAssertEqual(layout.captureFrame, CGRect(x: 3, y: 3, width: 500, height: 300))
+        XCTAssertEqual(
+            layout.captureFrame.offsetBy(
+                dx: layout.windowFrame.minX,
+                dy: layout.windowFrame.minY
+            ),
+            selection
+        )
+    }
+
+    func testRecordingBorderStaysInsideDisplayForFullScreenSelection() {
+        let display = CGRect(x: -1920, y: 0, width: 1920, height: 1080)
+        let layout = CaptureGeometry.recordingBorderLayout(
+            selectionFrame: display,
+            displayFrame: display,
+            borderWidth: 3
+        )
+
+        XCTAssertEqual(layout.windowFrame, display)
+        XCTAssertEqual(layout.captureFrame, CGRect(origin: .zero, size: display.size))
+    }
+
+    func testRecordingBorderClipsOnlyOuterMarginsAtTopRightDisplayEdges() {
+        let display = CGRect(x: 0, y: 1080, width: 1920, height: 1080)
+        let selection = CGRect(x: 1500, y: 1900, width: 420, height: 260)
+        let layout = CaptureGeometry.recordingBorderLayout(
+            selectionFrame: selection,
+            displayFrame: display,
+            borderWidth: 3
+        )
+
+        XCTAssertEqual(layout.windowFrame, CGRect(x: 1497, y: 1897, width: 423, height: 263))
+        XCTAssertEqual(layout.captureFrame, CGRect(x: 3, y: 3, width: 420, height: 260))
+        XCTAssertTrue(display.contains(layout.windowFrame))
+        XCTAssertEqual(
+            layout.captureFrame.offsetBy(
+                dx: layout.windowFrame.minX,
+                dy: layout.windowFrame.minY
+            ),
+            selection
+        )
+    }
+
+    func testRecordingBorderClipsOnlyOuterMarginsAtBottomLeftDisplayEdges() {
+        let display = CGRect(x: -1920, y: -1080, width: 1920, height: 1080)
+        let selection = CGRect(x: -1920, y: -1080, width: 420, height: 260)
+        let layout = CaptureGeometry.recordingBorderLayout(
+            selectionFrame: selection,
+            displayFrame: display,
+            borderWidth: 3
+        )
+
+        XCTAssertEqual(layout.windowFrame, CGRect(x: -1920, y: -1080, width: 423, height: 263))
+        XCTAssertEqual(layout.captureFrame, CGRect(x: 0, y: 0, width: 420, height: 260))
+        XCTAssertTrue(display.contains(layout.windowFrame))
+        XCTAssertEqual(
+            layout.captureFrame.offsetBy(
+                dx: layout.windowFrame.minX,
+                dy: layout.windowFrame.minY
+            ),
+            selection
+        )
+    }
+
     func testCapturePixelSizeUsesRetinaBackingScale() {
         XCTAssertEqual(
             CaptureGeometry.capturePixelSize(

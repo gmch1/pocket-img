@@ -210,6 +210,34 @@ enum SelectionResizeHandle: CaseIterable, Hashable {
 }
 
 enum CaptureGeometry {
+    struct RecordingBorderLayout: Equatable {
+        let windowFrame: CGRect
+        let captureFrame: CGRect
+    }
+
+    static func recordingBorderLayout(
+        selectionFrame: CGRect,
+        displayFrame: CGRect,
+        borderWidth: CGFloat
+    ) -> RecordingBorderLayout {
+        let selection = selectionFrame.standardized.intersection(displayFrame.standardized)
+        guard !selection.isNull, !selection.isEmpty else {
+            return RecordingBorderLayout(windowFrame: .zero, captureFrame: .zero)
+        }
+        let width = max(0, borderWidth)
+        let windowFrame = selection
+            .insetBy(dx: -width, dy: -width)
+            .intersection(displayFrame.standardized)
+        let captureFrame = selection.offsetBy(
+            dx: -windowFrame.minX,
+            dy: -windowFrame.minY
+        )
+        return RecordingBorderLayout(
+            windowFrame: windowFrame,
+            captureFrame: captureFrame
+        )
+    }
+
     static func rectangleAnnotation(
         _ rect: CGRect,
         contains point: CGPoint,
