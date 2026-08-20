@@ -45,7 +45,7 @@ final class ConfigurationTests: XCTestCase {
     }
 
     @MainActor
-    func testCaptureOverlayInitializesPixelInspectorWithoutMouseMovement() {
+    func testCaptureOverlayInitializesPixelInspectorWithoutClaimingCursorFromInactiveWindow() {
         let window = NSWindow(
             contentRect: CGRect(x: 100, y: 200, width: 800, height: 600),
             styleMask: [.borderless],
@@ -59,6 +59,7 @@ final class ConfigurationTests: XCTestCase {
         view.initializeHoverPoint(atScreenPoint: CGPoint(x: 340, y: 440))
 
         XCTAssertEqual(view.hoverPoint, CGPoint(x: 240, y: 360))
+        XCTAssertFalse(view.synchronizeCursor(atScreenPoint: CGPoint(x: 340, y: 440)))
     }
 
     func testAutomaticUpdateFeedUsesSignedHTTPSAppcast() throws {
