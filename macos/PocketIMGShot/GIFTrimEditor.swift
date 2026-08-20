@@ -306,16 +306,16 @@ final class GIFTrimEditorController: NSObject, NSWindowDelegate {
             queue: .main
         ) { [weak self] time in
             MainActor.assumeIsolated {
-                guard let self, !resolved else { return }
+                guard let self, !self.resolved else { return }
                 let seconds = CMTimeGetSeconds(time)
                 guard seconds.isFinite else { return }
-                currentTimeLabel.stringValue = Self.timecode(seconds)
-                timeline.playhead = min(
-                    timeline.trimRange.end,
-                    max(timeline.trimRange.start, seconds)
+                self.currentTimeLabel.stringValue = Self.timecode(seconds)
+                self.timeline.playhead = min(
+                    self.timeline.trimRange.end,
+                    max(self.timeline.trimRange.start, seconds)
                 )
-                if seconds >= timeline.trimRange.end - 0.01 {
-                    updatePlayButton()
+                if seconds >= self.timeline.trimRange.end - 0.01 {
+                    self.updatePlayButton()
                 }
             }
         }
