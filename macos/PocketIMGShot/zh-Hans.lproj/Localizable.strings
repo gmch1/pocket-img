@@ -34,7 +34,17 @@
 "pinned.close" = "关闭贴图";
 
 "gif.hud.recording" = "正在录制 %@ / 30 秒";
+"gif.hud.recording_passive" = "正在录制 %@ · 按 %@ 停止";
 "gif.hud.stop" = "停止";
+"gif.editor.title" = "裁剪 GIF";
+"gif.editor.instructions" = "拖动时间轴两端调整开始和结束位置，然后生成 GIF。";
+"gif.editor.selection" = "%@ – %@（已选择 %@）";
+"gif.editor.play" = "播放";
+"gif.editor.pause" = "暂停";
+"gif.editor.generate" = "生成 GIF";
+"gif.editor.cancel" = "取消";
+"gif.editor.start_handle" = "GIF 开始位置";
+"gif.editor.end_handle" = "GIF 结束位置";
 
 "toast.hotkey_registration_failed" = "快捷键注册失败";
 "toast.settings_saved" = "设置已保存";
@@ -56,6 +66,7 @@
 "status.gif.countdown" = "GIF 录制即将开始…";
 "status.gif.recording" = "正在录制 GIF…";
 "status.gif.stopping" = "正在停止 GIF 录制…";
+"status.gif.editing" = "正在调整 GIF 起止时间…";
 "status.gif.encoding" = "正在生成 GIF…";
 "status.gif.copied" = "GIF 已复制";
 

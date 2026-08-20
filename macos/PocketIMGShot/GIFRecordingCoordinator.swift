@@ -12,6 +12,7 @@ enum GIFRecordingState: Equatable, Sendable {
     case countdown(Int)
     case recording
     case stopping
+    case editing
     case encoding
 }
 
@@ -48,6 +49,7 @@ final class GIFRecordingCoordinator: NSObject, NSWindowDelegate {
         case starting
         case recording
         case stopping
+        case editing
         case encoding
     }
 
@@ -74,6 +76,7 @@ final class GIFRecordingCoordinator: NSObject, NSWindowDelegate {
     private var countdownWindow: NSPanel?
     private var recordingBorderWindow: NSPanel?
     private var recordingHUDWindow: NSPanel?
+    private var trimEditor: GIFTrimEditorController?
     private var captureTask: Task<Void, Never>?
     private var countdownTask: Task<Void, Never>?
     private var maximumDurationTask: Task<Void, Never>?
@@ -84,6 +87,7 @@ final class GIFRecordingCoordinator: NSObject, NSWindowDelegate {
     private let escapeHotKey = GlobalHotKey(identifier: 4)
     private var recorder: ScreenStreamRecorder?
     private var encoder: GIFEncoder?
+    private var pendingMovie: GIFMovieRecording?
     private var sessionID: UUID?
     private var selectionContext: SelectionContext?
     private var recordingStartedAt: Date?
@@ -94,10 +98,12 @@ final class GIFRecordingCoordinator: NSObject, NSWindowDelegate {
     private var onCancel: (() -> Void)?
     private var onError: ((Error) -> Void)?
     private var language: AppLanguage = .system
+    private var stopShortcutDisplayName = "F2"
     private var finished = true
 
     func begin(
         language: AppLanguage,
+        stopShortcutDisplayName: String,
         onStateChange: @escaping (GIFRecordingState) -> Void,
         onFinish: @escaping (GIFRecordingResult) -> Void,
         onCancel: @escaping () -> Void,
@@ -108,6 +114,7 @@ final class GIFRecordingCoordinator: NSObject, NSWindowDelegate {
         let sessionID = GIFExperimentLogger.makeSessionID()
         self.sessionID = sessionID
         self.language = language
+        self.stopShortcutDisplayName = stopShortcutDisplayName
         self.onStateChange = onStateChange
         self.onFinish = onFinish
         self.onCancel = onCancel
@@ -157,16 +164,14 @@ final class GIFRecordingCoordinator: NSObject, NSWindowDelegate {
         }
     }
 
-    /// Stops an active recording and starts GIF encoding. Calling this method in
-    /// any other state is intentionally a no-op, so the global F2 handler can
-    /// safely forward repeated key presses here.
+    /// Stops an active recording and opens the trim editor. Calling this method
+    /// in any other state is intentionally a no-op, so the global GIF hot key
+    /// can safely forward repeated key presses here.
     func stopRecording() {
         guard !finished,
               phase == .recording,
               let sessionID,
-              let recorder,
-              let encoder,
-              let selectionContext else {
+              let recorder else {
             return
         }
 
@@ -196,12 +201,64 @@ final class GIFRecordingCoordinator: NSObject, NSWindowDelegate {
                 try? FileManager.default.removeItem(at: movie.info.movieURL)
                 return
             }
-            phase = .encoding
-            publish(.encoding)
+            processingTask = nil
+            pendingMovie = movie
+            phase = .editing
+            publish(.editing)
+            showTrimEditor(movie: movie)
+        }
+    }
 
+    private func showTrimEditor(movie: GIFMovieRecording) {
+        closeTrimEditor()
+        let editor = GIFTrimEditorController(
+            movieURL: movie.info.movieURL,
+            duration: movie.duration,
+            frameRate: 10,
+            pixelSize: movie.info.outputPixelSize,
+            language: language,
+            onConfirm: { [weak self] trimRange in
+                self?.beginEncoding(trimRange: trimRange)
+            },
+            onCancel: { [weak self] in
+                self?.cancel()
+            }
+        )
+        trimEditor = editor
+        editor.show()
+        DiagnosticLog.record(
+            "gif trim editor opened duration=\(String(format: "%.3f", movie.duration))"
+        )
+    }
+
+    private func beginEncoding(trimRange: GIFTrimRange) {
+        guard !finished,
+              phase == .editing,
+              let sessionID,
+              let encoder,
+              let movie = pendingMovie,
+              let selectionContext else {
+            return
+        }
+
+        closeTrimEditor()
+        pendingMovie = nil
+        phase = .encoding
+        publish(.encoding)
+        let encoderTrimRange: GIFTrimRange? = trimRange.start <= 0.000_001
+            && abs(trimRange.end - movie.duration) <= 0.000_001
+            ? nil
+            : trimRange
+
+        processingTask = Task { [weak self] in
+            guard let self else { return }
             let encoding: GIFEncodingResult
             do {
-                encoding = try await encoder.encode(movie: movie, sessionID: sessionID)
+                encoding = try await encoder.encode(
+                    movie: movie,
+                    sessionID: sessionID,
+                    trimRange: encoderTrimRange
+                )
             } catch is CancellationError {
                 return
             } catch {
@@ -246,10 +303,15 @@ final class GIFRecordingCoordinator: NSObject, NSWindowDelegate {
 
     func cancel(notify: Bool = true) {
         guard !finished || phase != .idle || !selectionWindows.isEmpty else { return }
+        let pendingMovieURL = pendingMovie?.info.movieURL
+        pendingMovie = nil
         finished = true
         phase = .idle
         cancelTasks()
         closeAllWindows()
+        if let pendingMovieURL {
+            try? FileManager.default.removeItem(at: pendingMovieURL)
+        }
         restorePreviouslyActiveApplication()
 
         let recorder = self.recorder
@@ -703,16 +765,22 @@ final class GIFRecordingCoordinator: NSObject, NSWindowDelegate {
 
     private func showRecordingHUD(context: SelectionContext) {
         closeRecordingHUD()
-        let size = CGSize(width: 250, height: 52)
-        let frame = recordingHUDFrame(
-            size: size,
+        let layout = CaptureGeometry.recordingHUDLayout(
+            interactiveSize: CGSize(width: 250, height: 52),
+            passiveSize: CGSize(width: 220, height: 36),
             selectionFrame: context.screenFrame,
             visibleFrame: context.screenVisibleFrame
         )
-        let panel = makeAuxiliaryPanel(frame: frame, ignoresMouseEvents: false)
+        let isInteractive = layout.mode == .interactiveOutside
+        let panel = makeAuxiliaryPanel(
+            frame: layout.frame,
+            ignoresMouseEvents: !isInteractive
+        )
         let view = GIFRecordingHUDView(
-            frame: CGRect(origin: .zero, size: size),
-            language: language
+            frame: CGRect(origin: .zero, size: layout.frame.size),
+            language: language,
+            showsStopButton: isInteractive,
+            stopShortcutDisplayName: stopShortcutDisplayName
         ) { [weak self] in
             self?.stopRecording()
         }
@@ -766,38 +834,13 @@ final class GIFRecordingCoordinator: NSObject, NSWindowDelegate {
         return CGRect(origin: origin, size: size).constrained(within: visibleFrame)
     }
 
-    private func recordingHUDFrame(
-        size: CGSize,
-        selectionFrame: CGRect,
-        visibleFrame: CGRect
-    ) -> CGRect {
-        let gap: CGFloat = 10
-        let centeredX = selectionFrame.midX - size.width / 2
-        let aboveY = selectionFrame.maxY + gap
-        let belowY = selectionFrame.minY - size.height - gap
-        let preferredY: CGFloat
-        if aboveY + size.height <= visibleFrame.maxY {
-            preferredY = aboveY
-        } else if belowY >= visibleFrame.minY {
-            preferredY = belowY
-        } else {
-            preferredY = min(
-                max(selectionFrame.maxY - size.height - gap, visibleFrame.minY),
-                visibleFrame.maxY - size.height
-            )
-        }
-        return CGRect(
-            origin: CGPoint(x: centeredX, y: preferredY),
-            size: size
-        ).constrained(within: visibleFrame)
-    }
-
     private func complete(_ result: GIFRecordingResult) {
         guard !finished else { return }
         finished = true
         phase = .idle
         cancelTasks()
         closeAllWindows()
+        pendingMovie = nil
         let completion = onFinish
         recorder = nil
         encoder = nil
@@ -812,10 +855,15 @@ final class GIFRecordingCoordinator: NSObject, NSWindowDelegate {
 
     private func fail(_ error: Error) {
         guard !finished else { return }
+        let pendingMovieURL = pendingMovie?.info.movieURL
+        pendingMovie = nil
         finished = true
         phase = .idle
         cancelTasks()
         closeAllWindows()
+        if let pendingMovieURL {
+            try? FileManager.default.removeItem(at: pendingMovieURL)
+        }
         restorePreviouslyActiveApplication()
         let recorder = self.recorder
         self.recorder = nil
@@ -890,6 +938,7 @@ final class GIFRecordingCoordinator: NSObject, NSWindowDelegate {
         closeCountdownWindow()
         closeRecordingBorder()
         closeRecordingHUD()
+        closeTrimEditor()
     }
 
     private func closeSelectionWindows() {
@@ -931,6 +980,12 @@ final class GIFRecordingCoordinator: NSObject, NSWindowDelegate {
         window?.orderOut(nil)
         window?.contentView = nil
         window?.close()
+    }
+
+    private func closeTrimEditor() {
+        let editor = trimEditor
+        trimEditor = nil
+        editor?.dismiss(notify: false)
     }
 
     private func captureDisplays() async throws -> [FrozenDisplay] {
@@ -1661,6 +1716,8 @@ private final class GIFRecordingBorderView: NSView {
 @MainActor
 private final class GIFRecordingHUDView: NSView {
     private let language: AppLanguage
+    private let showsStopButton: Bool
+    private let stopShortcutDisplayName: String
     private let label = NSTextField(labelWithString: "")
     private let stopButton = NSButton()
     private let recordingDot = GIFRecordingDotView()
@@ -1669,9 +1726,13 @@ private final class GIFRecordingHUDView: NSView {
     init(
         frame frameRect: NSRect,
         language: AppLanguage,
+        showsStopButton: Bool,
+        stopShortcutDisplayName: String,
         onStop: @escaping () -> Void
     ) {
         self.language = language
+        self.showsStopButton = showsStopButton
+        self.stopShortcutDisplayName = stopShortcutDisplayName
         self.onStop = onStop
         super.init(frame: frameRect)
 
@@ -1691,6 +1752,7 @@ private final class GIFRecordingHUDView: NSView {
         stopButton.font = .systemFont(ofSize: 12, weight: .semibold)
         stopButton.target = self
         stopButton.action = #selector(stopPressed)
+        stopButton.isHidden = !showsStopButton
         addSubview(stopButton)
         addSubview(recordingDot)
     }
@@ -1703,16 +1765,18 @@ private final class GIFRecordingHUDView: NSView {
     override func layout() {
         super.layout()
         recordingDot.frame = CGRect(x: 14, y: bounds.midY - 5, width: 10, height: 10)
-        stopButton.frame = CGRect(
-            x: bounds.maxX - 76,
-            y: bounds.midY - 15,
-            width: 64,
-            height: 30
-        )
+        if showsStopButton {
+            stopButton.frame = CGRect(
+                x: bounds.maxX - 76,
+                y: bounds.midY - 15,
+                width: 64,
+                height: 30
+            )
+        }
         label.frame = CGRect(
             x: 32,
             y: bounds.midY - 10,
-            width: stopButton.frame.minX - 40,
+            width: showsStopButton ? stopButton.frame.minX - 40 : bounds.maxX - 44,
             height: 20
         )
     }
@@ -1720,7 +1784,14 @@ private final class GIFRecordingHUDView: NSView {
     func update(elapsed: TimeInterval) {
         let wholeSeconds = Int(max(0, elapsed).rounded(.down))
         let value = String(format: "%02d:%02d", wholeSeconds / 60, wholeSeconds % 60)
-        label.stringValue = L10n.format("gif.hud.recording", language: language, value)
+        label.stringValue = showsStopButton
+            ? L10n.format("gif.hud.recording", language: language, value)
+            : L10n.format(
+                "gif.hud.recording_passive",
+                language: language,
+                value,
+                stopShortcutDisplayName
+            )
     }
 
     @objc private func stopPressed() {

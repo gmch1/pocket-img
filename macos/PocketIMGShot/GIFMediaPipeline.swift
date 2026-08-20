@@ -56,6 +56,110 @@ struct GIFMovieRecording: Sendable {
     let frames: GIFFrameStatistics
 }
 
+/// A half-open time range used while sampling the intermediate movie.
+///
+/// Callers may construct a range before the movie's exact duration is known.
+/// `normalized(forDuration:)` clamps both endpoints to the asset and rejects
+/// ranges that are reversed, non-finite, or too short to produce a useful GIF.
+struct GIFTrimRange: Equatable, Sendable {
+    static let minimumDuration: TimeInterval = 0.1
+
+    let start: TimeInterval
+    let end: TimeInterval
+
+    init(start: TimeInterval, end: TimeInterval) {
+        self.start = start
+        self.end = end
+    }
+
+    var duration: TimeInterval {
+        guard start.isFinite, end.isFinite else { return 0 }
+        return max(0, end - start)
+    }
+
+    var isValid: Bool {
+        start.isFinite
+            && end.isFinite
+            && start >= 0
+            && end > start
+            && duration >= Self.minimumDuration
+    }
+
+    func normalized(forDuration assetDuration: TimeInterval) -> GIFTrimRange? {
+        guard assetDuration.isFinite,
+              assetDuration > 0,
+              start.isFinite,
+              end.isFinite,
+              end > start else {
+            return nil
+        }
+        let normalized = GIFTrimRange(
+            start: min(max(0, start), assetDuration),
+            end: min(max(0, end), assetDuration)
+        )
+        return normalized.isValid ? normalized : nil
+    }
+}
+
+/// Pure frame scheduling logic shared by every encoder quality attempt.
+/// Keeping this independent from AVFoundation makes trim clamping, frame count,
+/// sample positions, and the shortened final-frame delay straightforward to test.
+struct GIFFrameSchedule: Equatable, Sendable {
+    let range: GIFTrimRange
+    let frameRate: Int
+    let frameCount: Int
+
+    init?(
+        trimRange: GIFTrimRange?,
+        assetDuration: TimeInterval,
+        frameRate: Int
+    ) {
+        guard assetDuration.isFinite,
+              assetDuration > 0,
+              frameRate > 0 else {
+            return nil
+        }
+
+        let effectiveRange: GIFTrimRange
+        if let trimRange {
+            guard let normalized = trimRange.normalized(forDuration: assetDuration) else {
+                return nil
+            }
+            effectiveRange = normalized
+        } else {
+            effectiveRange = GIFTrimRange(start: 0, end: assetDuration)
+        }
+
+        // Avoid manufacturing an empty trailing frame when a mathematically
+        // integral duration lands a few ULPs above the integer boundary.
+        let scaledFrameCount = effectiveRange.duration * Double(frameRate)
+        let rawFrameCount = ceil(max(0, scaledFrameCount - 1e-9))
+        guard rawFrameCount.isFinite,
+              rawFrameCount > 0,
+              rawFrameCount < Double(Int.max) else {
+            return nil
+        }
+        range = effectiveRange
+        self.frameRate = frameRate
+        frameCount = max(1, Int(rawFrameCount))
+    }
+
+    func sampleTime(forFrame index: Int) -> TimeInterval? {
+        guard (0..<frameCount).contains(index) else { return nil }
+        let requestedTime = range.start + Double(index) / Double(frameRate)
+        // The schedule is half-open. This guard also protects against floating
+        // point rounding placing the final request exactly on the end boundary.
+        return min(requestedTime, range.end.nextDown)
+    }
+
+    func frameDelay(forFrame index: Int) -> TimeInterval? {
+        guard (0..<frameCount).contains(index) else { return nil }
+        let frameDuration = 1 / Double(frameRate)
+        let elapsed = Double(index) * frameDuration
+        return min(frameDuration, max(0, range.duration - elapsed))
+    }
+}
+
 struct GIFEncodingAttempt: Codable, Equatable, Sendable {
     let frameRate: Int
     let maxDimension: Int
@@ -91,6 +195,7 @@ enum GIFExperimentStage: String, Codable, Sendable {
 
 enum GIFMediaPipelineError: LocalizedError, Sendable {
     case invalidRegion
+    case invalidTrimRange
     case displayNotFound
     case startInProgress
     case alreadyRecording
@@ -110,6 +215,8 @@ enum GIFMediaPipelineError: LocalizedError, Sendable {
         switch self {
         case .invalidRegion:
             return "The selected GIF recording region is invalid."
+        case .invalidTrimRange:
+            return "The selected GIF time range is invalid or too short."
         case .displayNotFound:
             return "The selected display is no longer available."
         case .startInProgress:
@@ -144,6 +251,7 @@ enum GIFMediaPipelineError: LocalizedError, Sendable {
     var diagnosticKind: String {
         switch self {
         case .invalidRegion: return "invalid_region"
+        case .invalidTrimRange: return "invalid_trim_range"
         case .displayNotFound: return "display_not_found"
         case .startInProgress: return "start_in_progress"
         case .alreadyRecording: return "already_recording"
@@ -869,7 +977,11 @@ actor GIFEncoder {
         self.maximumBytes = maximumBytes
     }
 
-    func encode(movie: GIFMovieRecording, sessionID: UUID) async throws -> GIFEncodingResult {
+    func encode(
+        movie: GIFMovieRecording,
+        sessionID: UUID,
+        trimRange: GIFTrimRange? = nil
+    ) async throws -> GIFEncodingResult {
         // Encoding consumes the intermediate movie. The final GIF must remain on
         // disk for clipboard file promises, but retaining every H.264 recording
         // would leak tens of megabytes across experiment runs.
@@ -888,7 +1000,8 @@ actor GIFEncoder {
                     try Self.encodeAttempt(
                         movieURL: movie.info.movieURL,
                         sessionID: sessionID,
-                        policy: policy
+                        policy: policy,
+                        trimRange: trimRange
                     )
                 }
                 let output = try await withTaskCancellationHandler(
@@ -945,6 +1058,11 @@ actor GIFEncoder {
             }
 
             throw GIFMediaPipelineError.unableToCreateGIF
+        } catch is CancellationError {
+            if let previousAttemptURL {
+                try? FileManager.default.removeItem(at: previousAttemptURL)
+            }
+            throw CancellationError()
         } catch {
             if let previousAttemptURL {
                 try? FileManager.default.removeItem(at: previousAttemptURL)
@@ -963,7 +1081,8 @@ actor GIFEncoder {
     private static func encodeAttempt(
         movieURL: URL,
         sessionID: UUID,
-        policy: Policy
+        policy: Policy,
+        trimRange: GIFTrimRange?
     ) throws -> AttemptOutput {
         let wallStart = ProcessInfo.processInfo.systemUptime
         let cpuStart = processCPUTime()
@@ -973,8 +1092,15 @@ actor GIFEncoder {
               !asset.tracks(withMediaType: .video).isEmpty else {
             throw GIFMediaPipelineError.unreadableMovie
         }
+        guard let schedule = GIFFrameSchedule(
+            trimRange: trimRange,
+            assetDuration: seconds,
+            frameRate: policy.frameRate
+        ) else {
+            throw GIFMediaPipelineError.invalidTrimRange
+        }
 
-        let frameCount = max(1, Int(ceil(seconds * Double(policy.frameRate))))
+        let frameCount = schedule.frameCount
         let outputURL = try GIFTemporaryFiles.makeURL(
             sessionID: sessionID,
             kind: "\(policy.frameRate)fps-\(policy.maxDimension)",
@@ -986,6 +1112,7 @@ actor GIFEncoder {
             frameCount,
             nil
         ) else {
+            try? FileManager.default.removeItem(at: outputURL)
             throw GIFMediaPipelineError.unableToCreateGIF
         }
 
@@ -996,22 +1123,28 @@ actor GIFEncoder {
         ]
         CGImageDestinationSetProperties(destination, containerProperties as CFDictionary)
 
-        let frameDelay = 1 / Double(policy.frameRate)
-        let frameProperties: [CFString: Any] = [
-            kCGImagePropertyGIFDictionary: [
-                kCGImagePropertyGIFDelayTime: frameDelay,
-                kCGImagePropertyGIFUnclampedDelayTime: frameDelay
-            ]
-        ]
         let generator = AVAssetImageGenerator(asset: asset)
         generator.appliesPreferredTrackTransform = true
         generator.maximumSize = CGSize(
             width: CGFloat(policy.maxDimension),
             height: CGFloat(policy.maxDimension)
         )
-        let tolerance = CMTime(value: 1, timescale: CMTimeScale(policy.frameRate * 2))
-        generator.requestedTimeToleranceBefore = tolerance
-        generator.requestedTimeToleranceAfter = tolerance
+        if trimRange == nil {
+            // Preserve the faster whole-movie path used by the experimental
+            // recorder before trimming was introduced.
+            let tolerance = CMTime(
+                value: 1,
+                timescale: CMTimeScale(policy.frameRate * 2)
+            )
+            generator.requestedTimeToleranceBefore = tolerance
+            generator.requestedTimeToleranceAfter = tolerance
+        } else {
+            // A non-zero tolerance can return a key frame before the trim start
+            // or after its end. Exact tolerance keeps every sampled image inside
+            // the user-selected half-open time range.
+            generator.requestedTimeToleranceBefore = .zero
+            generator.requestedTimeToleranceAfter = .zero
+        }
 
         var outputPixelSize = CGSize.zero
         do {
@@ -1019,10 +1152,11 @@ actor GIFEncoder {
                 if index % 10 == 0 {
                     try Task.checkCancellation()
                 }
-                let requestedSeconds = min(
-                    Double(index) / Double(policy.frameRate),
-                    max(0, seconds - 0.001)
-                )
+                guard let requestedSeconds = schedule.sampleTime(forFrame: index),
+                      let frameDelay = schedule.frameDelay(forFrame: index),
+                      frameDelay > 0 else {
+                    throw GIFMediaPipelineError.invalidTrimRange
+                }
                 let requestedTime = CMTime(
                     seconds: requestedSeconds,
                     preferredTimescale: 600
@@ -1038,6 +1172,12 @@ actor GIFEncoder {
                         height: CGFloat(image.height)
                     )
                 }
+                let frameProperties: [CFString: Any] = [
+                    kCGImagePropertyGIFDictionary: [
+                        kCGImagePropertyGIFDelayTime: frameDelay,
+                        kCGImagePropertyGIFUnclampedDelayTime: frameDelay
+                    ]
+                ]
                 CGImageDestinationAddImage(
                     destination,
                     image,
@@ -1058,7 +1198,7 @@ actor GIFEncoder {
         return AttemptOutput(
             url: outputURL,
             outputPixelSize: outputPixelSize,
-            duration: seconds,
+            duration: schedule.range.duration,
             bytes: bytes,
             wallTime: ProcessInfo.processInfo.systemUptime - wallStart,
             cpuTime: max(0, processCPUTime() - cpuStart)

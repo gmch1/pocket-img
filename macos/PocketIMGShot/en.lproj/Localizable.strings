@@ -34,7 +34,17 @@
 "pinned.close" = "Close Pinned Image";
 
 "gif.hud.recording" = "Recording %@ / 30s";
+"gif.hud.recording_passive" = "Recording %@ · Press %@ to stop";
 "gif.hud.stop" = "Stop";
+"gif.editor.title" = "Trim GIF";
+"gif.editor.instructions" = "Drag the timeline handles to adjust the start and end, then create the GIF.";
+"gif.editor.selection" = "%@ – %@ (%@ selected)";
+"gif.editor.play" = "Play";
+"gif.editor.pause" = "Pause";
+"gif.editor.generate" = "Create GIF";
+"gif.editor.cancel" = "Cancel";
+"gif.editor.start_handle" = "GIF start time";
+"gif.editor.end_handle" = "GIF end time";
 
 "toast.hotkey_registration_failed" = "Couldn’t register shortcut";
 "toast.settings_saved" = "Settings saved";
@@ -56,6 +66,7 @@
 "status.gif.countdown" = "GIF recording starts shortly…";
 "status.gif.recording" = "Recording GIF…";
 "status.gif.stopping" = "Stopping GIF recording…";
+"status.gif.editing" = "Adjusting GIF start and end…";
 "status.gif.encoding" = "Encoding GIF…";
 "status.gif.copied" = "GIF copied";
 
