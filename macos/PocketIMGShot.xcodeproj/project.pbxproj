@@ -24,6 +24,8 @@
 		B00000000000000000000010 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000012 /* Assets.xcassets */; };
 		B00000000000000000000011 /* Localization.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000013 /* Localization.swift */; };
 		B00000000000000000000012 /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = V00000000000000000000001 /* Localizable.strings */; };
+		B00000000000000000000013 /* GIFMediaPipeline.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000016 /* GIFMediaPipeline.swift */; };
+		B00000000000000000000014 /* GIFRecordingCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000017 /* GIFRecordingCoordinator.swift */; };
 		B00000000000000000000101 /* AnnotationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000101 /* AnnotationTests.swift */; };
 		B00000000000000000000102 /* ConfigurationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000102 /* ConfigurationTests.swift */; };
 		B00000000000000000000103 /* ScreenshotRendererTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000103 /* ScreenshotRendererTests.swift */; };
@@ -35,6 +37,7 @@
 		B00000000000000000000207 /* CoreText.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = F00000000000000000000207 /* CoreText.framework */; };
 		B00000000000000000000208 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = P00000000000000000000001 /* Sparkle */; };
 		B00000000000000000000209 /* libwebp in Frameworks */ = {isa = PBXBuildFile; productRef = P00000000000000000000002 /* libwebp */; };
+		B0000000000000000000020A /* AVFoundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = F00000000000000000000208 /* AVFoundation.framework */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -68,6 +71,8 @@
 		F00000000000000000000013 /* Localization.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Localization.swift; sourceTree = "<group>"; };
 		F00000000000000000000014 /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = en.lproj/Localizable.strings; sourceTree = "<group>"; };
 		F00000000000000000000015 /* zh-Hans */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = "zh-Hans"; path = "zh-Hans.lproj/Localizable.strings"; sourceTree = "<group>"; };
+		F00000000000000000000016 /* GIFMediaPipeline.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GIFMediaPipeline.swift; sourceTree = "<group>"; };
+		F00000000000000000000017 /* GIFRecordingCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GIFRecordingCoordinator.swift; sourceTree = "<group>"; };
 		F00000000000000000000101 /* AnnotationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnnotationTests.swift; sourceTree = "<group>"; };
 		F00000000000000000000102 /* ConfigurationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfigurationTests.swift; sourceTree = "<group>"; };
 		F00000000000000000000103 /* ScreenshotRendererTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenshotRendererTests.swift; sourceTree = "<group>"; };
@@ -77,6 +82,7 @@
 		F00000000000000000000205 /* Carbon.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Carbon.framework; path = System/Library/Frameworks/Carbon.framework; sourceTree = SDKROOT; };
 		F00000000000000000000206 /* ImageIO.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = ImageIO.framework; path = System/Library/Frameworks/ImageIO.framework; sourceTree = SDKROOT; };
 		F00000000000000000000207 /* CoreText.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreText.framework; path = System/Library/Frameworks/CoreText.framework; sourceTree = SDKROOT; };
+		F00000000000000000000208 /* AVFoundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AVFoundation.framework; path = System/Library/Frameworks/AVFoundation.framework; sourceTree = SDKROOT; };
 		F00000000000000000000301 /* PocketIMGShot.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = PocketIMGShot.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		F00000000000000000000302 /* PocketIMGShotTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = PocketIMGShotTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -94,6 +100,7 @@
 				B00000000000000000000205 /* Carbon.framework in Frameworks */,
 				B00000000000000000000206 /* ImageIO.framework in Frameworks */,
 				B00000000000000000000207 /* CoreText.framework in Frameworks */,
+				B0000000000000000000020A /* AVFoundation.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -137,6 +144,8 @@
 				F00000000000000000000011 /* PocketIMGShot.entitlements */,
 				F00000000000000000000012 /* Assets.xcassets */,
 				F00000000000000000000013 /* Localization.swift */,
+				F00000000000000000000016 /* GIFMediaPipeline.swift */,
+				F00000000000000000000017 /* GIFRecordingCoordinator.swift */,
 				V00000000000000000000001 /* Localizable.strings */,
 				F0000000000000000000000D /* Info.plist */,
 			);
@@ -162,6 +171,7 @@
 				F00000000000000000000205 /* Carbon.framework */,
 				F00000000000000000000206 /* ImageIO.framework */,
 				F00000000000000000000207 /* CoreText.framework */,
+				F00000000000000000000208 /* AVFoundation.framework */,
 			);
 			name = Frameworks;
 			sourceTree = "<group>";
@@ -299,6 +309,8 @@
 				B0000000000000000000000E /* DiagnosticLog.swift in Sources */,
 				B0000000000000000000000F /* PinnedImagePresenter.swift in Sources */,
 				B00000000000000000000011 /* Localization.swift in Sources */,
+				B00000000000000000000013 /* GIFMediaPipeline.swift in Sources */,
+				B00000000000000000000014 /* GIFRecordingCoordinator.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

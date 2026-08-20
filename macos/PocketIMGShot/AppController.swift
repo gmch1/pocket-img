@@ -3,26 +3,42 @@ import Combine
 import CoreGraphics
 import Foundation
 import Sparkle
+import UniformTypeIdentifiers
 
 @MainActor
 final class AppController: ObservableObject {
     static let shared = AppController()
 
+    private enum Activity {
+        case idle
+        case screenshot
+        case gif(GIFRecordingState)
+        case gifResult
+        case uploading
+        case uploadFailure
+    }
+
     @Published private(set) var isCapturing = false
     @Published private(set) var isUploading = false
+    @Published private(set) var isGIFRecording = false
+    @Published private(set) var canToggleGIFRecording = true
     @Published private(set) var statusMessage = ""
     @Published private(set) var canCheckForUpdates = false
 
     let settings = AppSettings()
 
-    private let hotKey = GlobalHotKey(identifier: 1)
+    private let captureHotKey = GlobalHotKey(identifier: 1)
+    private let gifHotKey = GlobalHotKey(identifier: 3)
     private let captureCoordinator = CaptureCoordinator()
+    private let gifRecordingCoordinator = GIFRecordingCoordinator()
     private let pinnedImages = PinnedImagePresenter()
     private let toast = ToastPresenter()
     private let updaterController: SPUStandardUpdaterController
     private var pendingUpload: UploadPayload?
+    private var pendingUploadExperimentSessionID: UUID?
     private var client: PocketIMGClient?
     private var clientConfiguration: ServiceConfiguration?
+    private var activity: Activity = .idle
 
     private init() {
         let shouldStartUpdater = ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil
@@ -43,26 +59,51 @@ final class AppController: ObservableObject {
     }
 
     func stop() {
-        hotKey.unregister()
+        captureHotKey.unregister()
+        gifHotKey.unregister()
         captureCoordinator.cancel(notify: false)
+        gifRecordingCoordinator.cancel(notify: false)
         settings.flushAnnotationStyle()
     }
 
     func registerHotKey() {
+        captureHotKey.unregister()
+        gifHotKey.unregister()
+
+        var registrationErrors: [String] = []
         do {
-            try hotKey.register(settings.hotKey) { [weak self] in
+            try captureHotKey.register(settings.hotKey) { [weak self] in
                 self?.startCapture()
             }
-            settings.hotKeyRegistrationError = ""
         } catch {
-            settings.hotKeyRegistrationError = localizedDescription(for: error)
+            registrationErrors.append(localizedDescription(for: error))
+        }
+
+        if settings.hotKey.keyCode == settings.gifHotKey.keyCode,
+           settings.hotKey.carbonModifiers == settings.gifHotKey.carbonModifiers {
+            registrationErrors.append(
+                L10n.text("settings.hotkey_conflict", language: settings.language)
+            )
+        } else {
+            do {
+                try gifHotKey.register(settings.gifHotKey) { [weak self] in
+                    self?.toggleGIFRecording()
+                }
+            } catch {
+                registrationErrors.append(localizedDescription(for: error))
+            }
+        }
+
+        settings.hotKeyRegistrationError = registrationErrors.joined(separator: "\n")
+        if !registrationErrors.isEmpty {
             toast.show(L10n.text("toast.hotkey_registration_failed", language: settings.language))
         }
     }
 
     func setHotKeyRecording(_ recording: Bool) {
         if recording {
-            hotKey.unregister()
+            captureHotKey.unregister()
+            gifHotKey.unregister()
         } else {
             registerHotKey()
         }
@@ -76,6 +117,10 @@ final class AppController: ObservableObject {
 
     func persistHotKey(_ value: HotKey) {
         settings.persistHotKey(value)
+    }
+
+    func persistGIFHotKey(_ value: HotKey) {
+        settings.persistGIFHotKey(value)
     }
 
     func setLanguage(_ language: AppLanguage) {
@@ -126,22 +171,10 @@ final class AppController: ObservableObject {
     }
 
     func startCapture() {
-        guard !isCapturing, !isUploading else { return }
-        guard CGPreflightScreenCaptureAccess() else {
-            let granted = CGRequestScreenCaptureAccess()
-            if !granted {
-                showScreenCapturePermissionHelp()
-                return
-            }
-            toast.show(L10n.format(
-                "toast.capture_permission_granted",
-                language: settings.language,
-                settings.hotKey.localizedDisplayName(language: settings.language)
-            ))
-            return
-        }
+        guard case .idle = activity else { return }
+        guard ensureScreenCaptureAccess(for: settings.hotKey) else { return }
 
-        isCapturing = true
+        transition(to: .screenshot)
         statusMessage = ""
         captureCoordinator.begin(
             annotationStyle: settings.annotationStyle,
@@ -152,23 +185,24 @@ final class AppController: ObservableObject {
             },
             onFinish: { [weak self] payload, action in
                 guard let self else { return }
-                self.isCapturing = false
                 switch action {
                 case .pin:
+                    self.transition(to: .idle)
                     self.pin(payload)
                 case .copy:
+                    self.transition(to: .idle)
                     self.copy(payload)
                 case .upload:
                     self.upload(payload)
                 }
             },
             onCancel: { [weak self] in
-                self?.isCapturing = false
+                self?.transition(to: .idle)
                 self?.statusMessage = ""
             },
             onError: { [weak self] error in
                 guard let self else { return }
-                self.isCapturing = false
+                self.transition(to: .idle)
                 self.statusMessage = L10n.text("status.capture_failed", language: self.settings.language)
                 self.showError(
                     title: L10n.text("alert.capture_failed", language: self.settings.language),
@@ -178,10 +212,178 @@ final class AppController: ObservableObject {
         )
     }
 
-    private func upload(_ payload: UploadPayload) {
+    func toggleGIFRecording() {
+        switch activity {
+        case .idle:
+            startGIFRecording()
+        case .gif(.recording):
+            gifRecordingCoordinator.stopRecording()
+        default:
+            break
+        }
+    }
+
+    private func startGIFRecording() {
+        guard ensureScreenCaptureAccess(for: settings.gifHotKey) else { return }
+
+        transition(to: .gif(.preparing))
+        statusMessage = L10n.text("status.gif.selecting", language: settings.language)
+        gifRecordingCoordinator.begin(
+            language: settings.language,
+            onStateChange: { [weak self] state in
+                self?.handleGIFStateChange(state)
+            },
+            onFinish: { [weak self] result in
+                guard let self else { return }
+                self.transition(to: .gifResult)
+                self.presentGIFResult(result)
+            },
+            onCancel: { [weak self] in
+                self?.transition(to: .idle)
+                self?.statusMessage = ""
+            },
+            onError: { [weak self] error in
+                guard let self else { return }
+                self.transition(to: .idle)
+                self.statusMessage = ""
+                self.showError(
+                    title: L10n.text("alert.gif_failed", language: self.settings.language),
+                    message: self.messageWithGIFExperimentLog(
+                        self.localizedDescription(for: error)
+                    )
+                )
+            }
+        )
+    }
+
+    private func handleGIFStateChange(_ state: GIFRecordingState) {
+        guard case .gif = activity else { return }
+        switch state {
+        case .idle:
+            // The matching finish, cancel, or error callback owns the terminal
+            // transition so a new capture cannot start between callbacks.
+            break
+        case .preparing, .selecting:
+            transition(to: .gif(state))
+            statusMessage = L10n.text("status.gif.selecting", language: settings.language)
+        case .countdown:
+            transition(to: .gif(state))
+            statusMessage = L10n.text("status.gif.countdown", language: settings.language)
+        case .recording:
+            transition(to: .gif(state))
+            statusMessage = L10n.text("status.gif.recording", language: settings.language)
+        case .stopping:
+            transition(to: .gif(state))
+            statusMessage = L10n.text("status.gif.stopping", language: settings.language)
+        case .encoding:
+            transition(to: .gif(state))
+            statusMessage = L10n.text("status.gif.encoding", language: settings.language)
+        }
+    }
+
+    private func presentGIFResult(_ result: GIFRecordingResult) {
+        let duration = String(format: "%.1f s", result.duration)
+        let bytes = ByteCountFormatter.string(
+            fromByteCount: result.metrics.gifBytes,
+            countStyle: .file
+        )
+        let canUpload = settings.hasUploadConfiguration
+            && !result.metrics.exceedsMaximumBytes
+
+        let alert = NSAlert()
+        alert.alertStyle = .informational
+        alert.messageText = L10n.text("alert.gif_ready", language: settings.language)
+        alert.informativeText = L10n.format(
+            result.metrics.exceedsMaximumBytes
+                ? "alert.gif_ready_body_large"
+                : "alert.gif_ready_body",
+            language: settings.language,
+            duration,
+            bytes
+        )
+        alert.addButton(withTitle: L10n.text("button.copy_gif", language: settings.language))
+        if canUpload {
+            alert.addButton(withTitle: L10n.text("button.upload_gif", language: settings.language))
+        }
+        alert.addButton(withTitle: L10n.text("button.cancel", language: settings.language))
+
+        NSApplication.shared.activate(ignoringOtherApps: true)
+        let response = alert.runModal()
+        if response == .alertFirstButtonReturn {
+            transition(to: .idle)
+            copyGIF(result)
+        } else if canUpload, response == .alertSecondButtonReturn {
+            try? FileManager.default.removeItem(at: result.fileURL)
+            upload(result.payload, experimentSessionID: result.sessionID)
+        } else {
+            try? FileManager.default.removeItem(at: result.fileURL)
+            transition(to: .idle)
+            statusMessage = ""
+        }
+    }
+
+    private func copyGIF(_ result: GIFRecordingResult) {
+        let item = NSPasteboardItem()
+        let gifType = NSPasteboard.PasteboardType(UTType.gif.identifier)
+        guard item.setData(result.data, forType: gifType) else {
+            GIFExperimentLogger.recordOutcome(
+                sessionID: result.sessionID,
+                stage: .clipboard,
+                event: "clipboard_failed"
+            )
+            try? FileManager.default.removeItem(at: result.fileURL)
+            statusMessage = ""
+            showError(
+                title: L10n.text("alert.gif_failed", language: settings.language),
+                message: L10n.text("error.clipboard_write_failed", language: settings.language)
+            )
+            return
+        }
+        item.setString(result.fileURL.absoluteString, forType: .fileURL)
+
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        guard pasteboard.writeObjects([item]) else {
+            GIFExperimentLogger.recordOutcome(
+                sessionID: result.sessionID,
+                stage: .clipboard,
+                event: "clipboard_failed"
+            )
+            try? FileManager.default.removeItem(at: result.fileURL)
+            statusMessage = ""
+            showError(
+                title: L10n.text("alert.gif_failed", language: settings.language),
+                message: L10n.text("error.clipboard_write_failed", language: settings.language)
+            )
+            return
+        }
+
+        GIFExperimentLogger.recordOutcome(
+            sessionID: result.sessionID,
+            stage: .clipboard,
+            event: "clipboard_succeeded"
+        )
+        let copiedStatus = L10n.text("status.gif.copied", language: settings.language)
+        statusMessage = copiedStatus
+        toast.show(L10n.text("toast.gif_copied", language: settings.language))
+        clearStatusLater(expected: copiedStatus)
+    }
+
+    private func upload(
+        _ payload: UploadPayload,
+        experimentSessionID: UUID? = nil
+    ) {
         DiagnosticLog.record("upload started bytes=\(payload.data.count) type=\(payload.contentType)")
         pendingUpload = payload
-        isUploading = true
+        pendingUploadExperimentSessionID = experimentSessionID
+        if let experimentSessionID {
+            GIFExperimentLogger.recordOutcome(
+                sessionID: experimentSessionID,
+                stage: .upload,
+                event: "upload_started"
+            )
+        }
+        transition(to: .uploading)
         statusMessage = L10n.text("status.uploading", language: settings.language)
         toast.show(L10n.text("toast.uploading", language: settings.language), duration: 60)
 
@@ -199,8 +401,16 @@ final class AppController: ObservableObject {
                 let url = try await client.upload(payload)
                 NSPasteboard.general.clearContents()
                 NSPasteboard.general.setString(url.absoluteString, forType: .string)
+                if let experimentSessionID {
+                    GIFExperimentLogger.recordOutcome(
+                        sessionID: experimentSessionID,
+                        stage: .upload,
+                        event: "upload_succeeded"
+                    )
+                }
                 pendingUpload = nil
-                isUploading = false
+                pendingUploadExperimentSessionID = nil
+                transition(to: .idle)
                 let completedStatus = L10n.text("status.link_copied", language: settings.language)
                 statusMessage = completedStatus
                 DiagnosticLog.record("upload finished")
@@ -208,7 +418,14 @@ final class AppController: ObservableObject {
                 clearStatusLater(expected: completedStatus)
             } catch {
                 DiagnosticLog.record(error, phase: "upload")
-                isUploading = false
+                if let experimentSessionID {
+                    GIFExperimentLogger.recordError(
+                        sessionID: experimentSessionID,
+                        stage: .upload,
+                        error: error
+                    )
+                }
+                transition(to: .uploadFailure)
                 statusMessage = L10n.text("status.upload_failed", language: settings.language)
                 toast.dismiss()
                 offerUploadRetry(error: error)
@@ -258,15 +475,33 @@ final class AppController: ObservableObject {
     private func offerUploadRetry(error: Error) {
         let alert = NSAlert()
         alert.alertStyle = .warning
-        alert.messageText = L10n.text("alert.upload_failed", language: settings.language)
-        alert.informativeText = messageWithDiagnosticLog(localizedDescription(for: error))
+        let isGIFUpload = pendingUpload?.contentType == "image/gif"
+        let titleKey = isGIFUpload
+            ? "alert.gif_upload_failed"
+            : "alert.upload_failed"
+        alert.messageText = L10n.text(titleKey, language: settings.language)
+        alert.informativeText = isGIFUpload
+            ? messageWithGIFExperimentLog(localizedDescription(for: error))
+            : messageWithDiagnosticLog(localizedDescription(for: error))
         alert.addButton(withTitle: L10n.text("button.retry", language: settings.language))
         alert.addButton(withTitle: L10n.text("button.cancel", language: settings.language))
         NSApplication.shared.activate(ignoringOtherApps: true)
         if alert.runModal() == .alertFirstButtonReturn, let pendingUpload {
-            upload(pendingUpload)
+            upload(
+                pendingUpload,
+                experimentSessionID: pendingUploadExperimentSessionID
+            )
         } else {
+            if let pendingUploadExperimentSessionID {
+                GIFExperimentLogger.recordOutcome(
+                    sessionID: pendingUploadExperimentSessionID,
+                    stage: .upload,
+                    event: "upload_cancelled"
+                )
+            }
             pendingUpload = nil
+            pendingUploadExperimentSessionID = nil
+            transition(to: .idle)
             statusMessage = ""
         }
     }
@@ -278,6 +513,48 @@ final class AppController: ObservableObject {
                 statusMessage = ""
             }
         }
+    }
+
+    private func transition(to newActivity: Activity) {
+        activity = newActivity
+        switch newActivity {
+        case .idle:
+            isCapturing = false
+            isUploading = false
+            isGIFRecording = false
+            canToggleGIFRecording = true
+        case .screenshot, .gifResult:
+            isCapturing = true
+            isUploading = false
+            isGIFRecording = false
+            canToggleGIFRecording = false
+        case .gif(let state):
+            isCapturing = true
+            isUploading = false
+            isGIFRecording = state == .recording || state == .stopping
+            canToggleGIFRecording = state == .recording
+        case .uploading, .uploadFailure:
+            isCapturing = false
+            isUploading = true
+            isGIFRecording = false
+            canToggleGIFRecording = false
+        }
+    }
+
+    private func ensureScreenCaptureAccess(for hotKey: HotKey) -> Bool {
+        guard !CGPreflightScreenCaptureAccess() else { return true }
+
+        let granted = CGRequestScreenCaptureAccess()
+        if !granted {
+            showScreenCapturePermissionHelp()
+            return false
+        }
+        toast.show(L10n.format(
+            "toast.capture_permission_granted",
+            language: settings.language,
+            hotKey.localizedDisplayName(language: settings.language)
+        ))
+        return false
     }
 
     private func showScreenCapturePermissionHelp() {
@@ -319,6 +596,14 @@ final class AppController: ObservableObject {
             "diagnostic_log",
             language: settings.language,
             "~/Library/Logs/PocketIMGShot.log"
+        )
+    }
+
+    private func messageWithGIFExperimentLog(_ message: String) -> String {
+        messageWithDiagnosticLog(message) + "\n" + L10n.format(
+            "gif_experiment_log",
+            language: settings.language,
+            "~/Library/Logs/PocketIMGShot-GIF-Experiment.jsonl"
         )
     }
 }

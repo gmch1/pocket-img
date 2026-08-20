@@ -50,7 +50,7 @@ struct SettingsView: View {
 
             Section(L10n.text("settings.capture.section", language: settings.language)) {
                 HStack {
-                    Text(L10n.text("settings.global_hotkey", language: settings.language))
+                    Text(L10n.text("settings.screenshot_hotkey", language: settings.language))
                     SettingsHelpButton(
                         text: L10n.text("settings.hotkey.help", language: settings.language)
                     )
@@ -59,6 +59,20 @@ struct SettingsView: View {
                         hotKey: $settings.hotKey,
                         language: settings.language,
                         onChange: controller.persistHotKey,
+                        onRecordingChanged: controller.setHotKeyRecording
+                    )
+                        .frame(width: 170, height: 28)
+                }
+                HStack {
+                    Text(L10n.text("settings.gif_hotkey", language: settings.language))
+                    SettingsHelpButton(
+                        text: L10n.text("settings.hotkey.help", language: settings.language)
+                    )
+                    Spacer()
+                    HotKeyRecorder(
+                        hotKey: $settings.gifHotKey,
+                        language: settings.language,
+                        onChange: controller.persistGIFHotKey,
                         onRecordingChanged: controller.setHotKeyRecording
                     )
                         .frame(width: 170, height: 28)
@@ -79,7 +93,7 @@ struct SettingsView: View {
             }
         }
         .formStyle(.grouped)
-        .frame(width: 500, height: 430)
+        .frame(width: 500, height: 470)
         .padding()
     }
 }

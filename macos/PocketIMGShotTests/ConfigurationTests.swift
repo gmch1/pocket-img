@@ -97,6 +97,12 @@ final class ConfigurationTests: XCTestCase {
         XCTAssertEqual(HotKey.default.modifiers, 0)
     }
 
+    func testDefaultGIFHotKeyIsF2() {
+        XCTAssertEqual(HotKey.gifDefault.keyCode, UInt32(kVK_F2))
+        XCTAssertEqual(HotKey.gifDefault.displayName, "F2")
+        XCTAssertEqual(HotKey.gifDefault.modifiers, 0)
+    }
+
     func testGlobalHotKeysOnlyHandleTheirOwnCarbonIdentifier() {
         let captureHotKey = GlobalHotKey(identifier: 1)
         let escapeHotKey = GlobalHotKey(identifier: 2)
@@ -143,6 +149,7 @@ final class ConfigurationTests: XCTestCase {
         settings.serverAddress = "https://img.example.com/"
         settings.token = "test-token"
         settings.hotKey = HotKey(keyCode: 3, modifiers: 256, keyLabel: "F")
+        settings.gifHotKey = HotKey(keyCode: 4, modifiers: 512, keyLabel: "H")
         settings.persistLanguage(.english)
         settings.updateAnnotationStyle(AnnotationStylePreferences(
             rectangleLineWidth: 5.5,
@@ -156,6 +163,7 @@ final class ConfigurationTests: XCTestCase {
         XCTAssertEqual(restored.serverAddress, "https://img.example.com")
         XCTAssertEqual(restored.token, "test-token")
         XCTAssertEqual(restored.hotKey, settings.hotKey)
+        XCTAssertEqual(restored.gifHotKey, settings.gifHotKey)
         XCTAssertEqual(restored.language, .english)
         XCTAssertEqual(restored.annotationStyle, settings.annotationStyle)
         let attributes = try FileManager.default.attributesOfItem(atPath: settingsURL.path)
@@ -186,11 +194,13 @@ final class ConfigurationTests: XCTestCase {
         XCTAssertEqual(migrated.serverAddress, "https://img.example.com")
         XCTAssertEqual(migrated.token, "legacy-token")
         XCTAssertEqual(migrated.hotKey, .default)
+        XCTAssertEqual(migrated.gifHotKey, .gifDefault)
         let storedObject = try XCTUnwrap(
             JSONSerialization.jsonObject(with: Data(contentsOf: settingsURL)) as? [String: Any]
         )
-        XCTAssertEqual(storedObject["schemaVersion"] as? Int, 5)
+        XCTAssertEqual(storedObject["schemaVersion"] as? Int, 6)
         XCTAssertEqual(storedObject["hotKeyLabel"] as? String, "F1")
+        XCTAssertEqual(storedObject["gifHotKeyLabel"] as? String, "F2")
     }
 
     @MainActor
@@ -254,6 +264,56 @@ final class ConfigurationTests: XCTestCase {
 
         let restored = AppSettings(settingsURL: settingsURL)
         XCTAssertEqual(restored.hotKey.displayName, "F2")
+        XCTAssertEqual(restored.gifHotKey, .gifDefault)
+    }
+
+    @MainActor
+    func testGIFHotKeyPersistsWithoutOverwritingScreenshotHotKey() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("PocketIMGShotGIFHotKeyTests-\(UUID().uuidString)", isDirectory: true)
+        let settingsURL = directory.appendingPathComponent("settings.json")
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let screenshotHotKey = HotKey(keyCode: 3, modifiers: 256, keyLabel: "F")
+        let gifHotKey = HotKey(keyCode: 4, modifiers: 512, keyLabel: "H")
+        let settings = AppSettings(settingsURL: settingsURL)
+
+        settings.persistHotKey(screenshotHotKey)
+        settings.persistGIFHotKey(gifHotKey)
+
+        let restored = AppSettings(settingsURL: settingsURL)
+        XCTAssertEqual(restored.hotKey, screenshotHotKey)
+        XCTAssertEqual(restored.gifHotKey, gifHotKey)
+    }
+
+    @MainActor
+    func testAddingGIFShortcutDoesNotRewriteAnExistingScreenshotF2() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("PocketIMGShotGIFMigrationTests-\(UUID().uuidString)", isDirectory: true)
+        let settingsURL = directory.appendingPathComponent("settings.json")
+        defer { try? FileManager.default.removeItem(at: directory) }
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let previousSchemaJSON = """
+        {
+          "schemaVersion": 5,
+          "serverAddress": "https://img.example.com",
+          "token": "token",
+          "hotKeyCode": \(UInt32(kVK_F2)),
+          "hotKeyModifiers": 0,
+          "hotKeyLabel": "F2"
+        }
+        """
+        try XCTUnwrap(previousSchemaJSON.data(using: .utf8)).write(to: settingsURL)
+
+        let migrated = AppSettings(settingsURL: settingsURL)
+
+        XCTAssertEqual(migrated.hotKey, .gifDefault)
+        XCTAssertEqual(migrated.gifHotKey, .gifDefault)
+        let storedObject = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: Data(contentsOf: settingsURL)) as? [String: Any]
+        )
+        XCTAssertEqual(storedObject["schemaVersion"] as? Int, 6)
+        XCTAssertEqual(storedObject["hotKeyLabel"] as? String, "F2")
+        XCTAssertEqual(storedObject["gifHotKeyLabel"] as? String, "F2")
     }
 
     @MainActor
@@ -288,7 +348,7 @@ final class ConfigurationTests: XCTestCase {
         let storedObject = try XCTUnwrap(
             JSONSerialization.jsonObject(with: Data(contentsOf: settingsURL)) as? [String: Any]
         )
-        XCTAssertEqual(storedObject["schemaVersion"] as? Int, 5)
+        XCTAssertEqual(storedObject["schemaVersion"] as? Int, 6)
     }
 
     @MainActor
@@ -302,6 +362,14 @@ final class ConfigurationTests: XCTestCase {
         XCTAssertEqual(
             L10n.text("settings.hotkey.help", language: .english),
             "Click and press a new shortcut. Some Macs also require Fn."
+        )
+        XCTAssertEqual(
+            L10n.text("settings.screenshot_hotkey", language: .simplifiedChinese),
+            "截图快捷键"
+        )
+        XCTAssertEqual(
+            L10n.text("settings.gif_hotkey", language: .english),
+            "Record GIF Shortcut"
         )
         let space = HotKey(keyCode: UInt32(kVK_Space), modifiers: 0, keyLabel: "Space")
         XCTAssertEqual(space.localizedDisplayName(language: .simplifiedChinese), "空格")
