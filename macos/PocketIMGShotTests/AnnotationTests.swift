@@ -2,6 +2,52 @@ import XCTest
 @testable import PocketIMGShot
 
 final class AnnotationTests: XCTestCase {
+    func testCursorRectsAreClippedAndInvalidRectsAreRejected() {
+        let bounds = CGRect(x: 0, y: 0, width: 100, height: 80)
+
+        XCTAssertEqual(
+            CaptureGeometry.validCursorRect(
+                CGRect(x: 90, y: 70, width: 20, height: 20),
+                within: bounds
+            ),
+            CGRect(x: 90, y: 70, width: 10, height: 10)
+        )
+        XCTAssertEqual(
+            CaptureGeometry.validCursorRect(
+                CGRect(x: 40, y: 40, width: -10, height: -20),
+                within: bounds
+            ),
+            CGRect(x: 30, y: 20, width: 10, height: 20)
+        )
+        XCTAssertNil(CaptureGeometry.validCursorRect(.null, within: bounds))
+        XCTAssertNil(CaptureGeometry.validCursorRect(.zero, within: bounds))
+        XCTAssertNil(CaptureGeometry.validCursorRect(
+            CGRect(x: 110, y: 10, width: 5, height: 5),
+            within: bounds
+        ))
+        XCTAssertNil(CaptureGeometry.validCursorRect(
+            CGRect(x: .nan, y: 0, width: 5, height: 5),
+            within: bounds
+        ))
+    }
+
+    func testDisjointHoverAndSelectionCannotBecomeACursorRect() {
+        let selection = CGRect(x: 100, y: 100, width: 200, height: 120)
+        let pointerOutsideSelection = CGPoint(x: 20, y: 20)
+        let hoverCursorRect = CGRect(
+            x: pointerOutsideSelection.x - 3,
+            y: pointerOutsideSelection.y - 3,
+            width: 6,
+            height: 6
+        ).intersection(selection)
+
+        XCTAssertTrue(hoverCursorRect.isNull)
+        XCTAssertNil(CaptureGeometry.validCursorRect(
+            hoverCursorRect,
+            within: CGRect(x: 0, y: 0, width: 800, height: 600)
+        ))
+    }
+
     func testRectangleNormalizesDragDirection() {
         let value = Annotation(
             tool: .rectangle,

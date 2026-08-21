@@ -31,6 +31,7 @@
 		B00000000000000000000102 /* ConfigurationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000102 /* ConfigurationTests.swift */; };
 		B00000000000000000000103 /* ScreenshotRendererTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000103 /* ScreenshotRendererTests.swift */; };
 		B00000000000000000000104 /* GIFMediaPipelineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000104 /* GIFMediaPipelineTests.swift */; };
+		B00000000000000000000105 /* PocketIMGClientTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000105 /* PocketIMGClientTests.swift */; };
 		B00000000000000000000201 /* AppKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = F00000000000000000000201 /* AppKit.framework */; };
 		B00000000000000000000202 /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = F00000000000000000000202 /* SwiftUI.framework */; };
 		B00000000000000000000203 /* ScreenCaptureKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = F00000000000000000000203 /* ScreenCaptureKit.framework */; };
@@ -80,6 +81,7 @@
 		F00000000000000000000102 /* ConfigurationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfigurationTests.swift; sourceTree = "<group>"; };
 		F00000000000000000000103 /* ScreenshotRendererTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenshotRendererTests.swift; sourceTree = "<group>"; };
 		F00000000000000000000104 /* GIFMediaPipelineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GIFMediaPipelineTests.swift; sourceTree = "<group>"; };
+		F00000000000000000000105 /* PocketIMGClientTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PocketIMGClientTests.swift; sourceTree = "<group>"; };
 		F00000000000000000000201 /* AppKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AppKit.framework; path = System/Library/Frameworks/AppKit.framework; sourceTree = SDKROOT; };
 		F00000000000000000000202 /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
 		F00000000000000000000203 /* ScreenCaptureKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = ScreenCaptureKit.framework; path = System/Library/Frameworks/ScreenCaptureKit.framework; sourceTree = SDKROOT; };
@@ -164,6 +166,7 @@
 				F00000000000000000000102 /* ConfigurationTests.swift */,
 				F00000000000000000000103 /* ScreenshotRendererTests.swift */,
 				F00000000000000000000104 /* GIFMediaPipelineTests.swift */,
+				F00000000000000000000105 /* PocketIMGClientTests.swift */,
 			);
 			path = PocketIMGShotTests;
 			sourceTree = "<group>";
@@ -329,6 +332,7 @@
 				B00000000000000000000102 /* ConfigurationTests.swift in Sources */,
 				B00000000000000000000103 /* ScreenshotRendererTests.swift in Sources */,
 				B00000000000000000000104 /* GIFMediaPipelineTests.swift in Sources */,
+				B00000000000000000000105 /* PocketIMGClientTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

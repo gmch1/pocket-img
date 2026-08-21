@@ -225,6 +225,32 @@ enum CaptureGeometry {
         let captureFrame: CGRect
     }
 
+    static func validCursorRect(_ candidate: CGRect, within viewBounds: CGRect) -> CGRect? {
+        let values = [
+            candidate.origin.x,
+            candidate.origin.y,
+            candidate.size.width,
+            candidate.size.height,
+            viewBounds.origin.x,
+            viewBounds.origin.y,
+            viewBounds.size.width,
+            viewBounds.size.height,
+        ]
+        guard values.allSatisfy({ $0.isFinite }) else { return nil }
+
+        let normalizedBounds = viewBounds.standardized
+        let normalizedCandidate = candidate.standardized
+        guard normalizedBounds.width > 0,
+              normalizedBounds.height > 0,
+              normalizedCandidate.width > 0,
+              normalizedCandidate.height > 0 else {
+            return nil
+        }
+        let clipped = normalizedCandidate.intersection(normalizedBounds)
+        guard !clipped.isNull, !clipped.isEmpty else { return nil }
+        return clipped
+    }
+
     static func recordingHUDLayout(
         interactiveSize: CGSize,
         passiveSize: CGSize,

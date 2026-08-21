@@ -468,7 +468,7 @@ final class CapturePreparationView: NSView {
     }
 
     override func resetCursorRects() {
-        addCursorRect(bounds, cursor: .crosshair)
+        addValidatedCursorRect(bounds, cursor: .crosshair)
     }
 
     override func mouseDown(with event: NSEvent) {}

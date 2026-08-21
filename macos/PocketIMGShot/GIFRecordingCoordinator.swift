@@ -1103,20 +1103,20 @@ final class GIFRegionSelectionView: NSView {
     override func resetCursorRects() {
         switch mode {
         case .selecting:
-            addCursorRect(bounds, cursor: .crosshair)
+            addValidatedCursorRect(bounds, cursor: .crosshair)
         case .editing:
-            addCursorRect(bounds, cursor: .arrow)
+            addValidatedCursorRect(bounds, cursor: .arrow)
             guard let selection else { return }
             if let selectionResizeHandle {
-                addCursorRect(bounds, cursor: cursor(for: selectionResizeHandle))
+                addValidatedCursorRect(bounds, cursor: cursor(for: selectionResizeHandle))
                 return
             }
-            addCursorRect(
+            addValidatedCursorRect(
                 selection,
                 cursor: selectionAtDragStart == nil ? .openHand : .closedHand
             )
             for (handle, frame) in selectionResizeHandleFrames(for: selection) {
-                addCursorRect(frame, cursor: cursor(for: handle))
+                addValidatedCursorRect(frame, cursor: cursor(for: handle))
             }
         }
     }
@@ -1584,7 +1584,7 @@ private final class GIFRecordingPreparationView: NSView {
     }
 
     override func resetCursorRects() {
-        addCursorRect(bounds, cursor: .crosshair)
+        addValidatedCursorRect(bounds, cursor: .crosshair)
     }
 
     override func mouseDown(with event: NSEvent) {}

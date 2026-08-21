@@ -1,6 +1,10 @@
 import Foundation
 
 actor PocketIMGClient {
+    static let availabilityTimeout: TimeInterval = 5
+    static let requestInactivityTimeout: TimeInterval = 15
+    static let resourceTimeout: TimeInterval = 300
+
     private struct UploadResponse: Decodable {
         struct Image: Decodable {
             let url: String
@@ -17,17 +21,25 @@ actor PocketIMGClient {
     private let session: URLSession
     private var authenticated = false
 
-    init(configuration: ServiceConfiguration) {
+    init(
+        configuration: ServiceConfiguration,
+        protocolClasses: [AnyClass]? = nil
+    ) {
         self.configuration = configuration
         let sessionConfiguration = URLSessionConfiguration.ephemeral
         sessionConfiguration.httpCookieAcceptPolicy = .always
         sessionConfiguration.httpShouldSetCookies = true
-        sessionConfiguration.timeoutIntervalForRequest = 180
-        sessionConfiguration.timeoutIntervalForResource = 300
+        sessionConfiguration.waitsForConnectivity = false
+        sessionConfiguration.timeoutIntervalForRequest = Self.requestInactivityTimeout
+        sessionConfiguration.timeoutIntervalForResource = Self.resourceTimeout
+        if let protocolClasses {
+            sessionConfiguration.protocolClasses = protocolClasses
+        }
         session = URLSession(configuration: sessionConfiguration)
     }
 
     func upload(_ payload: UploadPayload) async throws -> URL {
+        try await verifyServerAvailability()
         if !authenticated {
             try await authenticate()
         }
@@ -49,8 +61,28 @@ actor PocketIMGClient {
         return result
     }
 
+    private func verifyServerAvailability() async throws {
+        var request = URLRequest(
+            url: try endpoint("/healthz"),
+            cachePolicy: .reloadIgnoringLocalAndRemoteCacheData,
+            timeoutInterval: Self.availabilityTimeout
+        )
+        request.httpMethod = "GET"
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        let (data, rawResponse) = try await session.data(for: request)
+        guard let response = rawResponse as? HTTPURLResponse else {
+            throw PocketIMGClientError.invalidResponse
+        }
+        guard (200..<300).contains(response.statusCode) else {
+            throw apiError(status: response.statusCode, data: data)
+        }
+    }
+
     private func authenticate() async throws {
-        var request = URLRequest(url: try endpoint("/api/auth/session"))
+        var request = URLRequest(
+            url: try endpoint("/api/auth/session"),
+            timeoutInterval: Self.requestInactivityTimeout
+        )
         request.httpMethod = "POST"
         request.setValue("Bearer \(configuration.token)", forHTTPHeaderField: "Authorization")
         let (data, rawResponse) = try await session.data(for: request)
@@ -65,7 +97,10 @@ actor PocketIMGClient {
 
     private func performUpload(_ payload: UploadPayload) async throws -> HTTPResult {
         let boundary = "PocketIMGShot-\(UUID().uuidString)"
-        var request = URLRequest(url: try endpoint("/api/images"))
+        var request = URLRequest(
+            url: try endpoint("/api/images"),
+            timeoutInterval: Self.requestInactivityTimeout
+        )
         request.httpMethod = "POST"
         request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
