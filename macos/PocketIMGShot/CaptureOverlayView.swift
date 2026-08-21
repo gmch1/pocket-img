@@ -1,6 +1,15 @@
 import AppKit
 import CoreGraphics
 
+extension NSView {
+    func addValidatedCursorRect(_ candidate: CGRect, cursor: NSCursor) {
+        guard let cursorRect = CaptureGeometry.validCursorRect(candidate, within: bounds) else {
+            return
+        }
+        addCursorRect(cursorRect, cursor: cursor)
+    }
+}
+
 private extension AnnotationColor {
     var nsColor: NSColor {
         let components = components
@@ -89,7 +98,7 @@ final class AnnotationTextDragView: NSView {
     }
 
     override func resetCursorRects() {
-        addCursorRect(bounds, cursor: isDragging ? .closedHand : .openHand)
+        addValidatedCursorRect(bounds, cursor: isDragging ? .closedHand : .openHand)
     }
 
     override func mouseDown(with event: NSEvent) {
@@ -261,18 +270,18 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
 
     override func resetCursorRects() {
         if mode == .selecting {
-            addCursorRect(bounds, cursor: .crosshair)
+            addValidatedCursorRect(bounds, cursor: .crosshair)
             return
         }
-        addCursorRect(bounds, cursor: .arrow)
+        addValidatedCursorRect(bounds, cursor: .arrow)
         if let selection {
             if let selectionResizeHandle {
-                addCursorRect(bounds, cursor: cursor(for: selectionResizeHandle))
+                addValidatedCursorRect(bounds, cursor: cursor(for: selectionResizeHandle))
                 return
             }
             let isMoving = selectionAtDragStart != nil
                 || (annotationAtDragStart != nil && annotationResizeHandle == nil)
-            addCursorRect(
+            addValidatedCursorRect(
                 selection,
                 cursor: isMoving
                     ? .closedHand
@@ -288,7 +297,7 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
                     width: 6,
                     height: 6
                 ).intersection(selection)
-                addCursorRect(
+                addValidatedCursorRect(
                     hoverCursorRect,
                     cursor: annotationAtDragStart == nil ? .openHand : .closedHand
                 )
@@ -296,14 +305,14 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
             let controlIndex = hoveredAnnotationHit?.index ?? selectedAnnotationIndex
             if let controlIndex, annotations.indices.contains(controlIndex) {
                 for (handle, frame) in annotationResizeHandles(for: annotations[controlIndex]) {
-                    addCursorRect(
+                    addValidatedCursorRect(
                         frame.insetBy(dx: -3, dy: -3),
                         cursor: cursor(for: handle)
                     )
                 }
             }
             for (handle, frame) in selectionResizeHandleFrames(for: selection) {
-                addCursorRect(frame, cursor: cursor(for: handle))
+                addValidatedCursorRect(frame, cursor: cursor(for: handle))
             }
         }
     }
