@@ -26,7 +26,7 @@ final class AnnotationTests: XCTestCase {
             within: bounds
         ))
         XCTAssertNil(CaptureGeometry.validCursorRect(
-            CGRect(x: .nan, y: 0, width: 5, height: 5),
+            CGRect(x: CGFloat.nan, y: 0, width: 5, height: 5),
             within: bounds
         ))
     }
