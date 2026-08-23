@@ -53,9 +53,10 @@ Linux x86_64 后端、Android ARM64 管理 App、macOS Apple Silicon 客户端�
 
 - 一个非 root 容器同时提供内嵌网页、Go API、SQLite 和媒体文件服务，不需要外置数据库或第二个业务容器。
 - 镜像全部可变数据集中写入 `/data`，支持 amd64 与 arm64。
-- fnOS 网页入口通过统一网关复用 NAS 登录态，并按飞牛用户自动隔离图库空间。
+- fnOS 网页入口通过 SSO 复用 NAS 登录态，并把每个飞牛用户稳定映射到自己的 PocketIMG 图库空间。
 - 飞牛身份 Header 只在 Unix Socket 网关 listener 上可信；对外 TCP listener 不接受客户端伪造身份。
-- fnOS 引导页给出 Mac 客户端服务地址，可生成、轮换和撤销专属 Token，并从 NAS 本地下载同版本 PocketIMG Shot。
+- fnOS 引导页给出 Mac 客户端服务地址，可为当前飞牛用户生成、轮换和撤销只显示一次的 PocketIMG Mac 连接凭证，并从 NAS 本地下载同版本 PocketIMG Shot。
+- Mac 连接凭证进入当前飞牛用户的同一图库，但不继承管理员权限，也不会暴露飞牛密码、Cookie 或管理凭据。
 - 公开图片和视频仍走无需 NAS Cookie 的服务端口，复制到聊天软件后可以直接加载。
 
 ### Android 管理 App

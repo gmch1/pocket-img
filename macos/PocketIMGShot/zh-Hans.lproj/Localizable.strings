@@ -14,6 +14,7 @@
 "settings.service.section" = "PocketIMG 服务";
 "settings.server_address" = "服务器地址";
 "settings.server_address.help" = "局域网地址支持 HTTP。";
+"settings.connection_credential" = "连接凭证（Token）";
 "settings.capture.section" = "捕获快捷键";
 "settings.global_hotkey" = "全局快捷键";
 "settings.screenshot_hotkey" = "截图快捷键";
@@ -95,7 +96,7 @@
 "error.hotkey_registration" = "快捷键已被其他应用占用，或系统拒绝注册（%d）。";
 "error.invalid_server_address" = "服务器地址必须是完整的 HTTP 或 HTTPS 地址。";
 "error.server_address_has_path" = "服务器地址不能包含路径，请只填写协议、域名和端口。";
-"error.missing_token" = "Token 不能为空。";
+"error.missing_token" = "连接凭证（Token）不能为空。";
 "error.capture.no_displays" = "没有找到可截取的显示器。";
 "error.capture.encoding_failed" = "无法生成截图文件。";
 "error.clipboard_write_failed" = "系统剪贴板写入失败。";

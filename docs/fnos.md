@@ -25,7 +25,7 @@ fnOS 桌面或应用中心
 
 Mac 客户端、公开图片和视频
   └── http://<NAS 地址>:8080 或管理员配置的外部 HTTPS 地址
-      └── PocketIMG 设备 Token / Session
+      └── PocketIMG Mac 客户端连接凭证 / Session
           ├── 上传 API
           └── /i/ 与 /t/ 公共媒体
 ```
@@ -40,7 +40,11 @@ X-Trim-Username
 
 后端应使用 `X-Trim-Userid` 作为稳定用户标识，用户名只用于显示，管理员操作每次根据 `X-Trim-Isadmin` 检查。Header 只有在 `app.sock` listener 上可信；TCP listener 必须忽略客户端自行发送的所有 `X-Trim-*` Header，避免局域网请求伪造管理员。
 
-fnOS 当前没有供原生客户端使用的用户名/密码登录接口。因此 PocketIMG Shot 仍使用由当前 fnOS 用户在引导页生成的可撤销设备 Token。`TRIM_API_TOKEN` 是应用调用 fnOS 文件或平台开放 API 的凭据，不是用户登录 Token，本方案不使用也不向容器传递它。
+fnOS 网页通过 SSO 识别当前飞牛用户，并把该用户稳定映射到一个 PocketIMG 图库空间；该用户以后进入网页，或在 Mac 使用自己生成的连接凭证，看到的都是同一份图库。这个过程不会为用户导出 fnOS 登录 Token，也不会把飞牛管理员凭据保存为 PocketIMG Token。
+
+fnOS 当前没有供原生客户端复用 SSO 的用户名/密码登录接口。因此，当前飞牛用户需要在引导页单独生成可撤销的“Mac 客户端连接凭证”。该凭证只绑定当前用户的 PocketIMG 图库，用于 Mac 客户端换取 Session，不继承飞牛或 PocketIMG 的管理员权限。服务端只保存凭证哈希，明文只在生成时完整显示一次；丢失后无法找回，只能重新生成，旧凭证和它签发的客户端 Session 会立即失效。
+
+不得把飞牛 Cookie、密码、管理员凭据或 `TRIM_API_TOKEN` 暴露给 Mac 客户端。`TRIM_API_TOKEN` 是应用调用 fnOS 文件或平台开放 API 的凭据，不是用户登录凭据，本方案不使用也不向容器传递它。
 
 公开媒体不能放在统一网关之后。聊天软件和链接接收者通常没有 NAS Session Cookie；若 `/i/...` 经过统一网关，媒体将无法加载。管理员页面可以走 SSO，但复制出的公开 URL 必须使用 TCP 服务或单独配置的外部 HTTPS 基址。
 
@@ -254,9 +258,18 @@ https://<当前 fnOS 主机>/app/pocket-img
 1. 当前 fnOS 管理地址。
 2. Mac 客户端应填写的服务地址，例如 `http://192.168.1.10:8080`，或管理员配置的外部 HTTPS 地址。
 3. 从本机 `/downloads` 提供的 PocketIMG Shot ZIP、版本、系统要求和校验值。
-4. 当前 fnOS 用户，以及生成、重新生成和撤销 Token 的操作；Token 只完整展示一次。
-5. 客户端填写说明：只填服务地址和 Token，不填写 fnOS 用户名、fnOS 密码或空间 ID。
+4. 当前飞牛用户，以及生成、重新生成和撤销“Mac 客户端连接凭证”的操作；凭证只完整展示一次。
+5. 客户端填写说明：只填服务地址和连接凭证，不填写飞牛用户名、密码、管理员凭据或空间 ID。
 6. 手机无需安装当前 Android 管理 App，直接打开 Web 管理地址。
+
+推荐的首次连接顺序为：
+
+1. 登录 fnOS，并从应用中心打开 PocketIMG；网页通过 SSO 进入当前飞牛用户的图库。
+2. 下载 NAS 本地提供的 PocketIMG Shot。
+3. 在引导页生成连接凭证，并立即复制服务地址和只显示一次的凭证。
+4. 在 Mac 设置中填入这两项。Mac 上传的内容会出现在当前飞牛用户的同一图库中。
+
+连接凭证不是“飞牛管理 Token”。重新生成只是在不改变图库归属的前提下轮换 Mac 连接凭证；如果凭证遗失或怀疑泄露，重新生成后需要在所有 Mac 上更新。
 
 不能根据 fnOS 开放 API 可靠发现公网地址。页面可用当前 hostname 和 `PIH_SERVICE_PORT` 给出局域网候选值，但外部 HTTPS 公共基址必须由管理员显式配置。管理地址 `/app/pocket-img` 不能作为 Mac 客户端服务地址。
 
@@ -279,7 +292,7 @@ https://<当前 fnOS 主机>/app/pocket-img
 - 两个普通 fnOS 用户首次访问后得到不同空间，互相不可见。
 - 普通用户无法调用管理员 API；管理员身份以可信 Header 为准。
 - 从 TCP 端伪造 `X-Trim-Userid` 或 `X-Trim-Isadmin` 不会改变身份。
-- Mac 客户端使用引导页给出的地址和 Token 可以上传图片及 MP4。
+- Mac 客户端使用引导页给出的地址和连接凭证，可以向当前飞牛用户的同一图库上传图片及 MP4，且客户端会话不具有管理员权限。
 - 无 fnOS Cookie 的浏览器仍能读取复制出的 `/i/...` 公共链接。
 - 本地 ZIP 文件名、版本、SHA-256、Content-Type 和 Content-Disposition 正确。
 - 容器重启、应用停止再启动、同版本覆盖测试和跨版本升级后数据完整。

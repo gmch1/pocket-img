@@ -360,6 +360,14 @@ final class ConfigurationTests: XCTestCase {
             "局域网地址支持 HTTP。"
         )
         XCTAssertEqual(
+            L10n.text("settings.connection_credential", language: .simplifiedChinese),
+            "连接凭证（Token）"
+        )
+        XCTAssertEqual(
+            L10n.text("settings.connection_credential", language: .english),
+            "Connection Credential (Token)"
+        )
+        XCTAssertEqual(
             L10n.text("settings.hotkey.help", language: .english),
             "Click and press a new shortcut. Some Macs also require Fn."
         )

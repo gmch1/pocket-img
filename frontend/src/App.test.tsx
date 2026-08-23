@@ -123,12 +123,14 @@ describe("App", () => {
 
     const firstView = render(<App />);
 
-    const dialog = await screen.findByRole("dialog", { name: "客户端设置" });
-    expect(dialog.textContent).toContain("管理地址");
+    const dialog = await screen.findByRole("dialog", { name: "连接 Mac 客户端" });
+    expect(dialog.textContent).toContain("网页管理地址（飞牛 SSO）");
     expect(dialog.textContent).toContain(new URL(fnosSetup.management_url, window.location.origin).href);
-    expect(dialog.textContent).toContain("macOS 客户端服务地址");
+    expect(dialog.textContent).toContain("填入 Mac：服务器地址");
     expect(dialog.textContent).toContain(fnosSetup.service_url);
-    expect(dialog.textContent).toContain("不要填写飞牛用户名或密码");
+    expect(dialog.textContent).toContain("PocketIMG Shot 将连接到「小明」的同一图库");
+    expect(dialog.textContent).toContain("不包含飞牛登录态、密码或用户管理权限");
+    expect(dialog.textContent).toContain("飞牛网页登录不会自动生成 Mac 连接凭证");
     expect(dialog.textContent).toContain("手机无需安装客户端");
     expect(screen.queryByRole("button", { name: "设置 Token" })).toBeNull();
     expect(screen.queryByRole("button", { name: "退出会话" })).toBeNull();
@@ -137,14 +139,18 @@ describe("App", () => {
     expect(download.getAttribute("download")).toBe(fnosSetup.download?.filename);
     expect(window.localStorage.getItem("pocketimg:fnos-client-setup-seen:fnos-user-1000")).toBe("1");
 
-    fireEvent.click(screen.getByRole("button", { name: "关闭客户端设置" }));
-    expect(screen.queryByRole("dialog", { name: "客户端设置" })).toBeNull();
-    expect(screen.getByRole("button", { name: "客户端设置" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "关闭 Mac 连接引导" }));
+    expect(screen.queryByRole("dialog", { name: "连接 Mac 客户端" })).toBeNull();
+    const trigger = screen.getByRole("button", { name: "连接 Mac 客户端" });
+    expect(trigger.textContent).toContain("连接 Mac");
+    expect(trigger.textContent).toContain("尚未生成凭证");
+    fireEvent.click(trigger);
+    expect(screen.getByRole("dialog", { name: "连接 Mac 客户端" })).toBeTruthy();
 
     firstView.unmount();
     render(<App />);
-    expect(await screen.findByRole("button", { name: "客户端设置" })).toBeTruthy();
-    expect(screen.queryByRole("dialog", { name: "客户端设置" })).toBeNull();
+    expect(await screen.findByRole("button", { name: "连接 Mac 客户端" })).toBeTruthy();
+    expect(screen.queryByRole("dialog", { name: "连接 Mac 客户端" })).toBeNull();
   });
 
   test("treats a forbidden client setup probe as a normal non-FNOS deployment", async () => {
@@ -155,8 +161,8 @@ describe("App", () => {
 
     await screen.findByText("粘贴第一张图片或视频");
     await waitFor(() => expect(getClientSetup).toHaveBeenCalled());
-    expect(screen.queryByRole("button", { name: "客户端设置" })).toBeNull();
-    expect(screen.queryByRole("dialog", { name: "客户端设置" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "连接 Mac 客户端" })).toBeNull();
+    expect(screen.queryByRole("dialog", { name: "连接 Mac 客户端" })).toBeNull();
     expect(screen.getByRole("button", { name: "设置 Token" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "退出会话" })).toBeTruthy();
   });

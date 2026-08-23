@@ -44,33 +44,58 @@ describe("ClientSetupGuide", () => {
     vi.spyOn(window, "confirm").mockReturnValue(true);
   });
 
-  test("keeps a generated Token only in the mounted guide and supports revocation", async () => {
+  test("binds a one-time Mac connection credential to the current FNOS gallery", async () => {
     vi.mocked(rotateClientSetupToken).mockResolvedValue("client-secret-token");
     vi.mocked(revokeClientSetupToken).mockResolvedValue();
     const notify = vi.fn();
 
     render(<Harness onNotify={notify} />);
-    fireEvent.click(screen.getByRole("button", { name: "生成 Token" }));
+    expect(screen.getByText("PocketIMG Shot 将连接到「Alice」的同一图库。网页继续使用飞牛账号登录，Mac 使用独立连接凭证。")).toBeTruthy();
+    expect(screen.getByText("此凭证只可查看、上传和删除「Alice」自己的图库，不包含飞牛登录态、密码或用户管理权限。")).toBeTruthy();
+    expect(screen.getByText("飞牛网页登录不会自动生成 Mac 连接凭证。点击生成后，凭证只会在当前窗口显示一次。")).toBeTruthy();
+    expect(rotateClientSetupToken).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "生成连接凭证" }));
 
     expect(await screen.findByText("client-secret-token")).toBeTruthy();
-    expect(screen.getByText("请立即复制，关闭此窗口后不会再次显示")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "复制客户端 Token" }));
+    expect(screen.getByText("这是「Alice」的 Mac 连接凭证，请立即复制；关闭窗口后不会再次显示。")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "复制连接凭证" }));
     await waitFor(() => expect(copyText).toHaveBeenCalledWith("client-secret-token"));
 
-    fireEvent.click(screen.getByRole("button", { name: "关闭客户端设置" }));
+    fireEvent.click(screen.getByRole("button", { name: "关闭 Mac 连接引导" }));
     fireEvent.click(screen.getByRole("button", { name: "重新打开客户端设置" }));
     expect(screen.queryByText("client-secret-token")).toBeNull();
-    expect(screen.getByText("现有 Token 无法再次查看。需要配置新客户端时，请重新生成。")).toBeTruthy();
+    expect(screen.getByText("凭证明文无法再次查看。如果当时没有保存，只能重新生成；所有已连接的 Mac 都需要填写新凭证。")).toBeTruthy();
 
-    fireEvent.click(screen.getByRole("button", { name: "撤销 Token" }));
+    fireEvent.click(screen.getByRole("button", { name: "撤销连接凭证" }));
     await waitFor(() => expect(revokeClientSetupToken).toHaveBeenCalledOnce());
-    expect(screen.getByText("未配置")).toBeTruthy();
-    expect(screen.getByRole("button", { name: "生成 Token" })).toBeTruthy();
-    expect(notify).toHaveBeenCalledWith("客户端 Token 已撤销");
+    expect(screen.getByText("尚未生成")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "生成连接凭证" })).toBeTruthy();
+    expect(notify).toHaveBeenCalledWith("Mac 连接凭证已撤销");
   });
 
-  test("warns before replacing an existing Token", async () => {
+  test("keeps FNOS web administration separate and warns before replacing a credential", async () => {
     vi.mocked(rotateClientSetupToken).mockResolvedValue("replacement-token");
+
+    render(
+      <ClientSetupGuide
+        setup={{ ...setup, token_configured: true, user: { ...setup.user, is_admin: true } }}
+        onClose={() => undefined}
+        onTokenConfigured={() => undefined}
+        onSessionExpired={() => undefined}
+        onNotify={() => undefined}
+      />,
+    );
+    expect(screen.getByText("网页管理员")).toBeTruthy();
+    expect(screen.getByText(/不包含飞牛登录态、密码或用户管理权限/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "重新生成连接凭证" }));
+
+    await waitFor(() => expect(window.confirm).toHaveBeenCalledWith(expect.stringContaining("所有已连接的 Mac")));
+    expect(await screen.findByText("replacement-token")).toBeTruthy();
+  });
+
+  test("does not rotate an existing credential when the user cancels", () => {
+    vi.mocked(window.confirm).mockReturnValue(false);
 
     render(
       <ClientSetupGuide
@@ -81,10 +106,9 @@ describe("ClientSetupGuide", () => {
         onNotify={() => undefined}
       />,
     );
-    fireEvent.click(screen.getByRole("button", { name: "重新生成 Token" }));
+    fireEvent.click(screen.getByRole("button", { name: "重新生成连接凭证" }));
 
-    await waitFor(() => expect(window.confirm).toHaveBeenCalledWith(expect.stringContaining("立即撤销旧 Token")));
-    expect(await screen.findByText("replacement-token")).toBeTruthy();
+    expect(rotateClientSetupToken).not.toHaveBeenCalled();
   });
 });
 
