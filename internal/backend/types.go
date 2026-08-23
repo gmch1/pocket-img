@@ -6,6 +6,9 @@ const (
 	defaultUserQuotaBytes int64 = 10 << 30
 	defaultRetentionDays        = 90
 	thumbnailMaxAttempts        = 5
+	thumbnailPendingSize  int64 = 0
+	thumbnailFailedSize   int64 = -1
+	thumbnailSkippedSize  int64 = -2
 )
 
 type thumbnailCommitResult int
@@ -138,6 +141,7 @@ func (record accountRecord) response() accountResponse {
 
 type imageResponse struct {
 	ID            string `json:"id"`
+	MediaType     string `json:"media_type"`
 	Width         int    `json:"width"`
 	Height        int    `json:"height"`
 	ByteSize      int64  `json:"byte_size"`
@@ -156,6 +160,7 @@ func (record imageRecord) response() imageResponse {
 	}
 	return imageResponse{
 		ID:            record.ID,
+		MediaType:     record.MediaType,
 		Width:         record.Width,
 		Height:        record.Height,
 		ByteSize:      record.ByteSize,

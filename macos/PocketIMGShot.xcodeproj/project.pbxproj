@@ -24,13 +24,13 @@
 		B00000000000000000000010 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000012 /* Assets.xcassets */; };
 		B00000000000000000000011 /* Localization.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000013 /* Localization.swift */; };
 		B00000000000000000000012 /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = V00000000000000000000001 /* Localizable.strings */; };
-		B00000000000000000000013 /* GIFMediaPipeline.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000016 /* GIFMediaPipeline.swift */; };
-		B00000000000000000000014 /* GIFRecordingCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000017 /* GIFRecordingCoordinator.swift */; };
-		B00000000000000000000015 /* GIFTrimEditor.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000018 /* GIFTrimEditor.swift */; };
+		B00000000000000000000013 /* VideoMediaPipeline.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000016 /* VideoMediaPipeline.swift */; };
+		B00000000000000000000014 /* VideoRecordingCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000017 /* VideoRecordingCoordinator.swift */; };
+		B00000000000000000000015 /* VideoTrimEditor.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000018 /* VideoTrimEditor.swift */; };
 		B00000000000000000000101 /* AnnotationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000101 /* AnnotationTests.swift */; };
 		B00000000000000000000102 /* ConfigurationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000102 /* ConfigurationTests.swift */; };
 		B00000000000000000000103 /* ScreenshotRendererTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000103 /* ScreenshotRendererTests.swift */; };
-		B00000000000000000000104 /* GIFMediaPipelineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000104 /* GIFMediaPipelineTests.swift */; };
+		B00000000000000000000104 /* VideoMediaPipelineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000104 /* VideoMediaPipelineTests.swift */; };
 		B00000000000000000000105 /* PocketIMGClientTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000105 /* PocketIMGClientTests.swift */; };
 		B00000000000000000000201 /* AppKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = F00000000000000000000201 /* AppKit.framework */; };
 		B00000000000000000000202 /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = F00000000000000000000202 /* SwiftUI.framework */; };
@@ -74,13 +74,13 @@
 		F00000000000000000000013 /* Localization.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Localization.swift; sourceTree = "<group>"; };
 		F00000000000000000000014 /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = en.lproj/Localizable.strings; sourceTree = "<group>"; };
 		F00000000000000000000015 /* zh-Hans */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = "zh-Hans"; path = "zh-Hans.lproj/Localizable.strings"; sourceTree = "<group>"; };
-		F00000000000000000000016 /* GIFMediaPipeline.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GIFMediaPipeline.swift; sourceTree = "<group>"; };
-		F00000000000000000000017 /* GIFRecordingCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GIFRecordingCoordinator.swift; sourceTree = "<group>"; };
-		F00000000000000000000018 /* GIFTrimEditor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GIFTrimEditor.swift; sourceTree = "<group>"; };
+		F00000000000000000000016 /* VideoMediaPipeline.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VideoMediaPipeline.swift; sourceTree = "<group>"; };
+		F00000000000000000000017 /* VideoRecordingCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VideoRecordingCoordinator.swift; sourceTree = "<group>"; };
+		F00000000000000000000018 /* VideoTrimEditor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VideoTrimEditor.swift; sourceTree = "<group>"; };
 		F00000000000000000000101 /* AnnotationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnnotationTests.swift; sourceTree = "<group>"; };
 		F00000000000000000000102 /* ConfigurationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfigurationTests.swift; sourceTree = "<group>"; };
 		F00000000000000000000103 /* ScreenshotRendererTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenshotRendererTests.swift; sourceTree = "<group>"; };
-		F00000000000000000000104 /* GIFMediaPipelineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GIFMediaPipelineTests.swift; sourceTree = "<group>"; };
+		F00000000000000000000104 /* VideoMediaPipelineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VideoMediaPipelineTests.swift; sourceTree = "<group>"; };
 		F00000000000000000000105 /* PocketIMGClientTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PocketIMGClientTests.swift; sourceTree = "<group>"; };
 		F00000000000000000000201 /* AppKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AppKit.framework; path = System/Library/Frameworks/AppKit.framework; sourceTree = SDKROOT; };
 		F00000000000000000000202 /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
@@ -150,9 +150,9 @@
 				F00000000000000000000011 /* PocketIMGShot.entitlements */,
 				F00000000000000000000012 /* Assets.xcassets */,
 				F00000000000000000000013 /* Localization.swift */,
-				F00000000000000000000016 /* GIFMediaPipeline.swift */,
-				F00000000000000000000017 /* GIFRecordingCoordinator.swift */,
-				F00000000000000000000018 /* GIFTrimEditor.swift */,
+				F00000000000000000000016 /* VideoMediaPipeline.swift */,
+				F00000000000000000000017 /* VideoRecordingCoordinator.swift */,
+				F00000000000000000000018 /* VideoTrimEditor.swift */,
 				V00000000000000000000001 /* Localizable.strings */,
 				F0000000000000000000000D /* Info.plist */,
 			);
@@ -165,7 +165,7 @@
 				F00000000000000000000101 /* AnnotationTests.swift */,
 				F00000000000000000000102 /* ConfigurationTests.swift */,
 				F00000000000000000000103 /* ScreenshotRendererTests.swift */,
-				F00000000000000000000104 /* GIFMediaPipelineTests.swift */,
+				F00000000000000000000104 /* VideoMediaPipelineTests.swift */,
 				F00000000000000000000105 /* PocketIMGClientTests.swift */,
 			);
 			path = PocketIMGShotTests;
@@ -318,9 +318,9 @@
 				B0000000000000000000000E /* DiagnosticLog.swift in Sources */,
 				B0000000000000000000000F /* PinnedImagePresenter.swift in Sources */,
 				B00000000000000000000011 /* Localization.swift in Sources */,
-				B00000000000000000000013 /* GIFMediaPipeline.swift in Sources */,
-				B00000000000000000000014 /* GIFRecordingCoordinator.swift in Sources */,
-				B00000000000000000000015 /* GIFTrimEditor.swift in Sources */,
+				B00000000000000000000013 /* VideoMediaPipeline.swift in Sources */,
+				B00000000000000000000014 /* VideoRecordingCoordinator.swift in Sources */,
+				B00000000000000000000015 /* VideoTrimEditor.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -331,7 +331,7 @@
 				B00000000000000000000101 /* AnnotationTests.swift in Sources */,
 				B00000000000000000000102 /* ConfigurationTests.swift in Sources */,
 				B00000000000000000000103 /* ScreenshotRendererTests.swift in Sources */,
-				B00000000000000000000104 /* GIFMediaPipelineTests.swift in Sources */,
+				B00000000000000000000104 /* VideoMediaPipelineTests.swift in Sources */,
 				B00000000000000000000105 /* PocketIMGClientTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

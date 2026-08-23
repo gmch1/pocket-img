@@ -98,7 +98,7 @@ export function AdminPanel({ onClose, onSessionExpired, onNotify }: AdminPanelPr
           {loading ? <div className="user-list__loading"><span className="spinner" /></div> : users.map((user) => (
             <div className="user-row" key={user.space_id}>
               <div><strong>{user.space_id}</strong>{user.is_admin ? <span>管理员</span> : null}</div>
-              <small>{formatBytes(user.used_bytes)} / {formatBytes(user.quota_bytes)} · {user.image_count} 张 · {user.retention_days} 天</small>
+              <small>{formatBytes(user.used_bytes)} / {formatBytes(user.quota_bytes)} · {user.image_count} 项 · {user.retention_days} 天</small>
             </div>
           ))}
         </div>

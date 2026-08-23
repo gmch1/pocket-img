@@ -4,12 +4,12 @@ import Carbon.HIToolbox
 import Foundation
 import QuartzCore
 
-enum GIFTrimHandle: Equatable {
+enum VideoTrimHandle: Equatable {
     case start
     case end
 }
 
-enum GIFTrimGeometry {
+enum VideoTrimGeometry {
     static func x(
         forTime time: TimeInterval,
         duration: TimeInterval,
@@ -41,13 +41,13 @@ enum GIFTrimGeometry {
     }
 
     static func clampedRange(
-        current: GIFTrimRange,
-        changing handle: GIFTrimHandle,
+        current: VideoTrimRange,
+        changing handle: VideoTrimHandle,
         proposedTime: TimeInterval,
         duration: TimeInterval,
         minimumDuration: TimeInterval,
         snap: TimeInterval
-    ) -> GIFTrimRange {
+    ) -> VideoTrimRange {
         guard proposedTime.isFinite,
               duration.isFinite,
               duration > 0 else {
@@ -64,13 +64,13 @@ enum GIFTrimGeometry {
         switch handle {
         case .start:
             let latest = max(0, current.end - safeMinimum)
-            return GIFTrimRange(
+            return VideoTrimRange(
                 start: min(latest, max(0, snapped)),
                 end: current.end
             )
         case .end:
             let earliest = min(duration, current.start + safeMinimum)
-            return GIFTrimRange(
+            return VideoTrimRange(
                 start: current.start,
                 end: max(earliest, min(duration, snapped))
             )
@@ -79,17 +79,17 @@ enum GIFTrimGeometry {
 }
 
 @MainActor
-final class GIFTrimEditorController: NSObject, NSWindowDelegate {
+final class VideoTrimEditorController: NSObject, NSWindowDelegate {
     private let movieURL: URL
     private let duration: TimeInterval
     private let frameRate: Int
     private let language: AppLanguage
-    private var onConfirm: ((GIFTrimRange) -> Void)?
+    private var onConfirm: ((VideoTrimRange) -> Void)?
     private var onCancel: (() -> Void)?
 
     private let player: AVPlayer
-    private let playerView: GIFTrimPlayerView
-    private let timeline: GIFTrimTimelineView
+    private let playerView: VideoTrimPlayerView
+    private let timeline: VideoTrimTimelineView
     private let playButton = NSButton()
     private let currentTimeLabel = NSTextField(labelWithString: "")
     private let selectionLabel = NSTextField(labelWithString: "")
@@ -105,12 +105,12 @@ final class GIFTrimEditorController: NSObject, NSWindowDelegate {
         frameRate: Int,
         pixelSize: CGSize,
         language: AppLanguage,
-        onConfirm: @escaping (GIFTrimRange) -> Void,
+        onConfirm: @escaping (VideoTrimRange) -> Void,
         onCancel: @escaping () -> Void
     ) {
         let safeDuration = duration.isFinite
-            ? max(GIFTrimRange.minimumDuration, duration)
-            : GIFTrimRange.minimumDuration
+            ? max(VideoTrimRange.minimumDuration, duration)
+            : VideoTrimRange.minimumDuration
         let safeFrameRate = max(1, frameRate)
         let player = AVPlayer(url: movieURL)
         self.movieURL = movieURL
@@ -120,8 +120,8 @@ final class GIFTrimEditorController: NSObject, NSWindowDelegate {
         self.onConfirm = onConfirm
         self.onCancel = onCancel
         self.player = player
-        playerView = GIFTrimPlayerView(player: player)
-        timeline = GIFTrimTimelineView(
+        playerView = VideoTrimPlayerView(player: player)
+        timeline = VideoTrimTimelineView(
             duration: safeDuration,
             frameRate: safeFrameRate,
             language: language
@@ -174,7 +174,7 @@ final class GIFTrimEditorController: NSObject, NSWindowDelegate {
             backing: .buffered,
             defer: false
         )
-        window.title = L10n.text("gif.editor.title", language: language)
+        window.title = L10n.text("video.editor.title", language: language)
         window.minSize = CGSize(width: 650, height: 600)
         window.isReleasedWhenClosed = false
         window.delegate = self
@@ -184,7 +184,7 @@ final class GIFTrimEditorController: NSObject, NSWindowDelegate {
         window.contentView = root
 
         let instructions = NSTextField(
-            labelWithString: L10n.text("gif.editor.instructions", language: language)
+            labelWithString: L10n.text("video.editor.instructions", language: language)
         )
         instructions.font = .systemFont(ofSize: 13)
         instructions.textColor = .secondaryLabelColor
@@ -197,7 +197,7 @@ final class GIFTrimEditorController: NSObject, NSWindowDelegate {
         metadata.font = .monospacedDigitSystemFont(ofSize: 11, weight: .regular)
         metadata.textColor = .tertiaryLabelColor
 
-        playButton.title = L10n.text("gif.editor.play", language: language)
+        playButton.title = L10n.text("video.editor.play", language: language)
         playButton.bezelStyle = .rounded
         playButton.target = self
         playButton.action = #selector(togglePlayback)
@@ -210,7 +210,7 @@ final class GIFTrimEditorController: NSObject, NSWindowDelegate {
         selectionLabel.alignment = .center
 
         let generateButton = NSButton(
-            title: L10n.text("gif.editor.generate", language: language),
+            title: L10n.text("video.editor.generate", language: language),
             target: self,
             action: #selector(confirmTrim)
         )
@@ -218,7 +218,7 @@ final class GIFTrimEditorController: NSObject, NSWindowDelegate {
         generateButton.keyEquivalent = "\r"
 
         let cancelButton = NSButton(
-            title: L10n.text("gif.editor.cancel", language: language),
+            title: L10n.text("video.editor.cancel", language: language),
             target: self,
             action: #selector(cancelTrim)
         )
@@ -427,7 +427,7 @@ final class GIFTrimEditorController: NSObject, NSWindowDelegate {
     private func updateSelectionLabels() {
         let range = timeline.trimRange
         selectionLabel.stringValue = L10n.format(
-            "gif.editor.selection",
+            "video.editor.selection",
             language: language,
             Self.timecode(range.start),
             Self.timecode(range.end),
@@ -437,7 +437,7 @@ final class GIFTrimEditorController: NSObject, NSWindowDelegate {
 
     private func updatePlayButton() {
         playButton.title = L10n.text(
-            player.rate > 0 ? "gif.editor.pause" : "gif.editor.play",
+            player.rate > 0 ? "video.editor.pause" : "video.editor.play",
             language: language
         )
     }
@@ -499,7 +499,7 @@ final class GIFTrimEditorController: NSObject, NSWindowDelegate {
 }
 
 @MainActor
-private final class GIFTrimPlayerView: NSView {
+private final class VideoTrimPlayerView: NSView {
     private let playerLayer: AVPlayerLayer
 
     init(player: AVPlayer) {
@@ -532,7 +532,7 @@ private final class GIFTrimPlayerView: NSView {
 }
 
 @MainActor
-final class GIFTrimTimelineView: NSView {
+final class VideoTrimTimelineView: NSView {
     private static let horizontalInset: CGFloat = 12
     private static let verticalInset: CGFloat = 8
     private static let handleWidth: CGFloat = 18
@@ -542,12 +542,12 @@ final class GIFTrimTimelineView: NSView {
     private let language: AppLanguage
     private let minimumDuration: TimeInterval
     private let snap: TimeInterval
-    private let startHandle: GIFTrimHandleControl
-    private let endHandle: GIFTrimHandleControl
-    private var trackingHandle: GIFTrimHandle?
-    var onRangeChange: ((GIFTrimRange, GIFTrimHandle) -> Void)?
+    private let startHandle: VideoTrimHandleControl
+    private let endHandle: VideoTrimHandleControl
+    private var trackingHandle: VideoTrimHandle?
+    var onRangeChange: ((VideoTrimRange, VideoTrimHandle) -> Void)?
 
-    var trimRange: GIFTrimRange {
+    var trimRange: VideoTrimRange {
         didSet {
             needsLayout = true
             needsDisplay = true
@@ -565,11 +565,11 @@ final class GIFTrimTimelineView: NSView {
         self.duration = duration
         self.frameRate = max(1, frameRate)
         self.language = language
-        minimumDuration = min(duration, max(GIFTrimRange.minimumDuration, 0.2))
+        minimumDuration = min(duration, max(VideoTrimRange.minimumDuration, 0.2))
         snap = 0.1
-        trimRange = GIFTrimRange(start: 0, end: duration)
-        startHandle = GIFTrimHandleControl(handle: .start)
-        endHandle = GIFTrimHandleControl(handle: .end)
+        trimRange = VideoTrimRange(start: 0, end: duration)
+        startHandle = VideoTrimHandleControl(handle: .start)
+        endHandle = VideoTrimHandleControl(handle: .end)
         super.init(frame: .zero)
         wantsLayer = true
         startHandle.owner = self
@@ -594,12 +594,12 @@ final class GIFTrimTimelineView: NSView {
     override func layout() {
         super.layout()
         let rect = trackRect
-        let startX = GIFTrimGeometry.x(
+        let startX = VideoTrimGeometry.x(
             forTime: trimRange.start,
             duration: duration,
             trackRect: rect
         )
-        let endX = GIFTrimGeometry.x(
+        let endX = VideoTrimGeometry.x(
             forTime: trimRange.end,
             duration: duration,
             trackRect: rect
@@ -647,12 +647,12 @@ final class GIFTrimTimelineView: NSView {
             }
         }
 
-        let startX = GIFTrimGeometry.x(
+        let startX = VideoTrimGeometry.x(
             forTime: trimRange.start,
             duration: duration,
             trackRect: rect
         )
-        let endX = GIFTrimGeometry.x(
+        let endX = VideoTrimGeometry.x(
             forTime: trimRange.end,
             duration: duration,
             trackRect: rect
@@ -682,7 +682,7 @@ final class GIFTrimTimelineView: NSView {
         selectionPath.lineWidth = 2
         selectionPath.stroke()
 
-        let playheadX = GIFTrimGeometry.x(
+        let playheadX = VideoTrimGeometry.x(
             forTime: playhead,
             duration: duration,
             trackRect: rect
@@ -699,7 +699,7 @@ final class GIFTrimTimelineView: NSView {
         let point = convert(event.locationInWindow, from: nil)
         let startDistance = abs(point.x - startHandle.frame.midX)
         let endDistance = abs(point.x - endHandle.frame.midX)
-        let handle: GIFTrimHandle = startDistance <= endDistance ? .start : .end
+        let handle: VideoTrimHandle = startDistance <= endDistance ? .start : .end
         trackingHandle = handle
         window?.makeFirstResponder(handle == .start ? startHandle : endHandle)
         update(handle: handle, using: point.x)
@@ -718,17 +718,17 @@ final class GIFTrimTimelineView: NSView {
         self.trackingHandle = nil
     }
 
-    fileprivate func update(handle: GIFTrimHandle, event: NSEvent) {
+    fileprivate func update(handle: VideoTrimHandle, event: NSEvent) {
         let point = convert(event.locationInWindow, from: nil)
         update(handle: handle, using: point.x)
     }
 
-    fileprivate func step(handle: GIFTrimHandle, by amount: TimeInterval) {
+    fileprivate func step(handle: VideoTrimHandle, by amount: TimeInterval) {
         let current = handle == .start ? trimRange.start : trimRange.end
         set(handle: handle, proposedTime: current + amount)
     }
 
-    fileprivate func moveToBoundary(handle: GIFTrimHandle, end: Bool) {
+    fileprivate func moveToBoundary(handle: VideoTrimHandle, end: Bool) {
         let proposed: TimeInterval
         switch (handle, end) {
         case (.start, false): proposed = 0
@@ -739,13 +739,13 @@ final class GIFTrimTimelineView: NSView {
         set(handle: handle, proposedTime: proposed)
     }
 
-    private func update(handle: GIFTrimHandle, using x: CGFloat) {
-        let proposed = GIFTrimGeometry.time(forX: x, duration: duration, trackRect: trackRect)
+    private func update(handle: VideoTrimHandle, using x: CGFloat) {
+        let proposed = VideoTrimGeometry.time(forX: x, duration: duration, trackRect: trackRect)
         set(handle: handle, proposedTime: proposed)
     }
 
-    private func set(handle: GIFTrimHandle, proposedTime: TimeInterval) {
-        let updated = GIFTrimGeometry.clampedRange(
+    private func set(handle: VideoTrimHandle, proposedTime: TimeInterval) {
+        let updated = VideoTrimGeometry.clampedRange(
             current: trimRange,
             changing: handle,
             proposedTime: proposedTime,
@@ -764,12 +764,12 @@ final class GIFTrimTimelineView: NSView {
 
     private func updateHandleAccessibility() {
         startHandle.configureAccessibility(
-            label: L10n.text("gif.editor.start_handle", language: language),
+            label: L10n.text("video.editor.start_handle", language: language),
             value: trimRange.start,
             maximum: max(0, trimRange.end - minimumDuration)
         )
         endHandle.configureAccessibility(
-            label: L10n.text("gif.editor.end_handle", language: language),
+            label: L10n.text("video.editor.end_handle", language: language),
             value: trimRange.end,
             minimum: min(duration, trimRange.start + minimumDuration),
             maximum: duration
@@ -778,11 +778,11 @@ final class GIFTrimTimelineView: NSView {
 }
 
 @MainActor
-private final class GIFTrimHandleControl: NSControl {
-    let handle: GIFTrimHandle
-    weak var owner: GIFTrimTimelineView?
+private final class VideoTrimHandleControl: NSControl {
+    let handle: VideoTrimHandle
+    weak var owner: VideoTrimTimelineView?
 
-    init(handle: GIFTrimHandle) {
+    init(handle: VideoTrimHandle) {
         self.handle = handle
         super.init(frame: .zero)
         setAccessibilityRole(.slider)
@@ -862,11 +862,11 @@ private final class GIFTrimHandleControl: NSControl {
         setAccessibilityMinValue(NSNumber(value: minimum))
         setAccessibilityMaxValue(NSNumber(value: maximum))
         setAccessibilityValue(NSNumber(value: value))
-        setAccessibilityValueDescription(GIFTrimEditorControllerTimecode.value(value))
+        setAccessibilityValueDescription(VideoTrimEditorControllerTimecode.value(value))
     }
 }
 
-private enum GIFTrimEditorControllerTimecode {
+private enum VideoTrimEditorControllerTimecode {
     static func value(_ seconds: TimeInterval) -> String {
         let safe = max(0, seconds.isFinite ? seconds : 0)
         let minutes = Int(safe) / 60

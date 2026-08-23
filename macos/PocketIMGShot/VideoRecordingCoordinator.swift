@@ -5,7 +5,7 @@ import CoreVideo
 import Foundation
 import ScreenCaptureKit
 
-enum GIFRecordingState: Equatable, Sendable {
+enum VideoRecordingState: Equatable, Sendable {
     case idle
     case preparing
     case selecting
@@ -13,34 +13,31 @@ enum GIFRecordingState: Equatable, Sendable {
     case recording
     case stopping
     case editing
-    case encoding
+    case exporting
 }
 
-struct GIFRecordingMetrics: Sendable {
+struct VideoRecordingMetrics: Sendable {
     let sourcePointSize: CGSize
     let recordingPixelSize: CGSize
     let outputPixelSize: CGSize
-    let frameRate: Int
     let movieBytes: Int64
-    let gifBytes: Int64
-    let frames: GIFFrameStatistics
-    let encodingAttempts: [GIFEncodingAttempt]
-    let encodingWallTime: TimeInterval
-    let encodingCPUTime: TimeInterval
+    let videoBytes: Int64
+    let frames: VideoFrameStatistics
+    let exportWallTime: TimeInterval
     let exceedsMaximumBytes: Bool
 }
 
-struct GIFRecordingResult: Sendable {
+struct VideoRecordingResult: Sendable {
     let sessionID: UUID
     let data: Data
     let fileURL: URL
     let duration: TimeInterval
     let payload: UploadPayload
-    let metrics: GIFRecordingMetrics
+    let metrics: VideoRecordingMetrics
 }
 
 @MainActor
-final class GIFRecordingCoordinator: NSObject, NSWindowDelegate {
+final class VideoRecordingCoordinator: NSObject, NSWindowDelegate {
     private enum Phase {
         case idle
         case preparing
@@ -50,7 +47,7 @@ final class GIFRecordingCoordinator: NSObject, NSWindowDelegate {
         case recording
         case stopping
         case editing
-        case encoding
+        case exporting
     }
 
     private struct FrozenDisplay {
@@ -60,7 +57,7 @@ final class GIFRecordingCoordinator: NSObject, NSWindowDelegate {
     }
 
     private struct SelectionContext {
-        let region: GIFCaptureRegion
+        let region: VideoCaptureRegion
         let screenFrame: CGRect
         let displayFrame: CGRect
         let screenVisibleFrame: CGRect
@@ -71,12 +68,12 @@ final class GIFRecordingCoordinator: NSObject, NSWindowDelegate {
     private static let recordingBorderWidth: CGFloat = 2
 
     private var phase: Phase = .idle
-    private(set) var state: GIFRecordingState = .idle
-    private var selectionWindows: [GIFRecordingWindow] = []
+    private(set) var state: VideoRecordingState = .idle
+    private var selectionWindows: [VideoRecordingWindow] = []
     private var countdownWindow: NSPanel?
     private var recordingBorderWindow: NSPanel?
     private var recordingHUDWindow: NSPanel?
-    private var trimEditor: GIFTrimEditorController?
+    private var trimEditor: VideoTrimEditorController?
     private var captureTask: Task<Void, Never>?
     private var countdownTask: Task<Void, Never>?
     private var maximumDurationTask: Task<Void, Never>?
@@ -86,15 +83,15 @@ final class GIFRecordingCoordinator: NSObject, NSWindowDelegate {
     private var keyMonitor: Any?
     private let escapeHotKey = GlobalHotKey(identifier: 4)
     private var recorder: ScreenStreamRecorder?
-    private var encoder: GIFEncoder?
-    private var pendingMovie: GIFMovieRecording?
+    private var exporter: VideoExporter?
+    private var pendingMovie: VideoMovieRecording?
     private var sessionID: UUID?
     private var selectionContext: SelectionContext?
     private var recordingStartedAt: Date?
     private var previouslyActiveApplication: NSRunningApplication?
     private var previouslyActiveCursor: NSCursor?
-    private var onStateChange: ((GIFRecordingState) -> Void)?
-    private var onFinish: ((GIFRecordingResult) -> Void)?
+    private var onStateChange: ((VideoRecordingState) -> Void)?
+    private var onFinish: ((VideoRecordingResult) -> Void)?
     private var onCancel: (() -> Void)?
     private var onError: ((Error) -> Void)?
     private var language: AppLanguage = .system
@@ -104,14 +101,14 @@ final class GIFRecordingCoordinator: NSObject, NSWindowDelegate {
     func begin(
         language: AppLanguage,
         stopShortcutDisplayName: String,
-        onStateChange: @escaping (GIFRecordingState) -> Void,
-        onFinish: @escaping (GIFRecordingResult) -> Void,
+        onStateChange: @escaping (VideoRecordingState) -> Void,
+        onFinish: @escaping (VideoRecordingResult) -> Void,
         onCancel: @escaping () -> Void,
         onError: @escaping (Error) -> Void
     ) {
         cancel(notify: false)
 
-        let sessionID = GIFExperimentLogger.makeSessionID()
+        let sessionID = VideoExperimentLogger.makeSessionID()
         self.sessionID = sessionID
         self.language = language
         self.stopShortcutDisplayName = stopShortcutDisplayName
@@ -122,7 +119,7 @@ final class GIFRecordingCoordinator: NSObject, NSWindowDelegate {
         self.previouslyActiveApplication = NSWorkspace.shared.frontmostApplication
         self.previouslyActiveCursor = NSCursor.current
         self.recorder = makeRecorder(for: sessionID)
-        self.encoder = GIFEncoder()
+        self.exporter = VideoExporter()
         finished = false
         phase = .preparing
         publish(.preparing)
@@ -139,7 +136,7 @@ final class GIFRecordingCoordinator: NSObject, NSWindowDelegate {
                     throw CaptureError.noDisplays
                 }
                 if NSEvent.pressedMouseButtons != 0 {
-                    DiagnosticLog.record("gif selection waiting for an active mouse gesture")
+                    DiagnosticLog.record("video selection waiting for an active mouse gesture")
                 }
                 while NSEvent.pressedMouseButtons != 0 {
                     try await Task.sleep(for: .milliseconds(16))
@@ -150,11 +147,11 @@ final class GIFRecordingCoordinator: NSObject, NSWindowDelegate {
                 captureTask = nil
                 phase = .selecting
                 publish(.selecting)
-                DiagnosticLog.record("gif selection overlays ready displays=\(displays.count)")
+                DiagnosticLog.record("video selection overlays ready displays=\(displays.count)")
             } catch is CancellationError {
                 // The cancellation path owns teardown and callback delivery.
             } catch {
-                GIFExperimentLogger.recordError(
+                VideoExperimentLogger.recordError(
                     sessionID: sessionID,
                     stage: .selection,
                     error: error
@@ -165,7 +162,7 @@ final class GIFRecordingCoordinator: NSObject, NSWindowDelegate {
     }
 
     /// Stops an active recording and opens the trim editor. Calling this method
-    /// in any other state is intentionally a no-op, so the global GIF hot key
+    /// in any other state is intentionally a no-op, so the global Video hot key
     /// can safely forward repeated key presses here.
     func stopRecording() {
         guard !finished,
@@ -186,7 +183,7 @@ final class GIFRecordingCoordinator: NSObject, NSWindowDelegate {
 
         processingTask = Task { [weak self] in
             guard let self else { return }
-            let movie: GIFMovieRecording
+            let movie: VideoMovieRecording
             do {
                 movie = try await recorder.stop()
             } catch is CancellationError {
@@ -209,16 +206,16 @@ final class GIFRecordingCoordinator: NSObject, NSWindowDelegate {
         }
     }
 
-    private func showTrimEditor(movie: GIFMovieRecording) {
+    private func showTrimEditor(movie: VideoMovieRecording) {
         closeTrimEditor()
-        let editor = GIFTrimEditorController(
+        let editor = VideoTrimEditorController(
             movieURL: movie.info.movieURL,
             duration: movie.duration,
             frameRate: 10,
             pixelSize: movie.info.outputPixelSize,
             language: language,
             onConfirm: { [weak self] trimRange in
-                self?.beginEncoding(trimRange: trimRange)
+                self?.beginExport(trimRange: trimRange)
             },
             onCancel: { [weak self] in
                 self?.cancel()
@@ -227,15 +224,15 @@ final class GIFRecordingCoordinator: NSObject, NSWindowDelegate {
         trimEditor = editor
         editor.show()
         DiagnosticLog.record(
-            "gif trim editor opened duration=\(String(format: "%.3f", movie.duration))"
+            "video trim editor opened duration=\(String(format: "%.3f", movie.duration))"
         )
     }
 
-    private func beginEncoding(trimRange: GIFTrimRange) {
+    private func beginExport(trimRange: VideoTrimRange) {
         guard !finished,
               phase == .editing,
               let sessionID,
-              let encoder,
+              let exporter,
               let movie = pendingMovie,
               let selectionContext else {
             return
@@ -243,21 +240,21 @@ final class GIFRecordingCoordinator: NSObject, NSWindowDelegate {
 
         closeTrimEditor()
         pendingMovie = nil
-        phase = .encoding
-        publish(.encoding)
-        let encoderTrimRange: GIFTrimRange? = trimRange.start <= 0.000_001
+        phase = .exporting
+        publish(.exporting)
+        let exportTrimRange: VideoTrimRange? = trimRange.start <= 0.000_001
             && abs(trimRange.end - movie.duration) <= 0.000_001
             ? nil
             : trimRange
 
         processingTask = Task { [weak self] in
             guard let self else { return }
-            let encoding: GIFEncodingResult
+            let exported: VideoExportResult
             do {
-                encoding = try await encoder.encode(
+                exported = try await exporter.export(
                     movie: movie,
                     sessionID: sessionID,
-                    trimRange: encoderTrimRange
+                    trimRange: exportTrimRange
                 )
             } catch is CancellationError {
                 return
@@ -267,34 +264,31 @@ final class GIFRecordingCoordinator: NSObject, NSWindowDelegate {
                 return
             }
 
-            guard isCurrent(sessionID), phase == .encoding else {
-                try? FileManager.default.removeItem(at: encoding.fileURL)
+            guard isCurrent(sessionID), phase == .exporting else {
+                try? FileManager.default.removeItem(at: exported.fileURL)
                 return
             }
             let payload = UploadPayload(
-                data: encoding.data,
-                fileName: encoding.fileURL.lastPathComponent,
-                contentType: "image/gif",
-                displaySize: encoding.outputPixelSize
+                data: exported.data,
+                fileName: exported.fileURL.lastPathComponent,
+                contentType: "video/mp4",
+                displaySize: exported.outputPixelSize
             )
-            let metrics = GIFRecordingMetrics(
+            let metrics = VideoRecordingMetrics(
                 sourcePointSize: selectionContext.region.sourceRect.size,
                 recordingPixelSize: movie.info.outputPixelSize,
-                outputPixelSize: encoding.outputPixelSize,
-                frameRate: encoding.frameRate,
+                outputPixelSize: exported.outputPixelSize,
                 movieBytes: movie.movieBytes,
-                gifBytes: encoding.gifBytes,
+                videoBytes: exported.videoBytes,
                 frames: movie.frames,
-                encodingAttempts: encoding.attempts,
-                encodingWallTime: encoding.encodingWallTime,
-                encodingCPUTime: encoding.encodingCPUTime,
-                exceedsMaximumBytes: encoding.exceedsMaximumBytes
+                exportWallTime: exported.exportWallTime,
+                exceedsMaximumBytes: exported.exceedsMaximumBytes
             )
-            complete(GIFRecordingResult(
+            complete(VideoRecordingResult(
                 sessionID: sessionID,
-                data: encoding.data,
-                fileURL: encoding.fileURL,
-                duration: encoding.duration,
+                data: exported.data,
+                fileURL: exported.fileURL,
+                duration: exported.duration,
                 payload: payload,
                 metrics: metrics
             ))
@@ -316,7 +310,7 @@ final class GIFRecordingCoordinator: NSObject, NSWindowDelegate {
 
         let recorder = self.recorder
         self.recorder = nil
-        self.encoder = nil
+        self.exporter = nil
         let completion = onCancel
         publish(.idle)
         clearCallbacks()
@@ -345,21 +339,21 @@ final class GIFRecordingCoordinator: NSObject, NSWindowDelegate {
 
     private func showPreparationWindows() {
         selectionWindows = NSScreen.screens.map { screen in
-            let view = GIFRecordingPreparationView(
+            let view = VideoRecordingPreparationView(
                 frame: NSRect(origin: .zero, size: screen.frame.size)
             ) { [weak self] in
                 self?.cancel()
             }
             return makeSelectionWindow(for: screen, contentView: view, opaque: false)
         }
-        DiagnosticLog.record("gif preparation windows shown count=\(selectionWindows.count)")
+        DiagnosticLog.record("video preparation windows shown count=\(selectionWindows.count)")
         activateSelectionWindows()
     }
 
     private func showSelectionWindows(_ displays: [FrozenDisplay]) {
         let preparationWindows = selectionWindows
         selectionWindows = displays.map { display in
-            let view = GIFRegionSelectionView(
+            let view = VideoRegionSelectionView(
                 frame: NSRect(origin: .zero, size: display.screen.frame.size)
             )
             view.displayID = display.displayID
@@ -369,7 +363,7 @@ final class GIFRecordingCoordinator: NSObject, NSWindowDelegate {
             view.delegate = self
 
             let window = preparationWindows.first {
-                $0.screen?.gifDisplayID == display.displayID
+                $0.screen?.videoDisplayID == display.displayID
             } ?? makeSelectionWindow(for: display.screen, contentView: view, opaque: true)
             window.contentView = view
             window.backgroundColor = .black
@@ -393,8 +387,8 @@ final class GIFRecordingCoordinator: NSObject, NSWindowDelegate {
         for screen: NSScreen,
         contentView: NSView,
         opaque: Bool
-    ) -> GIFRecordingWindow {
-        let window = GIFRecordingWindow(
+    ) -> VideoRecordingWindow {
+        let window = VideoRecordingWindow(
             contentRect: screen.frame,
             styleMask: [.borderless],
             backing: .buffered,
@@ -435,7 +429,7 @@ final class GIFRecordingCoordinator: NSObject, NSWindowDelegate {
         NSApplication.shared.activate(ignoringOtherApps: true)
         preferred?.makeKeyAndOrderFront(nil)
         preferred?.makeFirstResponder(preferred?.contentView)
-        if let selectionView = preferred?.contentView as? GIFRegionSelectionView {
+        if let selectionView = preferred?.contentView as? VideoRegionSelectionView {
             selectionView.initializeHoverPoint(atScreenPoint: pointer)
         }
     }
@@ -467,15 +461,15 @@ final class GIFRecordingCoordinator: NSObject, NSWindowDelegate {
                 if hasSelectionFocus {
                     scheduleSelectionCursorSynchronization()
                     if attempt > 0 {
-                        DiagnosticLog.record("gif selection focus restored attempt=\(attempt)")
+                        DiagnosticLog.record("video selection focus restored attempt=\(attempt)")
                     }
                     return
                 }
-                DiagnosticLog.record("gif selection focus retry attempt=\(attempt + 1)")
+                DiagnosticLog.record("video selection focus retry attempt=\(attempt + 1)")
                 applySelectionFocus(includeHidden: false)
             }
             if !hasSelectionFocus {
-                DiagnosticLog.record("gif selection focus unavailable after retries")
+                DiagnosticLog.record("video selection focus unavailable after retries")
             }
         }
     }
@@ -483,7 +477,7 @@ final class GIFRecordingCoordinator: NSObject, NSWindowDelegate {
     func windowDidBecomeKey(_ notification: Notification) {
         guard !finished,
               phase == .preparing || phase == .selecting,
-              let window = notification.object as? GIFRecordingWindow,
+              let window = notification.object as? VideoRecordingWindow,
               selectionWindows.contains(where: { $0 === window }) else {
             return
         }
@@ -508,7 +502,7 @@ final class GIFRecordingCoordinator: NSObject, NSWindowDelegate {
            selectionWindows.contains(where: { $0 === keyWindow }) {
             return
         }
-        DiagnosticLog.record("gif selection focus lost; restoring overlay focus")
+        DiagnosticLog.record("video selection focus lost; restoring overlay focus")
         activateSelectionWindows(includeHidden: false)
     }
 
@@ -523,7 +517,7 @@ final class GIFRecordingCoordinator: NSObject, NSWindowDelegate {
                     return
                 }
                 if !self.synchronizeSelectionCursor() {
-                    DiagnosticLog.record("gif selection cursor sync skipped outside key window")
+                    DiagnosticLog.record("video selection cursor sync skipped outside key window")
                 }
             }
         }
@@ -532,16 +526,16 @@ final class GIFRecordingCoordinator: NSObject, NSWindowDelegate {
     @discardableResult
     private func synchronizeSelectionCursor() -> Bool {
         let pointer = NSEvent.mouseLocation
-        guard let window = NSApplication.shared.keyWindow as? GIFRecordingWindow,
+        guard let window = NSApplication.shared.keyWindow as? VideoRecordingWindow,
               selectionWindows.contains(where: { $0 === window }),
               window.isVisible,
               window.frame.contains(pointer) else {
             return false
         }
-        if let selectionView = window.contentView as? GIFRegionSelectionView {
+        if let selectionView = window.contentView as? VideoRegionSelectionView {
             return selectionView.synchronizeCursor(atScreenPoint: pointer)
         }
-        if let preparationView = window.contentView as? GIFRecordingPreparationView {
+        if let preparationView = window.contentView as? VideoRecordingPreparationView {
             window.invalidateCursorRects(for: preparationView)
             NSCursor.crosshair.set()
             return true
@@ -584,15 +578,15 @@ final class GIFRecordingCoordinator: NSObject, NSWindowDelegate {
                 }
             }
         } catch {
-            DiagnosticLog.record(error, phase: "register gif escape hotkey")
+            DiagnosticLog.record(error, phase: "register video escape hotkey")
         }
     }
 
     @discardableResult
     private func confirmCurrentSelection() -> Bool {
         guard phase == .selecting else { return false }
-        let preferredView = (NSApplication.shared.keyWindow?.contentView as? GIFRegionSelectionView)
-            ?? selectionWindows.compactMap { $0.contentView as? GIFRegionSelectionView }
+        let preferredView = (NSApplication.shared.keyWindow?.contentView as? VideoRegionSelectionView)
+            ?? selectionWindows.compactMap { $0.contentView as? VideoRegionSelectionView }
                 .first(where: { $0.selection != nil })
         guard let preferredView else { return false }
         return preferredView.requestConfirmation()
@@ -600,7 +594,7 @@ final class GIFRecordingCoordinator: NSObject, NSWindowDelegate {
 
     private func beginCountdown(
         selection: CGRect,
-        in view: GIFRegionSelectionView
+        in view: VideoRegionSelectionView
     ) {
         guard !finished,
               phase == .selecting,
@@ -612,7 +606,7 @@ final class GIFRecordingCoordinator: NSObject, NSWindowDelegate {
         let sourceRect = selection.integral.intersection(view.bounds)
         guard sourceRect.width >= 8, sourceRect.height >= 8 else { return }
         let context = SelectionContext(
-            region: GIFCaptureRegion(
+            region: VideoCaptureRegion(
                 displayID: displayID,
                 sourceRect: sourceRect,
                 backingScaleFactor: view.backingScaleFactor
@@ -634,7 +628,7 @@ final class GIFRecordingCoordinator: NSObject, NSWindowDelegate {
         showCountdownWindow(context: context, value: Self.countdownSeconds)
         publish(.countdown(Self.countdownSeconds))
         DiagnosticLog.record(
-            "gif countdown started session=\(sessionID?.uuidString ?? "unknown") " +
+            "video countdown started session=\(sessionID?.uuidString ?? "unknown") " +
             "display=\(displayID) rect=\(NSStringFromRect(sourceRect))"
         )
 
@@ -681,7 +675,7 @@ final class GIFRecordingCoordinator: NSObject, NSWindowDelegate {
             showRecordingHUD(context: context)
             startRecordingTimers(sessionID: sessionID)
             DiagnosticLog.record(
-                "gif recording started session=\(sessionID.uuidString) " +
+                "video recording started session=\(sessionID.uuidString) " +
                 "output=\(Int(info.outputPixelSize.width))x\(Int(info.outputPixelSize.height))"
             )
         } catch is CancellationError {
@@ -732,13 +726,13 @@ final class GIFRecordingCoordinator: NSObject, NSWindowDelegate {
             constrainedTo: context.screenVisibleFrame
         )
         let panel = makeAuxiliaryPanel(frame: frame, ignoresMouseEvents: true)
-        panel.contentView = GIFCountdownView(frame: CGRect(origin: .zero, size: size), value: value)
+        panel.contentView = VideoCountdownView(frame: CGRect(origin: .zero, size: size), value: value)
         countdownWindow = panel
         panel.orderFrontRegardless()
     }
 
     private func updateCountdown(_ value: Int) {
-        (countdownWindow?.contentView as? GIFCountdownView)?.value = value
+        (countdownWindow?.contentView as? VideoCountdownView)?.value = value
     }
 
     private func showRecordingBorder(context: SelectionContext) {
@@ -754,7 +748,7 @@ final class GIFRecordingCoordinator: NSObject, NSWindowDelegate {
             ignoresMouseEvents: true
         )
         panel.hasShadow = false
-        panel.contentView = GIFRecordingBorderView(
+        panel.contentView = VideoRecordingBorderView(
             frame: CGRect(origin: .zero, size: layout.windowFrame.size),
             captureFrame: layout.captureFrame,
             lineWidth: Self.recordingBorderWidth
@@ -776,7 +770,7 @@ final class GIFRecordingCoordinator: NSObject, NSWindowDelegate {
             frame: layout.frame,
             ignoresMouseEvents: !isInteractive
         )
-        let view = GIFRecordingHUDView(
+        let view = VideoRecordingHUDView(
             frame: CGRect(origin: .zero, size: layout.frame.size),
             language: language,
             showsStopButton: isInteractive,
@@ -795,7 +789,7 @@ final class GIFRecordingCoordinator: NSObject, NSWindowDelegate {
             max(0, Date().timeIntervalSince(recordingStartedAt ?? Date())),
             Self.maximumRecordingDuration
         )
-        (recordingHUDWindow?.contentView as? GIFRecordingHUDView)?.update(elapsed: elapsed)
+        (recordingHUDWindow?.contentView as? VideoRecordingHUDView)?.update(elapsed: elapsed)
     }
 
     private func makeAuxiliaryPanel(
@@ -834,7 +828,7 @@ final class GIFRecordingCoordinator: NSObject, NSWindowDelegate {
         return CGRect(origin: origin, size: size).constrained(within: visibleFrame)
     }
 
-    private func complete(_ result: GIFRecordingResult) {
+    private func complete(_ result: VideoRecordingResult) {
         guard !finished else { return }
         finished = true
         phase = .idle
@@ -843,11 +837,11 @@ final class GIFRecordingCoordinator: NSObject, NSWindowDelegate {
         pendingMovie = nil
         let completion = onFinish
         recorder = nil
-        encoder = nil
+        exporter = nil
         publish(.idle)
         clearCallbacks()
         DiagnosticLog.record(
-            "gif recording finished bytes=\(result.data.count) " +
+            "video recording finished bytes=\(result.data.count) " +
             "duration=\(String(format: "%.3f", result.duration))"
         )
         completion?(result)
@@ -867,11 +861,11 @@ final class GIFRecordingCoordinator: NSObject, NSWindowDelegate {
         restorePreviouslyActiveApplication()
         let recorder = self.recorder
         self.recorder = nil
-        encoder = nil
+        exporter = nil
         let completion = onError
         publish(.idle)
         clearCallbacks()
-        DiagnosticLog.record(error, phase: "gif recording")
+        DiagnosticLog.record(error, phase: "video recording")
         if let recorder {
             Task {
                 await recorder.cancel()
@@ -880,7 +874,7 @@ final class GIFRecordingCoordinator: NSObject, NSWindowDelegate {
         completion?(error)
     }
 
-    private func publish(_ newState: GIFRecordingState) {
+    private func publish(_ newState: VideoRecordingState) {
         state = newState
         onStateChange?(newState)
     }
@@ -945,7 +939,7 @@ final class GIFRecordingCoordinator: NSObject, NSWindowDelegate {
         let dismissedWindows = selectionWindows
         selectionWindows.removeAll()
         for window in dismissedWindows {
-            (window.contentView as? GIFRegionSelectionView)?.delegate = nil
+            (window.contentView as? VideoRegionSelectionView)?.delegate = nil
             window.delegate = nil
             window.orderOut(nil)
         }
@@ -1004,7 +998,7 @@ final class GIFRecordingCoordinator: NSObject, NSWindowDelegate {
 
         for screen in NSScreen.screens {
             try Task.checkCancellation()
-            guard let displayID = screen.gifDisplayID,
+            guard let displayID = screen.videoDisplayID,
                   let display = content.displays.first(where: { $0.displayID == displayID }) else {
                 continue
             }
@@ -1033,23 +1027,23 @@ final class GIFRecordingCoordinator: NSObject, NSWindowDelegate {
     }
 }
 
-extension GIFRecordingCoordinator: GIFRegionSelectionViewDelegate {
-    func gifRegionSelectionViewDidStartSelection(_ view: GIFRegionSelectionView) {
+extension VideoRecordingCoordinator: VideoRegionSelectionViewDelegate {
+    func videoRegionSelectionViewDidStartSelection(_ view: VideoRegionSelectionView) {
         guard phase == .selecting else { return }
         for window in selectionWindows where window.contentView !== view {
-            (window.contentView as? GIFRegionSelectionView)?.screenshot = nil
+            (window.contentView as? VideoRegionSelectionView)?.screenshot = nil
             window.orderOut(nil)
         }
         view.window?.makeKeyAndOrderFront(nil)
         view.window?.makeFirstResponder(view)
     }
 
-    func gifRegionSelectionViewDidCancel(_ view: GIFRegionSelectionView) {
+    func videoRegionSelectionViewDidCancel(_ view: VideoRegionSelectionView) {
         cancel()
     }
 
-    func gifRegionSelectionView(
-        _ view: GIFRegionSelectionView,
+    func videoRegionSelectionView(
+        _ view: VideoRegionSelectionView,
         didConfirm selection: CGRect
     ) {
         beginCountdown(selection: selection, in: view)
@@ -1057,14 +1051,14 @@ extension GIFRecordingCoordinator: GIFRegionSelectionViewDelegate {
 }
 
 @MainActor
-protocol GIFRegionSelectionViewDelegate: AnyObject {
-    func gifRegionSelectionViewDidStartSelection(_ view: GIFRegionSelectionView)
-    func gifRegionSelectionViewDidCancel(_ view: GIFRegionSelectionView)
-    func gifRegionSelectionView(_ view: GIFRegionSelectionView, didConfirm selection: CGRect)
+protocol VideoRegionSelectionViewDelegate: AnyObject {
+    func videoRegionSelectionViewDidStartSelection(_ view: VideoRegionSelectionView)
+    func videoRegionSelectionViewDidCancel(_ view: VideoRegionSelectionView)
+    func videoRegionSelectionView(_ view: VideoRegionSelectionView, didConfirm selection: CGRect)
 }
 
 @MainActor
-final class GIFRegionSelectionView: NSView {
+final class VideoRegionSelectionView: NSView {
     private enum Mode {
         case selecting
         case editing
@@ -1075,7 +1069,7 @@ final class GIFRegionSelectionView: NSView {
         static let selectionHandleHitSize: CGFloat = 14
     }
 
-    weak var delegate: GIFRegionSelectionViewDelegate?
+    weak var delegate: VideoRegionSelectionViewDelegate?
     var screenshot: CGImage? {
         didSet { needsDisplay = true }
     }
@@ -1129,19 +1123,19 @@ final class GIFRegionSelectionView: NSView {
            event.clickCount >= 2,
            let selection,
            selection.contains(point) {
-            delegate?.gifRegionSelectionView(self, didConfirm: selection)
+            delegate?.videoRegionSelectionView(self, didConfirm: selection)
             return
         }
 
         switch mode {
         case .selecting:
-            delegate?.gifRegionSelectionViewDidStartSelection(self)
+            delegate?.videoRegionSelectionViewDidStartSelection(self)
             dragStart = point
             selection = CGRect(origin: point, size: .zero)
         case .editing:
             guard let selection else {
                 mode = .selecting
-                delegate?.gifRegionSelectionViewDidStartSelection(self)
+                delegate?.videoRegionSelectionViewDidStartSelection(self)
                 dragStart = point
                 self.selection = CGRect(origin: point, size: .zero)
                 break
@@ -1157,7 +1151,7 @@ final class GIFRegionSelectionView: NSView {
                 NSCursor.closedHand.set()
             } else {
                 mode = .selecting
-                delegate?.gifRegionSelectionViewDidStartSelection(self)
+                delegate?.videoRegionSelectionViewDidStartSelection(self)
                 dragStart = point
                 self.selection = CGRect(origin: point, size: .zero)
                 hoveredSelectionResizeHandle = nil
@@ -1238,7 +1232,7 @@ final class GIFRegionSelectionView: NSView {
 
     override func keyDown(with event: NSEvent) {
         if event.keyCode == UInt16(kVK_Escape) {
-            delegate?.gifRegionSelectionViewDidCancel(self)
+            delegate?.videoRegionSelectionViewDidCancel(self)
             return
         }
         if event.keyCode == UInt16(kVK_Return)
@@ -1256,7 +1250,7 @@ final class GIFRegionSelectionView: NSView {
               selection.height >= 8 else {
             return false
         }
-        delegate?.gifRegionSelectionView(self, didConfirm: selection)
+        delegate?.videoRegionSelectionView(self, didConfirm: selection)
         return true
     }
 
@@ -1339,7 +1333,7 @@ final class GIFRegionSelectionView: NSView {
     }
 
     private func drawInstructions() {
-        let value = L10n.text("overlay.gif.instructions", language: language)
+        let value = L10n.text("overlay.video.instructions", language: language)
         let attributes: [NSAttributedString.Key: Any] = [
             .font: NSFont.systemFont(ofSize: 13, weight: .medium),
             .foregroundColor: NSColor.white,
@@ -1564,7 +1558,7 @@ final class GIFRegionSelectionView: NSView {
 }
 
 @MainActor
-private final class GIFRecordingPreparationView: NSView {
+private final class VideoRecordingPreparationView: NSView {
     private var onCancel: (() -> Void)?
 
     init(frame frameRect: NSRect, onCancel: @escaping () -> Void) {
@@ -1601,7 +1595,7 @@ private final class GIFRecordingPreparationView: NSView {
 }
 
 @MainActor
-private final class GIFCountdownView: NSView {
+private final class VideoCountdownView: NSView {
     var value: Int {
         didSet { needsDisplay = true }
     }
@@ -1644,7 +1638,7 @@ private final class GIFCountdownView: NSView {
 }
 
 @MainActor
-private final class GIFRecordingBorderView: NSView {
+private final class VideoRecordingBorderView: NSView {
     private let captureFrame: CGRect
     private let lineWidth: CGFloat
 
@@ -1714,13 +1708,13 @@ private final class GIFRecordingBorderView: NSView {
 }
 
 @MainActor
-private final class GIFRecordingHUDView: NSView {
+private final class VideoRecordingHUDView: NSView {
     private let language: AppLanguage
     private let showsStopButton: Bool
     private let stopShortcutDisplayName: String
     private let label = NSTextField(labelWithString: "")
     private let stopButton = NSButton()
-    private let recordingDot = GIFRecordingDotView()
+    private let recordingDot = VideoRecordingDotView()
     private var onStop: (() -> Void)?
 
     init(
@@ -1747,7 +1741,7 @@ private final class GIFRecordingHUDView: NSView {
         label.lineBreakMode = .byTruncatingTail
         addSubview(label)
 
-        stopButton.title = L10n.text("gif.hud.stop", language: language)
+        stopButton.title = L10n.text("video.hud.stop", language: language)
         stopButton.bezelStyle = .rounded
         stopButton.font = .systemFont(ofSize: 12, weight: .semibold)
         stopButton.target = self
@@ -1785,9 +1779,9 @@ private final class GIFRecordingHUDView: NSView {
         let wholeSeconds = Int(max(0, elapsed).rounded(.down))
         let value = String(format: "%02d:%02d", wholeSeconds / 60, wholeSeconds % 60)
         label.stringValue = showsStopButton
-            ? L10n.format("gif.hud.recording", language: language, value)
+            ? L10n.format("video.hud.recording", language: language, value)
             : L10n.format(
-                "gif.hud.recording_passive",
+                "video.hud.recording_passive",
                 language: language,
                 value,
                 stopShortcutDisplayName
@@ -1800,20 +1794,20 @@ private final class GIFRecordingHUDView: NSView {
 }
 
 @MainActor
-private final class GIFRecordingDotView: NSView {
+private final class VideoRecordingDotView: NSView {
     override func draw(_ dirtyRect: NSRect) {
         NSColor.systemRed.setFill()
         NSBezierPath(ovalIn: bounds.insetBy(dx: 0.5, dy: 0.5)).fill()
     }
 }
 
-private final class GIFRecordingWindow: NSWindow {
+private final class VideoRecordingWindow: NSWindow {
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { true }
 }
 
 private extension NSScreen {
-    var gifDisplayID: CGDirectDisplayID? {
+    var videoDisplayID: CGDirectDisplayID? {
         (deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber).map {
             CGDirectDisplayID($0.uint32Value)
         }

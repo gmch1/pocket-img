@@ -53,6 +53,11 @@ interface TimelineGroup {
   images: ImageItem[];
 }
 
+function isSupportedPastedMedia(type: string): boolean {
+  const normalized = type.toLowerCase();
+  return normalized.startsWith("image/") || normalized === "video/mp4";
+}
+
 function timelineDateLabel(createdAt: Date): string {
   const parts = TIMELINE_MONTH_DAY_LABEL.formatToParts(createdAt);
   const month = parts.find((part) => part.type === "month")?.value ?? "";
@@ -258,9 +263,9 @@ export default function App() {
       notify("请先输入 Token", true);
       return;
     }
-    const files = incoming.filter((file) => file.type.startsWith("image/")).slice(0, MAX_PASTE_FILES);
+    const files = incoming.filter((file) => isSupportedPastedMedia(file.type)).slice(0, MAX_PASTE_FILES);
     if (files.length === 0) return;
-    if (incoming.length > MAX_PASTE_FILES) notify(`一次最多上传 ${MAX_PASTE_FILES} 张`, true);
+    if (incoming.length > MAX_PASTE_FILES) notify(`一次最多上传 ${MAX_PASTE_FILES} 个文件`, true);
 
     const jobs = files.map((file) => {
       const id = `upload-${Date.now()}-${taskSequence.current++}`;
@@ -268,7 +273,7 @@ export default function App() {
     });
     const uploadable = jobs.filter(({ file }) => file.size <= MAX_FILE_BYTES);
     const rejectedCount = jobs.length - uploadable.length;
-    if (rejectedCount > 0) notify(rejectedCount === 1 ? "文件超过 25 MiB" : `${rejectedCount} 张图片超过 25 MiB`, true);
+    if (rejectedCount > 0) notify(rejectedCount === 1 ? "文件超过 25 MiB" : `${rejectedCount} 个文件超过 25 MiB`, true);
     if (uploadable.length === 0) return;
     setUploadTasks((current) => [
       ...current,
@@ -279,9 +284,10 @@ export default function App() {
       const successful: ImageItem[] = [];
       const failures: string[] = [];
       for (const { id, file } of uploadable) {
-        updateTask(id, { state: "optimizing", progress: 0 });
         try {
-          const prepared = await prepareImageForUpload(file);
+          const isVideo = file.type.toLowerCase() === "video/mp4";
+          if (!isVideo) updateTask(id, { state: "optimizing", progress: 0 });
+          const prepared = isVideo ? file : await prepareImageForUpload(file);
           updateTask(id, { state: "uploading" });
           const image = await uploadImage(
             prepared,
@@ -308,10 +314,10 @@ export default function App() {
       if (failures.length > 0) {
         const message = failures.length === 1 && successful.length === 0 && rejectedCount === 0
           ? failures[0]
-          : `${successful.length} 张上传完成，${failures.length + rejectedCount} 张失败`;
+          : `${successful.length} 个文件上传完成，${failures.length + rejectedCount} 个失败`;
         notify(message, true);
       } else if (rejectedCount > 0) {
-        if (successful.length > 0) notify(`${successful.length} 张上传完成，${rejectedCount} 张失败`, true);
+        if (successful.length > 0) notify(`${successful.length} 个文件上传完成，${rejectedCount} 个失败`, true);
       } else if (files.length === 1 && successful.length === 1) {
         try {
           await copyText(absoluteImageURL(successful[0].url));
@@ -320,7 +326,7 @@ export default function App() {
           notify("上传完成，自动复制失败", true);
         }
       } else if (successful.length > 0) {
-        notify(`${successful.length} 张图片上传完成`);
+        notify(`${successful.length} 个文件上传完成`);
       }
     });
   }, [expireSession, finishTask, notify, updateTask]);
@@ -328,7 +334,7 @@ export default function App() {
   useEffect(() => {
     const handlePaste = (event: ClipboardEvent) => {
       const files = Array.from(event.clipboardData?.items ?? [])
-        .filter((item) => item.kind === "file" && item.type.startsWith("image/"))
+        .filter((item) => item.kind === "file" && isSupportedPastedMedia(item.type))
         .map((item) => item.getAsFile())
         .filter((file): file is File => file !== null);
       if (files.length === 0) return;
@@ -349,7 +355,7 @@ export default function App() {
   }
 
   async function removeImages(ids: string[]) {
-    if (ids.length === 0 || !window.confirm(ids.length === 1 ? "永久删除这张图片？" : `永久删除选中的 ${ids.length} 张图片？`)) return;
+    if (ids.length === 0 || !window.confirm(ids.length === 1 ? "永久删除这项媒体？" : `永久删除选中的 ${ids.length} 项媒体？`)) return;
     try {
       const deleted = await deleteImages(ids);
       if (deleted === ids.length) {
@@ -360,7 +366,7 @@ export default function App() {
       }
       setSelected(new Set());
       if (preview && ids.includes(preview.id)) setPreview(null);
-      notify(deleted > 0 ? `已永久删除 ${deleted} 张图片` : "图片不存在或不属于当前空间", deleted === 0);
+      notify(deleted > 0 ? `已永久删除 ${deleted} 项媒体` : "媒体不存在或不属于当前空间", deleted === 0);
     } catch (reason) {
       if (reason instanceof APIError && reason.status === 401) expireSession();
       else notify(reason instanceof Error ? reason.message : "删除失败", true);
@@ -461,7 +467,7 @@ export default function App() {
       </header>
 
       <main className="gallery-shell">
-        <div className="paste-line"><kbd>Ctrl</kbd><span>+</span><kbd>V</kbd><span>粘贴图片即可上传</span></div>
+        <div className="paste-line"><kbd>Ctrl</kbd><span>+</span><kbd>V</kbd><span>粘贴图片或 MP4 视频即可上传</span></div>
         {galleryError ? (
           <div className="state-panel state-panel--error" role="alert">
             <span className="state-panel__mark"><AlertIcon /></span>
@@ -478,7 +484,7 @@ export default function App() {
           <div className="gallery-refreshing" role="status" aria-label="正在刷新图库"><span className="spinner" /></div>
         ) : null}
         {!galleryError && !loading && images.length === 0 ? (
-          <div className="empty-gallery"><ImageIcon /><p>粘贴第一张图片</p></div>
+          <div className="empty-gallery"><ImageIcon /><p>粘贴第一张图片或视频</p></div>
         ) : null}
         {images.length > 0 ? (
           <section
@@ -494,7 +500,7 @@ export default function App() {
               <div className="timeline-group" key={group.key}>
                 <header className="timeline-group__label">
                   <strong>{group.label}</strong>
-                  <span>{group.images.length} 张</span>
+                  <span>{group.images.length} 项</span>
                 </header>
                 <div className="image-grid">
                   {group.images.map((image) => (
@@ -527,12 +533,12 @@ export default function App() {
             ) : null}
           </section>
         ) : null}
-        {images.length === 100 ? <p className="list-limit">当前显示最近 100 张</p> : null}
+        {images.length === 100 ? <p className="list-limit">当前显示最近 100 项</p> : null}
       </main>
 
       {selected.size > 0 ? (
         <div className="selection-toolbar" role="toolbar" aria-label="批量操作">
-          <strong aria-label={`已选择 ${selected.size} 张`}>已选 {selected.size} 张</strong>
+          <strong aria-label={`已选择 ${selected.size} 项媒体`}>已选 {selected.size} 项</strong>
           <span className="selection-toolbar__divider" aria-hidden="true" />
           <button type="button" disabled={selected.size === images.length} onClick={() => setSelected(new Set(images.map((image) => image.id)))}>全选</button>
           <button className="selection-toolbar__danger" type="button" onClick={() => void removeImages(Array.from(selected))}><TrashIcon />删除</button>

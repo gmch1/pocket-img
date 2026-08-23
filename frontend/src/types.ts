@@ -2,6 +2,7 @@ export type GalleryRange = "today" | "7d" | "30d" | "all";
 
 export interface ImageItem {
   id: string;
+  media_type: `image/${string}` | "video/mp4";
   width: number;
   height: number;
   byte_size: number;

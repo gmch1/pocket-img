@@ -9,11 +9,27 @@ private struct StoredSettings: Codable {
     let hotKeyCode: UInt32
     let hotKeyModifiers: UInt
     let hotKeyLabel: String
-    let gifHotKeyCode: UInt32?
-    let gifHotKeyModifiers: UInt?
-    let gifHotKeyLabel: String?
+    let videoHotKeyCode: UInt32?
+    let videoHotKeyModifiers: UInt?
+    let videoHotKeyLabel: String?
     let annotationStyle: AnnotationStylePreferences?
     let language: AppLanguage?
+
+    // Keep the original JSON keys so upgrading from the GIF experiment does
+    // not reset the user's F2 shortcut.
+    private enum CodingKeys: String, CodingKey {
+        case schemaVersion
+        case serverAddress
+        case token
+        case hotKeyCode
+        case hotKeyModifiers
+        case hotKeyLabel
+        case videoHotKeyCode = "gifHotKeyCode"
+        case videoHotKeyModifiers = "gifHotKeyModifiers"
+        case videoHotKeyLabel = "gifHotKeyLabel"
+        case annotationStyle
+        case language
+    }
 }
 
 private struct SettingsStore {
@@ -110,7 +126,7 @@ final class AppSettings: ObservableObject {
     @Published var serverAddress: String
     @Published var token: String
     @Published var hotKey: HotKey
-    @Published var gifHotKey: HotKey
+    @Published var videoHotKey: HotKey
     @Published var language: AppLanguage
     @Published var hotKeyRegistrationError = ""
     private(set) var annotationStyle: AnnotationStylePreferences
@@ -132,18 +148,18 @@ final class AppSettings: ObservableObject {
                 && storedHotKey.modifiers == 0
                 && storedHotKey.keyLabel.uppercased() == "F2"
             let resolvedHotKey = shouldMigrateLegacyF2 ? HotKey.default : storedHotKey
-            let resolvedGIFHotKey: HotKey
-            if let keyCode = stored.gifHotKeyCode,
-               let modifiers = stored.gifHotKeyModifiers,
-               let keyLabel = stored.gifHotKeyLabel,
+            let resolvedVideoHotKey: HotKey
+            if let keyCode = stored.videoHotKeyCode,
+               let modifiers = stored.videoHotKeyModifiers,
+               let keyLabel = stored.videoHotKeyLabel,
                !keyLabel.isEmpty {
-                resolvedGIFHotKey = HotKey(
+                resolvedVideoHotKey = HotKey(
                     keyCode: keyCode,
                     modifiers: modifiers,
                     keyLabel: keyLabel
                 )
             } else {
-                resolvedGIFHotKey = .gifDefault
+                resolvedVideoHotKey = .videoDefault
             }
             let storedAnnotationStyle = stored.annotationStyle
             let shouldMigrateDefaultLineWidths = stored.schemaVersion == 2
@@ -163,7 +179,7 @@ final class AppSettings: ObservableObject {
             serverAddress = stored.serverAddress
             token = stored.token
             hotKey = resolvedHotKey
-            gifHotKey = resolvedGIFHotKey
+            videoHotKey = resolvedVideoHotKey
             annotationStyle = resolvedAnnotationStyle
             language = stored.language ?? .system
 
@@ -177,9 +193,9 @@ final class AppSettings: ObservableObject {
                     hotKeyCode: resolvedHotKey.keyCode,
                     hotKeyModifiers: resolvedHotKey.modifiers,
                     hotKeyLabel: resolvedHotKey.keyLabel,
-                    gifHotKeyCode: resolvedGIFHotKey.keyCode,
-                    gifHotKeyModifiers: resolvedGIFHotKey.modifiers,
-                    gifHotKeyLabel: resolvedGIFHotKey.keyLabel,
+                    videoHotKeyCode: resolvedVideoHotKey.keyCode,
+                    videoHotKeyModifiers: resolvedVideoHotKey.modifiers,
+                    videoHotKeyLabel: resolvedVideoHotKey.keyLabel,
                     annotationStyle: resolvedAnnotationStyle,
                     language: stored.language ?? .system
                 ))
@@ -188,7 +204,7 @@ final class AppSettings: ObservableObject {
             serverAddress = ""
             token = ""
             hotKey = .default
-            gifHotKey = .gifDefault
+            videoHotKey = .videoDefault
             annotationStyle = .default
             language = .system
         }
@@ -203,9 +219,9 @@ final class AppSettings: ObservableObject {
             hotKeyCode: hotKey.keyCode,
             hotKeyModifiers: hotKey.modifiers,
             hotKeyLabel: hotKey.keyLabel,
-            gifHotKeyCode: gifHotKey.keyCode,
-            gifHotKeyModifiers: gifHotKey.modifiers,
-            gifHotKeyLabel: gifHotKey.keyLabel,
+            videoHotKeyCode: videoHotKey.keyCode,
+            videoHotKeyModifiers: videoHotKey.modifiers,
+            videoHotKeyLabel: videoHotKey.keyLabel,
             annotationStyle: annotationStyle,
             language: language
         ))
@@ -224,9 +240,9 @@ final class AppSettings: ObservableObject {
                 hotKeyCode: value.keyCode,
                 hotKeyModifiers: value.modifiers,
                 hotKeyLabel: value.keyLabel,
-                gifHotKeyCode: stored?.gifHotKeyCode ?? gifHotKey.keyCode,
-                gifHotKeyModifiers: stored?.gifHotKeyModifiers ?? gifHotKey.modifiers,
-                gifHotKeyLabel: stored?.gifHotKeyLabel ?? gifHotKey.keyLabel,
+                videoHotKeyCode: stored?.videoHotKeyCode ?? videoHotKey.keyCode,
+                videoHotKeyModifiers: stored?.videoHotKeyModifiers ?? videoHotKey.modifiers,
+                videoHotKeyLabel: stored?.videoHotKeyLabel ?? videoHotKey.keyLabel,
                 annotationStyle: stored?.annotationStyle ?? annotationStyle,
                 language: stored?.language ?? language
             ))
@@ -235,8 +251,8 @@ final class AppSettings: ObservableObject {
         }
     }
 
-    func persistGIFHotKey(_ value: HotKey) {
-        gifHotKey = value
+    func persistVideoHotKey(_ value: HotKey) {
+        videoHotKey = value
         do {
             let stored = try store.load()
             try store.save(StoredSettings(
@@ -246,14 +262,14 @@ final class AppSettings: ObservableObject {
                 hotKeyCode: stored?.hotKeyCode ?? hotKey.keyCode,
                 hotKeyModifiers: stored?.hotKeyModifiers ?? hotKey.modifiers,
                 hotKeyLabel: stored?.hotKeyLabel ?? hotKey.keyLabel,
-                gifHotKeyCode: value.keyCode,
-                gifHotKeyModifiers: value.modifiers,
-                gifHotKeyLabel: value.keyLabel,
+                videoHotKeyCode: value.keyCode,
+                videoHotKeyModifiers: value.modifiers,
+                videoHotKeyLabel: value.keyLabel,
                 annotationStyle: stored?.annotationStyle ?? annotationStyle,
                 language: stored?.language ?? language
             ))
         } catch {
-            DiagnosticLog.record(error, phase: "save GIF hotkey")
+            DiagnosticLog.record(error, phase: "save video hotkey")
         }
     }
 
@@ -268,9 +284,9 @@ final class AppSettings: ObservableObject {
                 hotKeyCode: stored?.hotKeyCode ?? hotKey.keyCode,
                 hotKeyModifiers: stored?.hotKeyModifiers ?? hotKey.modifiers,
                 hotKeyLabel: stored?.hotKeyLabel ?? hotKey.keyLabel,
-                gifHotKeyCode: stored?.gifHotKeyCode ?? gifHotKey.keyCode,
-                gifHotKeyModifiers: stored?.gifHotKeyModifiers ?? gifHotKey.modifiers,
-                gifHotKeyLabel: stored?.gifHotKeyLabel ?? gifHotKey.keyLabel,
+                videoHotKeyCode: stored?.videoHotKeyCode ?? videoHotKey.keyCode,
+                videoHotKeyModifiers: stored?.videoHotKeyModifiers ?? videoHotKey.modifiers,
+                videoHotKeyLabel: stored?.videoHotKeyLabel ?? videoHotKey.keyLabel,
                 annotationStyle: stored?.annotationStyle ?? annotationStyle,
                 language: value
             ))
@@ -305,9 +321,9 @@ final class AppSettings: ObservableObject {
                 hotKeyCode: stored?.hotKeyCode ?? hotKey.keyCode,
                 hotKeyModifiers: stored?.hotKeyModifiers ?? hotKey.modifiers,
                 hotKeyLabel: stored?.hotKeyLabel ?? hotKey.keyLabel,
-                gifHotKeyCode: stored?.gifHotKeyCode ?? gifHotKey.keyCode,
-                gifHotKeyModifiers: stored?.gifHotKeyModifiers ?? gifHotKey.modifiers,
-                gifHotKeyLabel: stored?.gifHotKeyLabel ?? gifHotKey.keyLabel,
+                videoHotKeyCode: stored?.videoHotKeyCode ?? videoHotKey.keyCode,
+                videoHotKeyModifiers: stored?.videoHotKeyModifiers ?? videoHotKey.modifiers,
+                videoHotKeyLabel: stored?.videoHotKeyLabel ?? videoHotKey.keyLabel,
                 annotationStyle: annotationStyle,
                 language: stored?.language ?? language
             ))

@@ -17,6 +17,7 @@ export function ImageCard({ image, selected, selectionMode, onOpen, onCopy, onDe
   const timer = useRef<number | undefined>(undefined);
   const origin = useRef({ x: 0, y: 0 });
   const suppressClick = useRef(false);
+  const isVideo = image.media_type === "video/mp4";
 
   function cancelLongPress() {
     if (timer.current !== undefined) window.clearTimeout(timer.current);
@@ -68,13 +69,24 @@ export function ImageCard({ image, selected, selectionMode, onOpen, onCopy, onDe
       onKeyDown={keyDown}
     >
       <div className="image-card__media">
-        <img src={image.thumbnail_url} alt="" loading="lazy" draggable={false} />
+        {isVideo ? (
+          <video
+            src={image.url}
+            poster={image.thumbnail_url !== image.url ? image.thumbnail_url : undefined}
+            muted
+            preload="metadata"
+            playsInline
+            draggable={false}
+          />
+        ) : <img src={image.thumbnail_url} alt="" loading="lazy" draggable={false} />}
         {selected ? <span className="selection-mark"><CheckIcon /></span> : null}
-        {image.animated ? <span className="animation-mark">GIF</span> : null}
+        {isVideo
+          ? <span className="media-type-mark">视频</span>
+          : image.animated ? <span className="media-type-mark">GIF</span> : null}
         {!selectionMode ? (
           <div className="image-card__actions" onClick={(event) => event.stopPropagation()} onPointerDown={(event) => event.stopPropagation()}>
-            <button className="icon-button" type="button" aria-label="复制图片链接" onClick={onCopy}><CopyIcon /></button>
-            <button className="icon-button icon-button--danger" type="button" aria-label="永久删除图片" onClick={onDelete}><TrashIcon /></button>
+            <button className="icon-button" type="button" aria-label="复制媒体链接" onClick={onCopy}><CopyIcon /></button>
+            <button className="icon-button icon-button--danger" type="button" aria-label="永久删除媒体" onClick={onDelete}><TrashIcon /></button>
           </div>
         ) : null}
       </div>

@@ -245,7 +245,7 @@ func (s *store) commitThumbnailWithinQuota(ctx context.Context, ownerID, id stri
 	thumbnailSize := size
 	if size > quotaBytes || usedBytes > quotaBytes-size {
 		result = thumbnailQuotaExceeded
-		thumbnailSize = -1
+		thumbnailSize = thumbnailFailedSize
 	}
 	updated, err := tx.ExecContext(ctx, `UPDATE images SET thumbnail_size = ?, thumbnail_next_attempt_ms = 0
 		WHERE owner_id = ? AND id = ? AND thumbnail_size = 0`, thumbnailSize, ownerID, id)
@@ -268,7 +268,7 @@ func (s *store) recordThumbnailFailure(ctx context.Context, record imageRecord, 
 	nextAttemptMilli := nextAttempt.UnixMilli()
 	permanent := nextAttempts >= thumbnailMaxAttempts
 	if permanent {
-		thumbnailSize = -1
+		thumbnailSize = thumbnailFailedSize
 		nextAttemptMilli = 0
 	}
 	result, err := s.db.ExecContext(ctx, `UPDATE images

@@ -3,18 +3,15 @@ import CoreGraphics
 import CoreMedia
 import CoreVideo
 import Foundation
-import ImageIO
 import ScreenCaptureKit
-import UniformTypeIdentifiers
-import Darwin
 
-// MARK: - Values shared with the GIF recording coordinator
+// MARK: - Values shared with the Video recording coordinator
 
 /// A crop in the selected display's ScreenCaptureKit coordinate space.
 /// `sourceRect` is expressed in display points, with the origin expected by
 /// `SCStreamConfiguration.sourceRect`. `backingScaleFactor` converts those
 /// points into source pixels before the 1280-pixel recording cap is applied.
-struct GIFCaptureRegion: Sendable {
+struct VideoCaptureRegion: Sendable {
     let displayID: CGDirectDisplayID
     let sourceRect: CGRect
     let backingScaleFactor: CGFloat
@@ -30,7 +27,7 @@ struct GIFCaptureRegion: Sendable {
     }
 }
 
-struct GIFFrameStatistics: Codable, Equatable, Sendable {
+struct VideoFrameStatistics: Codable, Equatable, Sendable {
     let received: Int
     let appended: Int
     let dropped: Int
@@ -41,27 +38,27 @@ struct GIFFrameStatistics: Codable, Equatable, Sendable {
     let appendFailed: Int
 }
 
-struct GIFRecordingInfo: Sendable {
+struct VideoRecordingInfo: Sendable {
     let sessionID: UUID
-    let region: GIFCaptureRegion
+    let region: VideoCaptureRegion
     let outputPixelSize: CGSize
     let movieURL: URL
     let startedAt: Date
 }
 
-struct GIFMovieRecording: Sendable {
-    let info: GIFRecordingInfo
+struct VideoMovieRecording: Sendable {
+    let info: VideoRecordingInfo
     let duration: TimeInterval
     let movieBytes: Int64
-    let frames: GIFFrameStatistics
+    let frames: VideoFrameStatistics
 }
 
-/// A half-open time range used while sampling the intermediate movie.
+/// A half-open time range used while exporting the intermediate movie.
 ///
 /// Callers may construct a range before the movie's exact duration is known.
 /// `normalized(forDuration:)` clamps both endpoints to the asset and rejects
-/// ranges that are reversed, non-finite, or too short to produce a useful GIF.
-struct GIFTrimRange: Equatable, Sendable {
+/// ranges that are reversed, non-finite, or too short to produce a useful video.
+struct VideoTrimRange: Equatable, Sendable {
     static let minimumDuration: TimeInterval = 0.1
 
     let start: TimeInterval
@@ -85,7 +82,7 @@ struct GIFTrimRange: Equatable, Sendable {
             && duration >= Self.minimumDuration
     }
 
-    func normalized(forDuration assetDuration: TimeInterval) -> GIFTrimRange? {
+    func normalized(forDuration assetDuration: TimeInterval) -> VideoTrimRange? {
         guard assetDuration.isFinite,
               assetDuration > 0,
               start.isFinite,
@@ -93,7 +90,7 @@ struct GIFTrimRange: Equatable, Sendable {
               end > start else {
             return nil
         }
-        let normalized = GIFTrimRange(
+        let normalized = VideoTrimRange(
             start: min(max(0, start), assetDuration),
             end: min(max(0, end), assetDuration)
         )
@@ -101,99 +98,28 @@ struct GIFTrimRange: Equatable, Sendable {
     }
 }
 
-/// Pure frame scheduling logic shared by every encoder quality attempt.
-/// Keeping this independent from AVFoundation makes trim clamping, frame count,
-/// sample positions, and the shortened final-frame delay straightforward to test.
-struct GIFFrameSchedule: Equatable, Sendable {
-    let range: GIFTrimRange
-    let frameRate: Int
-    let frameCount: Int
-
-    init?(
-        trimRange: GIFTrimRange?,
-        assetDuration: TimeInterval,
-        frameRate: Int
-    ) {
-        guard assetDuration.isFinite,
-              assetDuration > 0,
-              frameRate > 0 else {
-            return nil
-        }
-
-        let effectiveRange: GIFTrimRange
-        if let trimRange {
-            guard let normalized = trimRange.normalized(forDuration: assetDuration) else {
-                return nil
-            }
-            effectiveRange = normalized
-        } else {
-            effectiveRange = GIFTrimRange(start: 0, end: assetDuration)
-        }
-
-        // Avoid manufacturing an empty trailing frame when a mathematically
-        // integral duration lands a few ULPs above the integer boundary.
-        let scaledFrameCount = effectiveRange.duration * Double(frameRate)
-        let rawFrameCount = ceil(max(0, scaledFrameCount - 1e-9))
-        guard rawFrameCount.isFinite,
-              rawFrameCount > 0,
-              rawFrameCount < Double(Int.max) else {
-            return nil
-        }
-        range = effectiveRange
-        self.frameRate = frameRate
-        frameCount = max(1, Int(rawFrameCount))
-    }
-
-    func sampleTime(forFrame index: Int) -> TimeInterval? {
-        guard (0..<frameCount).contains(index) else { return nil }
-        let requestedTime = range.start + Double(index) / Double(frameRate)
-        // The schedule is half-open. This guard also protects against floating
-        // point rounding placing the final request exactly on the end boundary.
-        return min(requestedTime, range.end.nextDown)
-    }
-
-    func frameDelay(forFrame index: Int) -> TimeInterval? {
-        guard (0..<frameCount).contains(index) else { return nil }
-        let frameDuration = 1 / Double(frameRate)
-        let elapsed = Double(index) * frameDuration
-        return min(frameDuration, max(0, range.duration - elapsed))
-    }
-}
-
-struct GIFEncodingAttempt: Codable, Equatable, Sendable {
-    let frameRate: Int
-    let maxDimension: Int
-    let outputPixelSize: CGSize
-    let gifBytes: Int64
-    let wallTime: TimeInterval
-    let cpuTime: TimeInterval
-}
-
-struct GIFEncodingResult: Sendable {
+struct VideoExportResult: Sendable {
     let sessionID: UUID
     let data: Data
     let fileURL: URL
     let outputPixelSize: CGSize
-    let frameRate: Int
     let duration: TimeInterval
-    let gifBytes: Int64
-    let attempts: [GIFEncodingAttempt]
-    let encodingWallTime: TimeInterval
-    let encodingCPUTime: TimeInterval
+    let videoBytes: Int64
+    let exportWallTime: TimeInterval
     let exceedsMaximumBytes: Bool
 }
 
-enum GIFExperimentStage: String, Codable, Sendable {
+enum VideoExperimentStage: String, Codable, Sendable {
     case selection
     case recordingSetup = "recording_setup"
     case recording
     case recordingStop = "recording_stop"
-    case encoding
+    case exporting
     case clipboard
     case upload
 }
 
-enum GIFMediaPipelineError: LocalizedError, Sendable {
+enum VideoMediaPipelineError: LocalizedError, Sendable {
     case invalidRegion
     case invalidTrimRange
     case displayNotFound
@@ -208,25 +134,26 @@ enum GIFMediaPipelineError: LocalizedError, Sendable {
     case screenCaptureStopped(domain: String, code: Int)
     case assetWriterFailed(domain: String, code: Int)
     case unreadableMovie
-    case unableToCreateGIF
-    case unableToReadGIF
+    case unableToCreateVideoExporter
+    case videoExportFailed(domain: String, code: Int)
+    case unableToReadVideo
 
     var errorDescription: String? {
         switch self {
         case .invalidRegion:
-            return "The selected GIF recording region is invalid."
+            return "The selected video recording region is invalid."
         case .invalidTrimRange:
-            return "The selected GIF time range is invalid or too short."
+            return "The selected video time range is invalid or too short."
         case .displayNotFound:
             return "The selected display is no longer available."
         case .startInProgress:
-            return "GIF recording is still starting."
+            return "Video recording is still starting."
         case .alreadyRecording:
-            return "A GIF recording is already active."
+            return "A video recording is already active."
         case .notRecording:
-            return "No GIF recording is active."
+            return "No video recording is active."
         case .unableToCreateTemporaryDirectory:
-            return "The temporary GIF recording directory could not be created."
+            return "The temporary video recording directory could not be created."
         case .unableToCreateAssetWriter:
             return "The temporary screen recording could not be created."
         case .unableToConfigureAssetWriter:
@@ -241,10 +168,12 @@ enum GIFMediaPipelineError: LocalizedError, Sendable {
             return "The temporary screen recording could not be finalized."
         case .unreadableMovie:
             return "The temporary screen recording could not be read."
-        case .unableToCreateGIF:
-            return "The GIF encoder could not create an output file."
-        case .unableToReadGIF:
-            return "The encoded GIF could not be read."
+        case .unableToCreateVideoExporter:
+            return "The video exporter could not be created."
+        case .videoExportFailed:
+            return "The selected video could not be exported."
+        case .unableToReadVideo:
+            return "The exported video could not be read."
         }
     }
 
@@ -264,8 +193,9 @@ enum GIFMediaPipelineError: LocalizedError, Sendable {
         case .screenCaptureStopped: return "screen_capture_stopped"
         case .assetWriterFailed: return "asset_writer_failed"
         case .unreadableMovie: return "unreadable_movie"
-        case .unableToCreateGIF: return "gif_create"
-        case .unableToReadGIF: return "gif_read"
+        case .unableToCreateVideoExporter: return "video_exporter_create"
+        case .videoExportFailed: return "video_export"
+        case .unableToReadVideo: return "video_read"
         }
     }
 }
@@ -283,11 +213,11 @@ actor ScreenStreamRecorder {
     }
 
     private final class ActiveRecording: @unchecked Sendable {
-        let info: GIFRecordingInfo
+        let info: VideoRecordingInfo
         let stream: SCStream
-        let output: GIFStreamOutput
+        let output: VideoStreamOutput
 
-        init(info: GIFRecordingInfo, stream: SCStream, output: GIFStreamOutput) {
+        init(info: VideoRecordingInfo, stream: SCStream, output: VideoStreamOutput) {
             self.info = info
             self.stream = stream
             self.output = output
@@ -303,23 +233,23 @@ actor ScreenStreamRecorder {
         self.onUnexpectedStop = onUnexpectedStop
     }
 
-    func start(region: GIFCaptureRegion, sessionID: UUID) async throws -> GIFRecordingInfo {
+    func start(region: VideoCaptureRegion, sessionID: UUID) async throws -> VideoRecordingInfo {
         switch state {
         case .idle:
             break
         case .starting:
-            throw GIFMediaPipelineError.startInProgress
+            throw VideoMediaPipelineError.startInProgress
         case .recording, .stopping:
-            throw GIFMediaPipelineError.alreadyRecording
+            throw VideoMediaPipelineError.alreadyRecording
         }
 
         guard Self.isValid(region) else {
-            GIFExperimentLogger.recordError(
+            VideoExperimentLogger.recordError(
                 sessionID: sessionID,
                 stage: .recordingSetup,
-                error: GIFMediaPipelineError.invalidRegion
+                error: VideoMediaPipelineError.invalidRegion
             )
-            throw GIFMediaPipelineError.invalidRegion
+            throw VideoMediaPipelineError.invalidRegion
         }
 
         state = .starting
@@ -327,15 +257,15 @@ actor ScreenStreamRecorder {
         cancelStopRequested = false
 
         let outputSize = Self.outputPixelSize(for: region)
-        GIFExperimentLogger.recordRecordingAttempt(
+        VideoExperimentLogger.recordRecordingAttempt(
             sessionID: sessionID,
             region: region,
             outputPixelSize: outputSize
         )
-        var createdOutput: GIFStreamOutput?
+        var createdOutput: VideoStreamOutput?
         var createdStream: SCStream?
         do {
-            let movieURL = try GIFTemporaryFiles.makeURL(
+            let movieURL = try VideoTemporaryFiles.makeURL(
                 sessionID: sessionID,
                 kind: "recording",
                 pathExtension: "mov"
@@ -349,7 +279,7 @@ actor ScreenStreamRecorder {
             guard let display = content.displays.first(where: {
                 $0.displayID == region.displayID
             }) else {
-                throw GIFMediaPipelineError.displayNotFound
+                throw VideoMediaPipelineError.displayNotFound
             }
 
             let currentProcessID = ProcessInfo.processInfo.processIdentifier
@@ -388,19 +318,19 @@ actor ScreenStreamRecorder {
             configuration.capturesAudio = false
 
             let startedAt = Date()
-            let info = GIFRecordingInfo(
+            let info = VideoRecordingInfo(
                 sessionID: sessionID,
                 region: region,
                 outputPixelSize: outputSize,
                 movieURL: movieURL,
                 startedAt: startedAt
             )
-            let output = try GIFStreamOutput(
+            let output = try VideoStreamOutput(
                 movieURL: movieURL,
                 outputPixelSize: outputSize,
                 frameRate: 10,
                 onUnexpectedStop: { [onUnexpectedStop] error in
-                    GIFExperimentLogger.recordError(
+                    VideoExperimentLogger.recordError(
                         sessionID: sessionID,
                         stage: .recording,
                         error: error,
@@ -430,7 +360,7 @@ actor ScreenStreamRecorder {
             state = .recording(
                 ActiveRecording(info: info, stream: stream, output: output)
             )
-            GIFExperimentLogger.recordSessionStarted(info)
+            VideoExperimentLogger.recordSessionStarted(info)
             return info
         } catch {
             if let stream = createdStream {
@@ -444,7 +374,7 @@ actor ScreenStreamRecorder {
             cancelStartRequested = false
             cancelStopRequested = false
             if !(error is CancellationError) {
-                GIFExperimentLogger.recordError(
+                VideoExperimentLogger.recordError(
                     sessionID: sessionID,
                     stage: .recordingSetup,
                     error: error,
@@ -456,15 +386,15 @@ actor ScreenStreamRecorder {
         }
     }
 
-    func stop() async throws -> GIFMovieRecording {
+    func stop() async throws -> VideoMovieRecording {
         let active: ActiveRecording
         switch state {
         case .recording(let value):
             active = value
         case .starting:
-            throw GIFMediaPipelineError.startInProgress
+            throw VideoMediaPipelineError.startInProgress
         case .idle, .stopping:
-            throw GIFMediaPipelineError.notRecording
+            throw VideoMediaPipelineError.notRecording
         }
 
         state = .stopping
@@ -491,13 +421,13 @@ actor ScreenStreamRecorder {
                 throw stopError
             }
 
-            let movie = GIFMovieRecording(
+            let movie = VideoMovieRecording(
                 info: active.info,
                 duration: summary.duration,
                 movieBytes: Self.fileSize(at: active.info.movieURL),
                 frames: summary.frames
             )
-            GIFExperimentLogger.recordRecording(movie)
+            VideoExperimentLogger.recordRecording(movie)
             return movie
         } catch {
             state = .idle
@@ -505,7 +435,7 @@ actor ScreenStreamRecorder {
             cancelStopRequested = false
             try? FileManager.default.removeItem(at: active.info.movieURL)
             if !(error is CancellationError) {
-                GIFExperimentLogger.recordError(
+                VideoExperimentLogger.recordError(
                     sessionID: active.info.sessionID,
                     stage: .recordingStop,
                     error: error,
@@ -534,7 +464,7 @@ actor ScreenStreamRecorder {
         case .stopping:
             // `stop()` owns the stream and writer while awaiting their async
             // completion. It observes this flag before returning and removes
-            // the movie instead of handing it to the encoder.
+            // the movie instead of handing it to the exporter.
             cancelStopRequested = true
         }
     }
@@ -546,7 +476,7 @@ actor ScreenStreamRecorder {
         }
     }
 
-    private static func isValid(_ region: GIFCaptureRegion) -> Bool {
+    private static func isValid(_ region: VideoCaptureRegion) -> Bool {
         let rect = region.sourceRect
         return rect.origin.x.isFinite
             && rect.origin.y.isFinite
@@ -560,7 +490,7 @@ actor ScreenStreamRecorder {
             && region.backingScaleFactor > 0
     }
 
-    private static func outputPixelSize(for region: GIFCaptureRegion) -> CGSize {
+    private static func outputPixelSize(for region: VideoCaptureRegion) -> CGSize {
         let sourceWidth = region.sourceRect.width * region.backingScaleFactor
         let sourceHeight = region.sourceRect.height * region.backingScaleFactor
         let reduction = min(1, 1280 / max(sourceWidth, sourceHeight))
@@ -580,14 +510,14 @@ actor ScreenStreamRecorder {
     }
 }
 
-private final class GIFStreamOutput: NSObject, SCStreamOutput, SCStreamDelegate, @unchecked Sendable {
+private final class VideoStreamOutput: NSObject, SCStreamOutput, SCStreamDelegate, @unchecked Sendable {
     struct Summary: Sendable {
         let duration: TimeInterval
-        let frames: GIFFrameStatistics
+        let frames: VideoFrameStatistics
     }
 
     let sampleQueue = DispatchQueue(
-        label: "com.gmch.pocketimg.shot.gif-recording",
+        label: "com.gmch.pocketimg.shot.video-recording",
         qos: .userInitiated
     )
 
@@ -629,15 +559,18 @@ private final class GIFStreamOutput: NSObject, SCStreamOutput, SCStreamDelegate,
         do {
             writer = try AVAssetWriter(outputURL: movieURL, fileType: .mov)
         } catch {
-            throw GIFMediaPipelineError.unableToCreateAssetWriter
+            throw VideoMediaPipelineError.unableToCreateAssetWriter
         }
 
         let width = Int(outputPixelSize.width)
         let height = Int(outputPixelSize.height)
-        let bitsPerPixel = 5.5
+        // Screen recordings contain large flat areas and run at only 10 fps.
+        // This cap keeps a 30-second clip comfortably below the server's
+        // 25 MiB upload limit without making text unreadable.
+        let bitsPerPixel = 2.5
         let estimatedBitRate = max(
-            1_000_000,
-            min(10_000_000, Int(Double(width * height) * bitsPerPixel))
+            600_000,
+            min(4_000_000, Int(Double(width * height) * bitsPerPixel))
         )
         let outputSettings: [String: Any] = [
             AVVideoCodecKey: AVVideoCodecType.h264,
@@ -647,7 +580,7 @@ private final class GIFStreamOutput: NSObject, SCStreamOutput, SCStreamDelegate,
                 AVVideoAverageBitRateKey: estimatedBitRate,
                 AVVideoExpectedSourceFrameRateKey: frameRate,
                 AVVideoMaxKeyFrameIntervalKey: frameRate * 2,
-                AVVideoProfileLevelKey: AVVideoProfileLevelH264HighAutoLevel
+                AVVideoProfileLevelKey: AVVideoProfileLevelH264MainAutoLevel
             ]
         ]
         writerInput = AVAssetWriterInput(
@@ -658,11 +591,11 @@ private final class GIFStreamOutput: NSObject, SCStreamOutput, SCStreamDelegate,
 
         guard writer.canApply(outputSettings: outputSettings, forMediaType: .video),
               writer.canAdd(writerInput) else {
-            throw GIFMediaPipelineError.unableToConfigureAssetWriter
+            throw VideoMediaPipelineError.unableToConfigureAssetWriter
         }
         writer.add(writerInput)
         guard writer.startWriting() else {
-            throw GIFMediaPipelineError.unableToStartAssetWriter
+            throw VideoMediaPipelineError.unableToStartAssetWriter
         }
         super.init()
     }
@@ -754,7 +687,7 @@ private final class GIFStreamOutput: NSObject, SCStreamOutput, SCStreamDelegate,
         try await withCheckedThrowingContinuation { continuation in
             sampleQueue.async { [self] in
                 guard !finalized else {
-                    continuation.resume(throwing: GIFMediaPipelineError.notRecording)
+                    continuation.resume(throwing: VideoMediaPipelineError.notRecording)
                     return
                 }
                 finalized = true
@@ -764,7 +697,7 @@ private final class GIFStreamOutput: NSObject, SCStreamOutput, SCStreamDelegate,
                       let lastPresentationTime else {
                     writer.cancelWriting()
                     try? FileManager.default.removeItem(at: movieURL)
-                    continuation.resume(throwing: GIFMediaPipelineError.noVideoFrames)
+                    continuation.resume(throwing: VideoMediaPipelineError.noVideoFrames)
                     return
                 }
 
@@ -800,7 +733,7 @@ private final class GIFStreamOutput: NSObject, SCStreamOutput, SCStreamDelegate,
                         continuation.resume(
                             returning: Summary(
                                 duration: duration,
-                                frames: GIFFrameStatistics(
+                                frames: VideoFrameStatistics(
                                     received: receivedFrames,
                                     appended: appendedFrames,
                                     dropped: droppedFrames,
@@ -934,7 +867,7 @@ private final class GIFStreamOutput: NSObject, SCStreamOutput, SCStreamDelegate,
 
     private static func pipelineError(forScreenCaptureError error: Error) -> Error {
         let value = error as NSError
-        return GIFMediaPipelineError.screenCaptureStopped(
+        return VideoMediaPipelineError.screenCaptureStopped(
             domain: value.domain,
             code: value.code
         )
@@ -942,134 +875,103 @@ private final class GIFStreamOutput: NSObject, SCStreamOutput, SCStreamDelegate,
 
     private static func pipelineError(forWriterError error: Error?) -> Error {
         let value = error as NSError?
-        return GIFMediaPipelineError.assetWriterFailed(
+        return VideoMediaPipelineError.assetWriterFailed(
             domain: value?.domain ?? AVFoundationErrorDomain,
             code: value?.code ?? -1
         )
     }
 }
 
-// MARK: - MOV -> looping GIF
+// MARK: - Trimmed, network-optimized H.264 MP4
 
-actor GIFEncoder {
-    private struct Policy: Sendable {
-        let frameRate: Int
-        let maxDimension: Int
-    }
-
-    private struct AttemptOutput: Sendable {
-        let url: URL
-        let outputPixelSize: CGSize
-        let duration: TimeInterval
-        let bytes: Int64
-        let wallTime: TimeInterval
-        let cpuTime: TimeInterval
-    }
-
+actor VideoExporter {
     private let maximumBytes: Int64
-    private let policies = [
-        Policy(frameRate: 10, maxDimension: 1280),
-        Policy(frameRate: 8, maxDimension: 960),
-        Policy(frameRate: 6, maxDimension: 720)
-    ]
 
     init(maximumBytes: Int64 = 24 * 1024 * 1024) {
         self.maximumBytes = maximumBytes
     }
 
-    func encode(
-        movie: GIFMovieRecording,
+    func export(
+        movie: VideoMovieRecording,
         sessionID: UUID,
-        trimRange: GIFTrimRange? = nil
-    ) async throws -> GIFEncodingResult {
-        // Encoding consumes the intermediate movie. The final GIF must remain on
-        // disk for clipboard file promises, but retaining every H.264 recording
-        // would leak tens of megabytes across experiment runs.
+        trimRange: VideoTrimRange? = nil
+    ) async throws -> VideoExportResult {
         defer {
             try? FileManager.default.removeItem(at: movie.info.movieURL)
         }
-        let totalWallStart = ProcessInfo.processInfo.systemUptime
-        let totalCPUStart = Self.processCPUTime()
-        var attempts: [GIFEncodingAttempt] = []
-        var previousAttemptURL: URL?
+
+        try Task.checkCancellation()
+        let wallStart = ProcessInfo.processInfo.systemUptime
+        let asset = AVURLAsset(url: movie.info.movieURL)
+        let assetDuration = CMTimeGetSeconds(asset.duration)
+        guard assetDuration.isFinite,
+              assetDuration > 0,
+              !asset.tracks(withMediaType: .video).isEmpty else {
+            throw VideoMediaPipelineError.unreadableMovie
+        }
+        guard let range = (trimRange ?? VideoTrimRange(start: 0, end: assetDuration))
+            .normalized(forDuration: assetDuration) else {
+            throw VideoMediaPipelineError.invalidTrimRange
+        }
+
+        let outputURL = try VideoTemporaryFiles.makeURL(
+            sessionID: sessionID,
+            kind: "clip",
+            pathExtension: "mp4"
+        )
+        try? FileManager.default.removeItem(at: outputURL)
+        guard let exporter = AVAssetExportSession(
+            asset: asset,
+            presetName: AVAssetExportPresetPassthrough
+        ), exporter.supportedFileTypes.contains(.mp4) else {
+            throw VideoMediaPipelineError.unableToCreateVideoExporter
+        }
+
+        exporter.outputURL = outputURL
+        exporter.outputFileType = .mp4
+        exporter.shouldOptimizeForNetworkUse = true
+        exporter.timeRange = CMTimeRange(
+            start: CMTime(seconds: range.start, preferredTimescale: 600),
+            duration: CMTime(seconds: range.duration, preferredTimescale: 600)
+        )
 
         do {
-            for (index, policy) in policies.enumerated() {
-                try Task.checkCancellation()
-                let encodingTask = Task.detached(priority: .userInitiated) {
-                    try Self.encodeAttempt(
-                        movieURL: movie.info.movieURL,
-                        sessionID: sessionID,
-                        policy: policy,
-                        trimRange: trimRange
-                    )
-                }
-                let output = try await withTaskCancellationHandler(
-                    operation: {
-                        try await encodingTask.value
-                    },
-                    onCancel: {
-                        encodingTask.cancel()
-                    }
-                )
-
-                attempts.append(
-                    GIFEncodingAttempt(
-                        frameRate: policy.frameRate,
-                        maxDimension: policy.maxDimension,
-                        outputPixelSize: output.outputPixelSize,
-                        gifBytes: output.bytes,
-                        wallTime: output.wallTime,
-                        cpuTime: output.cpuTime
-                    )
-                )
-
-                if let previousAttemptURL {
-                    try? FileManager.default.removeItem(at: previousAttemptURL)
-                }
-                previousAttemptURL = output.url
-
-                let isLastPolicy = index == policies.count - 1
-                guard output.bytes <= maximumBytes || isLastPolicy else {
-                    continue
-                }
-
-                let data: Data
-                do {
-                    data = try Data(contentsOf: output.url, options: [.mappedIfSafe])
-                } catch {
-                    throw GIFMediaPipelineError.unableToReadGIF
-                }
-                let result = GIFEncodingResult(
-                    sessionID: sessionID,
-                    data: data,
-                    fileURL: output.url,
-                    outputPixelSize: output.outputPixelSize,
-                    frameRate: policy.frameRate,
-                    duration: output.duration,
-                    gifBytes: output.bytes,
-                    attempts: attempts,
-                    encodingWallTime: ProcessInfo.processInfo.systemUptime - totalWallStart,
-                    encodingCPUTime: max(0, Self.processCPUTime() - totalCPUStart),
-                    exceedsMaximumBytes: output.bytes > maximumBytes
-                )
-                GIFExperimentLogger.recordEncoding(result, movie: movie)
-                return result
+            try Task.checkCancellation()
+            try await Self.run(exporter)
+            try Task.checkCancellation()
+            let data: Data
+            do {
+                // The upload action removes the temporary file before the async
+                // request starts. Keep an owned copy so that upload/retry never
+                // relies on the lifetime of a file-backed mapping.
+                data = try Data(contentsOf: outputURL)
+            } catch {
+                throw VideoMediaPipelineError.unableToReadVideo
             }
-
-            throw GIFMediaPipelineError.unableToCreateGIF
+            guard !data.isEmpty else {
+                throw VideoMediaPipelineError.unableToReadVideo
+            }
+            try Task.checkCancellation()
+            let result = VideoExportResult(
+                sessionID: sessionID,
+                data: data,
+                fileURL: outputURL,
+                outputPixelSize: movie.info.outputPixelSize,
+                duration: range.duration,
+                videoBytes: Int64(data.count),
+                exportWallTime: ProcessInfo.processInfo.systemUptime - wallStart,
+                exceedsMaximumBytes: Int64(data.count) > maximumBytes
+            )
+            VideoExperimentLogger.recordExport(result, movie: movie)
+            return result
         } catch is CancellationError {
-            if let previousAttemptURL {
-                try? FileManager.default.removeItem(at: previousAttemptURL)
-            }
+            try? FileManager.default.removeItem(at: outputURL)
             throw CancellationError()
         } catch {
-            if let previousAttemptURL {
-                try? FileManager.default.removeItem(at: previousAttemptURL)
-            }
-            GIFExperimentLogger.recordError(
+            try? FileManager.default.removeItem(at: outputURL)
+            VideoExperimentLogger.recordError(
                 sessionID: sessionID,
-                stage: .encoding,
+                stage: .exporting,
                 error: error,
                 region: movie.info.region,
                 outputPixelSize: movie.info.outputPixelSize
@@ -1078,141 +980,37 @@ actor GIFEncoder {
         }
     }
 
-    private static func encodeAttempt(
-        movieURL: URL,
-        sessionID: UUID,
-        policy: Policy,
-        trimRange: GIFTrimRange?
-    ) throws -> AttemptOutput {
-        let wallStart = ProcessInfo.processInfo.systemUptime
-        let cpuStart = processCPUTime()
-        let asset = AVURLAsset(url: movieURL)
-        let seconds = CMTimeGetSeconds(asset.duration)
-        guard seconds.isFinite, seconds > 0,
-              !asset.tracks(withMediaType: .video).isEmpty else {
-            throw GIFMediaPipelineError.unreadableMovie
-        }
-        guard let schedule = GIFFrameSchedule(
-            trimRange: trimRange,
-            assetDuration: seconds,
-            frameRate: policy.frameRate
-        ) else {
-            throw GIFMediaPipelineError.invalidTrimRange
-        }
-
-        let frameCount = schedule.frameCount
-        let outputURL = try GIFTemporaryFiles.makeURL(
-            sessionID: sessionID,
-            kind: "\(policy.frameRate)fps-\(policy.maxDimension)",
-            pathExtension: "gif"
-        )
-        guard let destination = CGImageDestinationCreateWithURL(
-            outputURL as CFURL,
-            UTType.gif.identifier as CFString,
-            frameCount,
-            nil
-        ) else {
-            try? FileManager.default.removeItem(at: outputURL)
-            throw GIFMediaPipelineError.unableToCreateGIF
-        }
-
-        let containerProperties: [CFString: Any] = [
-            kCGImagePropertyGIFDictionary: [
-                kCGImagePropertyGIFLoopCount: 0
-            ]
-        ]
-        CGImageDestinationSetProperties(destination, containerProperties as CFDictionary)
-
-        let generator = AVAssetImageGenerator(asset: asset)
-        generator.appliesPreferredTrackTransform = true
-        generator.maximumSize = CGSize(
-            width: CGFloat(policy.maxDimension),
-            height: CGFloat(policy.maxDimension)
-        )
-        if trimRange == nil {
-            // Preserve the faster whole-movie path used by the experimental
-            // recorder before trimming was introduced.
-            let tolerance = CMTime(
-                value: 1,
-                timescale: CMTimeScale(policy.frameRate * 2)
-            )
-            generator.requestedTimeToleranceBefore = tolerance
-            generator.requestedTimeToleranceAfter = tolerance
-        } else {
-            // A non-zero tolerance can return a key frame before the trim start
-            // or after its end. Exact tolerance keeps every sampled image inside
-            // the user-selected half-open time range.
-            generator.requestedTimeToleranceBefore = .zero
-            generator.requestedTimeToleranceAfter = .zero
-        }
-
-        var outputPixelSize = CGSize.zero
-        do {
-            for index in 0..<frameCount {
-                if index % 10 == 0 {
-                    try Task.checkCancellation()
+    private static func run(_ exporter: AVAssetExportSession) async throws {
+        try await withTaskCancellationHandler(
+            operation: {
+                try await withCheckedThrowingContinuation {
+                    (continuation: CheckedContinuation<Void, Error>) in
+                    exporter.exportAsynchronously {
+                        switch exporter.status {
+                        case .completed:
+                            continuation.resume()
+                        case .cancelled:
+                            continuation.resume(throwing: CancellationError())
+                        default:
+                            let value = exporter.error as NSError?
+                            continuation.resume(throwing: VideoMediaPipelineError.videoExportFailed(
+                                domain: value?.domain ?? AVFoundationErrorDomain,
+                                code: value?.code ?? -1
+                            ))
+                        }
+                    }
                 }
-                guard let requestedSeconds = schedule.sampleTime(forFrame: index),
-                      let frameDelay = schedule.frameDelay(forFrame: index),
-                      frameDelay > 0 else {
-                    throw GIFMediaPipelineError.invalidTrimRange
-                }
-                let requestedTime = CMTime(
-                    seconds: requestedSeconds,
-                    preferredTimescale: 600
-                )
-                var actualTime = CMTime.invalid
-                let image = try generator.copyCGImage(
-                    at: requestedTime,
-                    actualTime: &actualTime
-                )
-                if outputPixelSize == .zero {
-                    outputPixelSize = CGSize(
-                        width: CGFloat(image.width),
-                        height: CGFloat(image.height)
-                    )
-                }
-                let frameProperties: [CFString: Any] = [
-                    kCGImagePropertyGIFDictionary: [
-                        kCGImagePropertyGIFDelayTime: frameDelay,
-                        kCGImagePropertyGIFUnclampedDelayTime: frameDelay
-                    ]
-                ]
-                CGImageDestinationAddImage(
-                    destination,
-                    image,
-                    frameProperties as CFDictionary
-                )
+            },
+            onCancel: {
+                exporter.cancelExport()
             }
-
-            guard CGImageDestinationFinalize(destination) else {
-                throw GIFMediaPipelineError.unableToCreateGIF
-            }
-        } catch {
-            try? FileManager.default.removeItem(at: outputURL)
-            throw error
-        }
-
-        let attributes = try? FileManager.default.attributesOfItem(atPath: outputURL.path)
-        let bytes = (attributes?[.size] as? NSNumber)?.int64Value ?? 0
-        return AttemptOutput(
-            url: outputURL,
-            outputPixelSize: outputPixelSize,
-            duration: schedule.range.duration,
-            bytes: bytes,
-            wallTime: ProcessInfo.processInfo.systemUptime - wallStart,
-            cpuTime: max(0, processCPUTime() - cpuStart)
         )
-    }
-
-    private static func processCPUTime() -> TimeInterval {
-        Double(clock()) / Double(CLOCKS_PER_SEC)
     }
 }
 
 // MARK: - Privacy-preserving experiment log
 
-enum GIFExperimentLogger {
+enum VideoExperimentLogger {
     private struct RectValue: Encodable {
         let x: Double
         let y: Double
@@ -1244,7 +1042,7 @@ enum GIFExperimentLogger {
 
         init(_ error: Error) {
             let value = error as NSError
-            kind = (error as? GIFMediaPipelineError)?.diagnosticKind ?? "system_error"
+            kind = (error as? VideoMediaPipelineError)?.diagnosticKind ?? "system_error"
             domain = value.domain
             code = value.code
         }
@@ -1254,19 +1052,17 @@ enum GIFExperimentLogger {
         let timestamp: Date
         let sessionID: UUID
         let event: String
-        let stage: GIFExperimentStage?
+        let stage: VideoExperimentStage?
         let displayID: UInt32?
         let region: RectValue?
         let backingScaleFactor: Double?
         let output: SizeValue?
-        let frames: GIFFrameStatistics?
+        let frames: VideoFrameStatistics?
         let durationSeconds: TimeInterval?
         let movieBytes: Int64?
-        let gifBytes: Int64?
+        let videoBytes: Int64?
         let frameRate: Int?
-        let encodingAttempts: [GIFEncodingAttempt]?
-        let encodingWallSeconds: TimeInterval?
-        let encodingCPUSeconds: TimeInterval?
+        let exportWallSeconds: TimeInterval?
         let exceedsMaximumBytes: Bool?
         let error: ErrorValue?
     }
@@ -1288,17 +1084,17 @@ enum GIFExperimentLogger {
         return library
             .appendingPathComponent("Logs", isDirectory: true)
             .appendingPathComponent(
-                "PocketIMGShot-GIF-Experiment.jsonl",
+                "PocketIMGShot-Video-Experiment.jsonl",
                 isDirectory: false
             )
     }
 
     static func makeSessionID() -> UUID {
-        GIFTemporaryFiles.removeExpiredFiles()
+        VideoTemporaryFiles.removeExpiredFiles()
         return UUID()
     }
 
-    static func recordSessionStarted(_ info: GIFRecordingInfo) {
+    static func recordSessionStarted(_ info: VideoRecordingInfo) {
         write(
             Event(
                 timestamp: info.startedAt,
@@ -1312,11 +1108,9 @@ enum GIFExperimentLogger {
                 frames: nil,
                 durationSeconds: nil,
                 movieBytes: nil,
-                gifBytes: nil,
+                videoBytes: nil,
                 frameRate: 10,
-                encodingAttempts: nil,
-                encodingWallSeconds: nil,
-                encodingCPUSeconds: nil,
+                exportWallSeconds: nil,
                 exceedsMaximumBytes: nil,
                 error: nil
             )
@@ -1325,7 +1119,7 @@ enum GIFExperimentLogger {
 
     static func recordRecordingAttempt(
         sessionID: UUID,
-        region: GIFCaptureRegion,
+        region: VideoCaptureRegion,
         outputPixelSize: CGSize
     ) {
         write(
@@ -1341,18 +1135,16 @@ enum GIFExperimentLogger {
                 frames: nil,
                 durationSeconds: nil,
                 movieBytes: nil,
-                gifBytes: nil,
+                videoBytes: nil,
                 frameRate: 10,
-                encodingAttempts: nil,
-                encodingWallSeconds: nil,
-                encodingCPUSeconds: nil,
+                exportWallSeconds: nil,
                 exceedsMaximumBytes: nil,
                 error: nil
             )
         )
     }
 
-    static func recordRecording(_ movie: GIFMovieRecording) {
+    static func recordRecording(_ movie: VideoMovieRecording) {
         write(
             Event(
                 timestamp: Date(),
@@ -1366,24 +1158,22 @@ enum GIFExperimentLogger {
                 frames: movie.frames,
                 durationSeconds: movie.duration,
                 movieBytes: movie.movieBytes,
-                gifBytes: nil,
+                videoBytes: nil,
                 frameRate: 10,
-                encodingAttempts: nil,
-                encodingWallSeconds: nil,
-                encodingCPUSeconds: nil,
+                exportWallSeconds: nil,
                 exceedsMaximumBytes: nil,
                 error: nil
             )
         )
     }
 
-    static func recordEncoding(_ result: GIFEncodingResult, movie: GIFMovieRecording) {
+    static func recordExport(_ result: VideoExportResult, movie: VideoMovieRecording) {
         write(
             Event(
                 timestamp: Date(),
                 sessionID: result.sessionID,
-                event: "encoding_finished",
-                stage: .encoding,
+                event: "export_finished",
+                stage: .exporting,
                 displayID: movie.info.region.displayID,
                 region: RectValue(movie.info.region.sourceRect),
                 backingScaleFactor: Double(movie.info.region.backingScaleFactor),
@@ -1391,11 +1181,9 @@ enum GIFExperimentLogger {
                 frames: movie.frames,
                 durationSeconds: result.duration,
                 movieBytes: movie.movieBytes,
-                gifBytes: result.gifBytes,
-                frameRate: result.frameRate,
-                encodingAttempts: result.attempts,
-                encodingWallSeconds: result.encodingWallTime,
-                encodingCPUSeconds: result.encodingCPUTime,
+                videoBytes: result.videoBytes,
+                frameRate: 10,
+                exportWallSeconds: result.exportWallTime,
                 exceedsMaximumBytes: result.exceedsMaximumBytes,
                 error: nil
             )
@@ -1404,9 +1192,9 @@ enum GIFExperimentLogger {
 
     static func recordError(
         sessionID: UUID,
-        stage: GIFExperimentStage,
+        stage: VideoExperimentStage,
         error: Error,
-        region: GIFCaptureRegion? = nil,
+        region: VideoCaptureRegion? = nil,
         outputPixelSize: CGSize? = nil
     ) {
         write(
@@ -1422,11 +1210,9 @@ enum GIFExperimentLogger {
                 frames: nil,
                 durationSeconds: nil,
                 movieBytes: nil,
-                gifBytes: nil,
+                videoBytes: nil,
                 frameRate: nil,
-                encodingAttempts: nil,
-                encodingWallSeconds: nil,
-                encodingCPUSeconds: nil,
+                exportWallSeconds: nil,
                 exceedsMaximumBytes: nil,
                 error: ErrorValue(error)
             )
@@ -1435,7 +1221,7 @@ enum GIFExperimentLogger {
 
     static func recordOutcome(
         sessionID: UUID,
-        stage: GIFExperimentStage,
+        stage: VideoExperimentStage,
         event: String
     ) {
         write(
@@ -1451,11 +1237,9 @@ enum GIFExperimentLogger {
                 frames: nil,
                 durationSeconds: nil,
                 movieBytes: nil,
-                gifBytes: nil,
+                videoBytes: nil,
                 frameRate: nil,
-                encodingAttempts: nil,
-                encodingWallSeconds: nil,
-                encodingCPUSeconds: nil,
+                exportWallSeconds: nil,
                 exceedsMaximumBytes: nil,
                 error: nil
             )
@@ -1487,14 +1271,14 @@ enum GIFExperimentLogger {
                 ofItemAtPath: url.path
             )
         } catch {
-            // The experiment log must never make recording or encoding fail.
+            // Diagnostics must never make recording or exporting fail.
         }
     }
 }
 
-private enum GIFTemporaryFiles {
+private enum VideoTemporaryFiles {
     private static let directory = FileManager.default.temporaryDirectory
-        .appendingPathComponent("PocketIMGShot-GIF", isDirectory: true)
+        .appendingPathComponent("PocketIMGShot-Video", isDirectory: true)
 
     static func removeExpiredFiles(
         olderThan interval: TimeInterval = 7 * 24 * 60 * 60
@@ -1529,7 +1313,7 @@ private enum GIFTemporaryFiles {
                 withIntermediateDirectories: true
             )
         } catch {
-            throw GIFMediaPipelineError.unableToCreateTemporaryDirectory
+            throw VideoMediaPipelineError.unableToCreateTemporaryDirectory
         }
         return directory
             .appendingPathComponent(

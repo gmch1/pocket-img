@@ -64,15 +64,15 @@ struct SettingsView: View {
                         .frame(width: 170, height: 28)
                 }
                 HStack {
-                    Text(L10n.text("settings.gif_hotkey", language: settings.language))
+                    Text(L10n.text("settings.video_hotkey", language: settings.language))
                     SettingsHelpButton(
                         text: L10n.text("settings.hotkey.help", language: settings.language)
                     )
                     Spacer()
                     HotKeyRecorder(
-                        hotKey: $settings.gifHotKey,
+                        hotKey: $settings.videoHotKey,
                         language: settings.language,
-                        onChange: controller.persistGIFHotKey,
+                        onChange: controller.persistVideoHotKey,
                         onRecordingChanged: controller.setHotKeyRecording
                     )
                         .frame(width: 170, height: 28)

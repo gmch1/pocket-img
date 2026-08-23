@@ -22,7 +22,9 @@ import (
 
 var (
 	errUnsupportedImage = errors.New("unsupported image format")
+	errUnsupportedVideo = errors.New("unsupported video format")
 	errImageTooLarge    = errors.New("decoded image exceeds pixel limit")
+	errVideoTooLarge    = errors.New("video exceeds pixel limit")
 )
 
 type processor struct {
@@ -49,6 +51,23 @@ func newProcessor(cfg Config) *processor {
 }
 
 func (p *processor) process(tempPath, ownerID string) (imageRecord, error) {
+	video, mp4Candidate, err := inspectMP4(tempPath)
+	if mp4Candidate {
+		if err != nil {
+			return imageRecord{}, fmt.Errorf("%w: %v", errUnsupportedVideo, err)
+		}
+		if video.width <= 0 || video.height <= 0 {
+			return imageRecord{}, errUnsupportedVideo
+		}
+		if int64(video.width)*int64(video.height) > p.maxPixels {
+			return imageRecord{}, errVideoTooLarge
+		}
+		return p.preserveVideo(tempPath, ownerID, video)
+	}
+	if err != nil {
+		return imageRecord{}, err
+	}
+
 	config, format, err := decodeConfig(tempPath)
 	if err != nil {
 		return imageRecord{}, fmt.Errorf("decode image header: %w", err)
@@ -131,8 +150,52 @@ func (p *processor) process(tempPath, ownerID string) (imageRecord, error) {
 		Width:          config.Width,
 		Height:         config.Height,
 		ByteSize:       fullInfo.Size(),
-		ThumbnailSize:  0,
+		ThumbnailSize:  thumbnailPendingSize,
 		Animated:       animated,
+		CreatedAtMilli: time.Now().UTC().UnixMilli(),
+	}, nil
+}
+
+func (p *processor) preserveVideo(tempPath, ownerID string, video mp4Inspection) (imageRecord, error) {
+	id, err := randomID()
+	if err != nil {
+		return imageRecord{}, err
+	}
+	candidate := filepath.Join(p.dataDir, "tmp", id+".full.mp4")
+	cleanupCandidate := true
+	defer func() {
+		if cleanupCandidate {
+			_ = os.Remove(candidate)
+		}
+	}()
+	if err := renameOrCopy(tempPath, candidate); err != nil {
+		return imageRecord{}, fmt.Errorf("preserve video: %w", err)
+	}
+
+	fullPath := p.fullPath(ownerID, id, "mp4")
+	if err := os.MkdirAll(filepath.Dir(fullPath), 0o750); err != nil {
+		return imageRecord{}, err
+	}
+	if err := os.Rename(candidate, fullPath); err != nil {
+		return imageRecord{}, fmt.Errorf("commit full video: %w", err)
+	}
+	cleanupCandidate = false
+
+	info, err := os.Stat(fullPath)
+	if err != nil {
+		p.removeFiles(ownerID, id, "mp4")
+		return imageRecord{}, err
+	}
+	return imageRecord{
+		OwnerID:        ownerID,
+		ID:             id,
+		Extension:      "mp4",
+		MediaType:      "video/mp4",
+		Width:          video.width,
+		Height:         video.height,
+		ByteSize:       info.Size(),
+		ThumbnailSize:  thumbnailSkippedSize,
+		Animated:       false,
 		CreatedAtMilli: time.Now().UTC().UnixMilli(),
 	}, nil
 }

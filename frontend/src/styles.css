@@ -84,7 +84,7 @@ button:focus-visible, input:focus-visible, [role="button"]:focus-visible { outli
 .image-card:hover { border-color: #c8c7c0; box-shadow: 0 9px 28px rgba(28, 31, 28, 0.07); transform: translateY(-1px); }
 .image-card--selected { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
 .image-card__media { position: relative; overflow: hidden; aspect-ratio: 4 / 3; background: var(--soft); }
-.image-card__media img { display: block; width: 100%; height: 100%; object-fit: cover; opacity: 0; animation: reveal 0.28s 0.05s ease-out forwards; }
+.image-card__media > img, .image-card__media > video { display: block; width: 100%; height: 100%; object-fit: cover; opacity: 0; animation: reveal 0.28s 0.05s ease-out forwards; }
 @keyframes reveal { to { opacity: 1; } }
 .image-card__actions { position: absolute; z-index: 2; top: 8px; right: 8px; display: flex; gap: 2px; padding: 3px; border-radius: 11px; background: rgba(20, 22, 20, 0.68); box-shadow: 0 4px 18px rgba(0, 0, 0, 0.18); backdrop-filter: blur(9px); opacity: 0; transform: translateY(-4px); transition: opacity 0.15s ease, transform 0.15s ease; }
 .image-card:hover .image-card__actions, .image-card:focus-within .image-card__actions { opacity: 1; transform: translateY(0); }
@@ -93,7 +93,7 @@ button:focus-visible, input:focus-visible, [role="button"]:focus-visible { outli
 .image-card__actions .icon-button--danger:hover { color: #ffaaa5; background: rgba(255, 120, 112, 0.16); }
 .selection-mark { position: absolute; top: 10px; right: 10px; width: 25px; height: 25px; display: grid; place-items: center; border-radius: 50%; color: #fff; background: var(--accent); box-shadow: 0 2px 10px rgba(0, 0, 0, 0.22); }
 .selection-mark svg { width: 15px; }
-.animation-mark { position: absolute; left: 9px; bottom: 9px; padding: 3px 6px; border-radius: 6px; color: #fff; background: rgba(20, 22, 20, 0.65); font-size: 10px; font-weight: 700; letter-spacing: 0.06em; backdrop-filter: blur(5px); }
+.media-type-mark { position: absolute; left: 9px; bottom: 9px; padding: 3px 6px; border-radius: 6px; color: #fff; background: rgba(20, 22, 20, 0.65); font-size: 10px; font-weight: 700; letter-spacing: 0.06em; backdrop-filter: blur(5px); }
 .empty-gallery, .state-panel, .gallery-loading { min-height: 50vh; display: grid; place-items: center; align-content: center; gap: 14px; color: var(--muted); text-align: center; }
 .gallery-refreshing { position: fixed; z-index: 19; top: 80px; left: 50%; width: 34px; height: 34px; display: grid; place-items: center; border: 1px solid var(--line); border-radius: 11px; background: var(--surface-raised); box-shadow: var(--shadow); transform: translateX(-50%); pointer-events: none; }
 .gallery-refreshing .spinner { width: 16px; height: 16px; }
@@ -148,7 +148,7 @@ button:focus-visible, input:focus-visible, [role="button"]:focus-visible { outli
 
 .preview-backdrop { z-index: 60; background: rgba(13, 15, 14, 0.86); }
 .preview-shell { position: relative; width: min(94vw, 1500px); height: min(90vh, 1000px); display: grid; place-items: center; }
-.preview-shell > img { max-width: 100%; max-height: 100%; object-fit: contain; border-radius: 10px; box-shadow: 0 18px 70px rgba(0, 0, 0, 0.4); }
+.preview-shell > img, .preview-shell > video { max-width: 100%; max-height: 100%; object-fit: contain; border-radius: 10px; box-shadow: 0 18px 70px rgba(0, 0, 0, 0.4); }
 .preview-nav { position: absolute; z-index: 2; top: 50%; width: 46px; height: 46px; display: grid; place-items: center; padding: 0; border: 1px solid rgba(255, 255, 255, 0.14); border-radius: 14px; color: #e6e9e7; background: rgba(31, 34, 32, 0.66); box-shadow: 0 8px 28px rgba(0, 0, 0, 0.2); backdrop-filter: blur(12px); cursor: pointer; transform: translateY(-50%); transition: color 0.15s ease, background 0.15s ease, opacity 0.15s ease, transform 0.15s ease; }
 .preview-nav:hover { color: #fff; background: rgba(48, 52, 49, 0.88); }
 .preview-nav:active { transform: translateY(-50%) scale(0.94); }
