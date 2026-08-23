@@ -17,7 +17,7 @@ export function GlobalUploadProgress({ tasks }: GlobalUploadProgressProps) {
   const preparing = tasks.some((task) => task.state === "optimizing");
   const indeterminate = processing || preparing;
   const progress = Math.round(tasks.reduce((total, task) => total + taskProgress(task), 0) / tasks.length);
-  const label = processing ? "正在处理图片" : preparing ? "正在准备图片" : "正在上传图片";
+  const label = processing ? "正在处理媒体" : preparing ? "正在准备图片" : "正在上传媒体";
 
   return (
     <div

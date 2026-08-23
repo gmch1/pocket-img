@@ -590,9 +590,9 @@ func (s *Server) uploadImage(w http.ResponseWriter, r *http.Request) {
 	debug.FreeOSMemory()
 	if err != nil {
 		switch {
-		case errors.Is(err, errImageTooLarge):
+		case errors.Is(err, errImageTooLarge), errors.Is(err, errVideoTooLarge):
 			writeError(w, http.StatusRequestEntityTooLarge, err.Error())
-		case errors.Is(err, errUnsupportedImage):
+		case errors.Is(err, errUnsupportedImage), errors.Is(err, errUnsupportedVideo):
 			writeError(w, http.StatusUnsupportedMediaType, err.Error())
 		default:
 			writeError(w, http.StatusUnprocessableEntity, err.Error())
@@ -611,7 +611,9 @@ func (s *Server) uploadImage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s.wakeThumbnailWorker()
+	if record.ThumbnailSize == thumbnailPendingSize {
+		s.wakeThumbnailWorker()
+	}
 	s.galleryEvents.notify(ownerID)
 	writeJSON(w, http.StatusCreated, map[string]any{"image": record.response()})
 }
@@ -877,7 +879,7 @@ func (s *Server) serveFullImage(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 	extension := strings.TrimPrefix(filepath.Ext(name), ".")
 	id := strings.TrimSuffix(name, "."+extension)
-	if !validID(id) || (extension != "webp" && extension != "gif") {
+	if !validID(id) || (extension != "webp" && extension != "gif" && extension != "mp4") {
 		http.NotFound(w, r)
 		return
 	}
@@ -945,7 +947,7 @@ func (s *Server) serveFile(w http.ResponseWriter, r *http.Request, path, mediaTy
 
 func (s *Server) securityHeaders(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; worker-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'")
+		w.Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; worker-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'")
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.Header().Set("X-Frame-Options", "DENY")
 		w.Header().Set("Referrer-Policy", "no-referrer")

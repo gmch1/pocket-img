@@ -25,6 +25,7 @@ vi.mock("./image-compression", () => ({ prepareImageForUpload: vi.fn() }));
 
 const image: ImageItem = {
   id: "0123456789abcdef0123456789abcdef",
+  media_type: "image/webp",
   width: 1280,
   height: 720,
   byte_size: 1000,
@@ -35,6 +36,16 @@ const image: ImageItem = {
   thumbnail_url: "/t/0123456789abcdef0123456789abcdef.webp",
 };
 
+const video: ImageItem = {
+  ...image,
+  id: "abcdefabcdefabcdefabcdefabcdefab",
+  media_type: "video/mp4",
+  byte_size: 5000,
+  thumbnail_size: -2,
+  url: "/i/abcdefabcdefabcdefabcdefabcdefab.mp4",
+  thumbnail_url: "/i/abcdefabcdefabcdefabcdefabcdefab.mp4",
+};
+
 function gallery(images: ImageItem[], isAdmin = false): GalleryResponse {
   return {
     images,
@@ -42,7 +53,7 @@ function gallery(images: ImageItem[], isAdmin = false): GalleryResponse {
       space_id: "alice",
       is_admin: isAdmin,
       quota_bytes: 10 * 1024 * 1024 * 1024,
-      used_bytes: images.reduce((total, item) => total + item.byte_size + item.thumbnail_size, 0),
+      used_bytes: images.reduce((total, item) => total + item.byte_size + Math.max(0, item.thumbnail_size), 0),
       image_count: images.length,
       retention_days: 90,
       enabled: true,
@@ -58,6 +69,7 @@ describe("App", () => {
     vi.mocked(listUsers).mockReset();
     vi.mocked(copyText).mockReset();
     vi.mocked(copyText).mockResolvedValue();
+    vi.mocked(prepareImageForUpload).mockReset();
     vi.mocked(prepareImageForUpload).mockImplementation(async (file) => file);
     vi.mocked(uploadImage).mockReset();
   });
@@ -75,7 +87,7 @@ describe("App", () => {
     fireEvent.click(screen.getByRole("button", { name: "进入" }));
 
     await waitFor(() => expect(createSession).toHaveBeenCalledWith("test-token"));
-    expect(await screen.findByText("粘贴第一张图片")).toBeTruthy();
+    expect(await screen.findByText("粘贴第一张图片或视频")).toBeTruthy();
     expect(screen.queryByLabelText("Token")).toBeNull();
   });
 
@@ -87,7 +99,7 @@ describe("App", () => {
     });
 
     render(<App />);
-    await screen.findByText("粘贴第一张图片");
+    await screen.findByText("粘贴第一张图片或视频");
     const file = new File(["png"], "clipboard.png", { type: "image/png" });
     fireEvent.paste(window, {
       clipboardData: {
@@ -99,7 +111,99 @@ describe("App", () => {
     expect(prepareImageForUpload).toHaveBeenCalledWith(file);
     await waitFor(() => expect(copyText).toHaveBeenCalledOnce());
     expect(vi.mocked(copyText).mock.calls[0][0]).toContain(image.url);
-    expect(await screen.findByRole("button", { name: "复制图片链接" })).toBeTruthy();
+    expect(await screen.findByRole("button", { name: "复制媒体链接" })).toBeTruthy();
+  });
+
+  test("uploads a pasted MP4 without running image preparation", async () => {
+    vi.mocked(listImages).mockResolvedValue(gallery([]));
+    vi.mocked(uploadImage).mockImplementation(async (_file, onProgress) => {
+      onProgress(100);
+      return video;
+    });
+
+    const { container } = render(<App />);
+    await screen.findByText("粘贴第一张图片或视频");
+    const file = new File(["mp4"], "clip.mp4", { type: "video/mp4" });
+    fireEvent.paste(window, {
+      clipboardData: {
+        items: [{ kind: "file", type: "video/mp4", getAsFile: () => file }],
+      },
+    });
+
+    await waitFor(() => expect(uploadImage).toHaveBeenCalledOnce());
+    expect(vi.mocked(uploadImage).mock.calls[0][0]).toBe(file);
+    expect(prepareImageForUpload).not.toHaveBeenCalled();
+    await waitFor(() => expect(copyText).toHaveBeenCalledOnce());
+    expect(container.querySelector(".image-card video")?.getAttribute("src")).toBe(video.url);
+    expect(screen.getByText("视频")).toBeTruthy();
+  });
+
+  test("keeps the 25 MiB limit for pasted MP4 files", async () => {
+    vi.mocked(listImages).mockResolvedValue(gallery([]));
+
+    render(<App />);
+    await screen.findByText("粘贴第一张图片或视频");
+    const file = new File(["mp4"], "too-large.mp4", { type: "video/mp4" });
+    Object.defineProperty(file, "size", { value: 25 * 1024 * 1024 + 1 });
+    fireEvent.paste(window, {
+      clipboardData: {
+        items: [{ kind: "file", type: "video/mp4", getAsFile: () => file }],
+      },
+    });
+
+    expect(await screen.findByText("文件超过 25 MiB")).toBeTruthy();
+    expect(uploadImage).not.toHaveBeenCalled();
+    expect(prepareImageForUpload).not.toHaveBeenCalled();
+  });
+
+  test("renders muted video cards and an opt-in video preview", async () => {
+    vi.mocked(listImages).mockResolvedValue(gallery([video, image]));
+
+    const { container } = render(<App />);
+    await screen.findAllByRole("button", { name: "复制媒体链接" });
+    const cardVideo = container.querySelector<HTMLVideoElement>(".image-card video");
+    expect(cardVideo).toBeTruthy();
+    expect(cardVideo?.getAttribute("src")).toBe(video.url);
+    expect(cardVideo?.getAttribute("poster")).toBeNull();
+    expect(cardVideo?.muted).toBe(true);
+    expect(cardVideo?.preload).toBe("metadata");
+    expect(cardVideo?.playsInline).toBe(true);
+    expect(cardVideo?.controls).toBe(false);
+    expect(container.querySelector(".image-card img")?.getAttribute("src")).toBe(image.thumbnail_url);
+    expect(screen.getByText("视频")).toBeTruthy();
+
+    fireEvent.click(cardVideo!.closest(".image-card")!);
+    const dialog = screen.getByRole("dialog", { name: "媒体预览" });
+    const previewVideo = dialog.querySelector("video");
+    expect(previewVideo?.getAttribute("src")).toBe(video.url);
+    expect(previewVideo?.controls).toBe(true);
+    expect(previewVideo?.playsInline).toBe(true);
+    expect(previewVideo?.autoplay).toBe(false);
+
+    fireEvent.click(screen.getByRole("button", { name: "下一个媒体" }));
+    expect(dialog.querySelector("video")).toBeNull();
+    expect(dialog.querySelector("img")?.getAttribute("src")).toBe(image.url);
+  });
+
+  test("keeps animated images on the existing image rendering path", async () => {
+    const animatedImage: ImageItem = {
+      ...image,
+      media_type: "image/gif",
+      animated: true,
+      url: "/i/0123456789abcdef0123456789abcdef.gif",
+    };
+    vi.mocked(listImages).mockResolvedValue(gallery([animatedImage]));
+
+    const { container } = render(<App />);
+    await screen.findByRole("button", { name: "复制媒体链接" });
+    expect(container.querySelector(".image-card video")).toBeNull();
+    expect(container.querySelector(".image-card img")?.getAttribute("src")).toBe(animatedImage.thumbnail_url);
+    expect(screen.getByText("GIF")).toBeTruthy();
+
+    fireEvent.click(container.querySelector(".image-card")!);
+    const dialog = screen.getByRole("dialog", { name: "媒体预览" });
+    expect(dialog.querySelector("video")).toBeNull();
+    expect(dialog.querySelector("img")?.getAttribute("src")).toBe(animatedImage.url);
   });
 
   test("refreshes the gallery when a hidden tab becomes visible", async () => {
@@ -116,7 +220,7 @@ describe("App", () => {
       .mockResolvedValueOnce(gallery([newest]));
 
     const { container } = render(<App />);
-    await screen.findByRole("button", { name: "复制图片链接" });
+    await screen.findByRole("button", { name: "复制媒体链接" });
     expect(listImages).toHaveBeenCalledTimes(1);
 
     visibility = "hidden";
@@ -162,7 +266,7 @@ describe("App", () => {
       .mockResolvedValueOnce(gallery([newest]));
 
     const { container, unmount } = render(<App />);
-    await screen.findByRole("button", { name: "复制图片链接" });
+    await screen.findByRole("button", { name: "复制媒体链接" });
     await waitFor(() => expect(galleryListener).toBeTypeOf("function"));
     galleryListener?.(new MessageEvent("gallery", { data: "{}" }));
 
@@ -179,14 +283,14 @@ describe("App", () => {
       .mockResolvedValueOnce(gallery([]));
 
     render(<App />);
-    await screen.findByText("粘贴第一张图片");
+    await screen.findByText("粘贴第一张图片或视频");
     fireEvent.click(screen.getByRole("button", { name: "全部" }));
     expect(await screen.findByRole("heading", { name: "暂时无法加载" })).toBeTruthy();
     expect(screen.getByText("图库连接遇到问题，请稍后重试。")).toBeTruthy();
     expect(screen.getByText("请求失败 (502)")).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: "重新加载" }));
-    expect(await screen.findByText("粘贴第一张图片")).toBeTruthy();
+    expect(await screen.findByText("粘贴第一张图片或视频")).toBeTruthy();
     expect(listImages).toHaveBeenCalledTimes(3);
   });
 
@@ -213,10 +317,10 @@ describe("App", () => {
     vi.mocked(listImages).mockResolvedValue(gallery([image]));
     const { container } = render(<App />);
 
-    expect(await screen.findByRole("button", { name: "复制图片链接" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "永久删除图片" })).toBeTruthy();
-    expect(screen.queryByText("复制图片链接")).toBeNull();
-    expect(screen.queryByText("永久删除图片")).toBeNull();
+    expect(await screen.findByRole("button", { name: "复制媒体链接" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "永久删除媒体" })).toBeTruthy();
+    expect(screen.queryByText("复制媒体链接")).toBeNull();
+    expect(screen.queryByText("永久删除媒体")).toBeNull();
     expect(container.querySelector(".image-grid")).toBeTruthy();
     expect(container.querySelector(".image-card__media > .image-card__actions")).toBeTruthy();
     expect(screen.getByRole("button", { name: "7 天" }).classList.contains("is-active")).toBe(true);
@@ -236,15 +340,15 @@ describe("App", () => {
     vi.mocked(listImages).mockResolvedValue(gallery([image, older]));
 
     const { container } = render(<App />);
-    await screen.findAllByRole("button", { name: "复制图片链接" });
+    await screen.findAllByRole("button", { name: "复制媒体链接" });
     const groups = container.querySelectorAll(".timeline-group");
     expect(groups).toHaveLength(2);
     expect(groups[0].querySelectorAll(".image-card")).toHaveLength(1);
     expect(groups[1].querySelectorAll(".image-card")).toHaveLength(1);
     expect(groups[0].querySelector(".timeline-group__label")?.textContent).toContain("8月12日 周三");
     expect(groups[1].querySelector(".timeline-group__label")?.textContent).toContain("8月11日 周二");
-    expect(groups[0].querySelector(".timeline-group__label")?.textContent).toContain("1 张");
-    expect(groups[1].querySelector(".timeline-group__label")?.textContent).toContain("1 张");
+    expect(groups[0].querySelector(".timeline-group__label")?.textContent).toContain("1 项");
+    expect(groups[1].querySelector(".timeline-group__label")?.textContent).toContain("1 项");
   });
 
   test("navigates between images in the preview", async () => {
@@ -257,16 +361,16 @@ describe("App", () => {
     vi.mocked(listImages).mockResolvedValue(gallery([image, nextImage]));
 
     const { container } = render(<App />);
-    await screen.findAllByRole("button", { name: "复制图片链接" });
+    await screen.findAllByRole("button", { name: "复制媒体链接" });
     const cards = container.querySelectorAll<HTMLElement>(".image-card");
     fireEvent.click(cards[0]);
 
-    const previewImage = screen.getByRole("dialog", { name: "图片预览" }).querySelector("img");
+    const previewImage = screen.getByRole("dialog", { name: "媒体预览" }).querySelector("img");
     expect(previewImage?.getAttribute("src")).toBe(image.url);
-    expect((screen.getByRole("button", { name: "上一张图片" }) as HTMLButtonElement).disabled).toBe(true);
-    fireEvent.click(screen.getByRole("button", { name: "下一张图片" }));
+    expect((screen.getByRole("button", { name: "上一个媒体" }) as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: "下一个媒体" }));
     expect(previewImage?.getAttribute("src")).toBe(nextImage.url);
-    expect((screen.getByRole("button", { name: "下一张图片" }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole("button", { name: "下一个媒体" }) as HTMLButtonElement).disabled).toBe(true);
 
     fireEvent.keyDown(window, { key: "ArrowLeft" });
     expect(previewImage?.getAttribute("src")).toBe(image.url);
@@ -279,13 +383,13 @@ describe("App", () => {
       .mockImplementationOnce(() => new Promise((resolve) => { finishRefresh = resolve; }));
 
     const { container } = render(<App />);
-    expect(await screen.findByRole("button", { name: "复制图片链接" })).toBeTruthy();
+    expect(await screen.findByRole("button", { name: "复制媒体链接" })).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "全部" }));
 
     await waitFor(() => expect(listImages).toHaveBeenCalledTimes(2));
     expect(container.querySelector(".gallery-loading")).toBeNull();
     expect(screen.getByLabelText("正在刷新图库")).toBeTruthy();
-    expect(screen.getByRole("button", { name: "复制图片链接" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "复制媒体链接" })).toBeTruthy();
 
     await act(async () => finishRefresh?.(gallery([image])));
     await waitFor(() => expect(screen.queryByLabelText("正在刷新图库")).toBeNull());
@@ -301,7 +405,7 @@ describe("App", () => {
     });
 
     render(<App />);
-    await screen.findByText("粘贴第一张图片");
+    await screen.findByText("粘贴第一张图片或视频");
     const file = new File(["webp"], "clipboard.webp", { type: "image/webp" });
     fireEvent.paste(window, {
       clipboardData: {
@@ -309,7 +413,7 @@ describe("App", () => {
       },
     });
 
-    const progress = await screen.findByRole("progressbar", { name: "正在处理图片" });
+    const progress = await screen.findByRole("progressbar", { name: "正在处理媒体" });
     expect(progress.getAttribute("aria-valuenow")).toBeNull();
     expect(screen.queryByText("上传结果")).toBeNull();
 
@@ -321,7 +425,7 @@ describe("App", () => {
   test("shows multi-select controls in a bottom floating toolbar", async () => {
     vi.mocked(listImages).mockResolvedValue(gallery([image]));
     const { container } = render(<App />);
-    await screen.findByRole("button", { name: "复制图片链接" });
+    await screen.findByRole("button", { name: "复制媒体链接" });
 
     vi.useFakeTimers();
     const card = container.querySelector<HTMLElement>(".image-card");
@@ -334,7 +438,7 @@ describe("App", () => {
     expect(toolbar.classList.contains("selection-toolbar")).toBe(true);
     expect(toolbar.closest("header")).toBeNull();
     expect(screen.getByRole("navigation", { name: "时间范围" })).toBeTruthy();
-    expect(screen.getByText("已选 1 张")).toBeTruthy();
+    expect(screen.getByText("已选 1 项")).toBeTruthy();
     expect(screen.getByRole("button", { name: "完成" })).toBeTruthy();
     expect(container.querySelector(".selection-mark")).toBeTruthy();
   });
@@ -342,7 +446,7 @@ describe("App", () => {
   test("prevents the browser context menu across the page", async () => {
     vi.mocked(listImages).mockResolvedValue(gallery([]));
     render(<App />);
-    await screen.findByText("粘贴第一张图片");
+    await screen.findByText("粘贴第一张图片或视频");
 
     const contextMenu = new MouseEvent("contextmenu", { bubbles: true, cancelable: true });
     document.body.dispatchEvent(contextMenu);
@@ -366,7 +470,7 @@ describe("App", () => {
     vi.mocked(listImages).mockResolvedValue(gallery([image, second, third]));
 
     const { container } = render(<App />);
-    await screen.findAllByRole("button", { name: "复制图片链接" });
+    await screen.findAllByRole("button", { name: "复制媒体链接" });
     const timeline = container.querySelector<HTMLElement>(".image-timeline");
     const cards = Array.from(container.querySelectorAll<HTMLElement>(".image-card"));
     expect(timeline).toBeTruthy();
@@ -379,7 +483,7 @@ describe("App", () => {
     fireEvent.pointerMove(timeline!, { pointerId: 7, pointerType: "mouse", clientX: 250, clientY: 130 });
 
     expect(container.querySelector(".marquee-selection")).toBeTruthy();
-    expect(screen.getByLabelText("已选择 2 张")).toBeTruthy();
+    expect(screen.getByLabelText("已选择 2 项媒体")).toBeTruthy();
     expect(container.querySelectorAll(".image-card--selected")).toHaveLength(2);
 
     fireEvent.pointerUp(timeline!, { pointerId: 7, pointerType: "mouse", clientX: 250, clientY: 130 });
@@ -389,7 +493,7 @@ describe("App", () => {
     fireEvent.pointerDown(timeline!, { button: 0, pointerId: 8, pointerType: "mouse", ctrlKey: true, clientX: 370, clientY: 20 });
     fireEvent.pointerMove(timeline!, { pointerId: 8, pointerType: "mouse", clientX: 250, clientY: 130 });
     fireEvent.pointerUp(timeline!, { pointerId: 8, pointerType: "mouse", clientX: 250, clientY: 130 });
-    expect(screen.getByLabelText("已选择 3 张")).toBeTruthy();
+    expect(screen.getByLabelText("已选择 3 项媒体")).toBeTruthy();
     expect(container.querySelectorAll(".image-card--selected")).toHaveLength(3);
   });
 
@@ -399,7 +503,7 @@ describe("App", () => {
     vi.mocked(uploadImage).mockImplementation(() => new Promise((_resolve, reject) => { failUpload = reject; }));
 
     render(<App />);
-    await screen.findByText("粘贴第一张图片");
+    await screen.findByText("粘贴第一张图片或视频");
     const file = new File(["webp"], "clipboard.webp", { type: "image/webp" });
     fireEvent.paste(window, {
       clipboardData: {
@@ -407,7 +511,7 @@ describe("App", () => {
       },
     });
 
-    expect(await screen.findByRole("progressbar", { name: "正在上传图片" })).toBeTruthy();
+    expect(await screen.findByRole("progressbar", { name: "正在上传媒体" })).toBeTruthy();
     await act(async () => failUpload?.(new APIError(429, "rate limit exceeded")));
     expect(await screen.findByText("rate limit exceeded")).toBeTruthy();
     await waitFor(() => expect(screen.queryByRole("progressbar")).toBeNull());

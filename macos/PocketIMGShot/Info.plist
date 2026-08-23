@@ -32,7 +32,7 @@
 	<key>NSHighResolutionCapable</key>
 	<true/>
 	<key>NSScreenCaptureUsageDescription</key>
-	<string>用于截取选定屏幕区域，或在你主动启用时录制无音频的 GIF。</string>
+	<string>用于截取选定屏幕区域，或在你主动启用时录制无音频的视频。</string>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
 	<key>SUEnableAutomaticChecks</key>

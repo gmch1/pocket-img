@@ -3,8 +3,8 @@
 "language.english" = "English";
 
 "menu.capture" = "Capture (%@)";
-"menu.record_gif" = "Record GIF (%@)";
-"menu.stop_gif" = "Stop GIF Recording";
+"menu.record_video" = "Record Video (%@)";
+"menu.stop_video" = "Stop Video Recording";
 "menu.check_updates" = "Check for Updates…";
 "menu.settings" = "Settings…";
 "menu.quit" = "Quit PocketIMG Shot";
@@ -17,9 +17,9 @@
 "settings.capture.section" = "Capture Shortcuts";
 "settings.global_hotkey" = "Global Shortcut";
 "settings.screenshot_hotkey" = "Screenshot Shortcut";
-"settings.gif_hotkey" = "Record GIF Shortcut";
+"settings.video_hotkey" = "Record Video Shortcut";
 "settings.hotkey.help" = "Click and press a new shortcut. Some Macs also require Fn.";
-"settings.hotkey_conflict" = "Screenshot and GIF recording shortcuts must be different.";
+"settings.hotkey_conflict" = "Screenshot and video recording shortcuts must be different.";
 "settings.save" = "Save";
 
 "hotkey.recording" = "Press a new shortcut…";
@@ -30,21 +30,21 @@
 "hotkey.forward_delete" = "Forward Delete";
 
 "overlay.enter_text" = "Enter text";
-"overlay.gif.instructions" = "Drag to select, then press Return or double-click to record. Esc cancels.";
+"overlay.video.instructions" = "Drag to select, then press Return or double-click to record. Esc cancels.";
 "pinned.close" = "Close Pinned Image";
 
-"gif.hud.recording" = "Recording %@ / 30s";
-"gif.hud.recording_passive" = "Recording %@ · Press %@ to stop";
-"gif.hud.stop" = "Stop";
-"gif.editor.title" = "Trim GIF";
-"gif.editor.instructions" = "Drag the timeline handles to adjust the start and end, then create the GIF.";
-"gif.editor.selection" = "%@ – %@ (%@ selected)";
-"gif.editor.play" = "Play";
-"gif.editor.pause" = "Pause";
-"gif.editor.generate" = "Create GIF";
-"gif.editor.cancel" = "Cancel";
-"gif.editor.start_handle" = "GIF start time";
-"gif.editor.end_handle" = "GIF end time";
+"video.hud.recording" = "Recording %@ / 30s";
+"video.hud.recording_passive" = "Recording %@ · Press %@ to stop";
+"video.hud.stop" = "Stop";
+"video.editor.title" = "Trim Video";
+"video.editor.instructions" = "Drag the timeline handles to adjust the start and end, then export the MP4 video.";
+"video.editor.selection" = "%@ – %@ (%@ selected)";
+"video.editor.play" = "Play";
+"video.editor.pause" = "Pause";
+"video.editor.generate" = "Export Video";
+"video.editor.cancel" = "Cancel";
+"video.editor.start_handle" = "Video start time";
+"video.editor.end_handle" = "Video end time";
 
 "toast.hotkey_registration_failed" = "Couldn’t register shortcut";
 "toast.settings_saved" = "Settings saved";
@@ -53,7 +53,7 @@
 "toast.upload_complete" = "Upload complete. Link copied.";
 "toast.screenshot_copied" = "Screenshot copied";
 "toast.screenshot_pinned" = "Screenshot pinned to the desktop. Double-click or press Esc to close.";
-"toast.gif_copied" = "GIF copied";
+"toast.video_copied" = "Video copied";
 
 "status.capture_failed" = "Capture failed";
 "status.uploading" = "Uploading…";
@@ -62,36 +62,36 @@
 "status.screenshot_copied" = "Screenshot copied";
 "status.screenshot_pinned" = "Screenshot pinned";
 "status.pin_failed" = "Pin failed";
-"status.gif.selecting" = "Select an area to record";
-"status.gif.countdown" = "GIF recording starts shortly…";
-"status.gif.recording" = "Recording GIF…";
-"status.gif.stopping" = "Stopping GIF recording…";
-"status.gif.editing" = "Adjusting GIF start and end…";
-"status.gif.encoding" = "Encoding GIF…";
-"status.gif.copied" = "GIF copied";
+"status.video.selecting" = "Select an area to record";
+"status.video.countdown" = "Video recording starts shortly…";
+"status.video.recording" = "Recording video…";
+"status.video.stopping" = "Stopping video recording…";
+"status.video.editing" = "Adjusting video start and end…";
+"status.video.exporting" = "Exporting video…";
+"status.video.copied" = "Video copied";
 
 "alert.settings_save_failed" = "Couldn’t Save Settings";
 "alert.capture_failed" = "Couldn’t Create Screenshot";
 "alert.copy_failed" = "Couldn’t Copy Screenshot";
 "alert.pin_failed" = "Couldn’t Pin Screenshot";
 "alert.upload_failed" = "Screenshot Upload Failed";
-"alert.gif_upload_failed" = "GIF Upload Failed";
-"alert.gif_failed" = "Couldn’t Record GIF";
-"alert.gif_ready" = "GIF Ready";
-"alert.gif_ready_body" = "Duration: %@\nSize: %@";
-"alert.gif_ready_body_large" = "Duration: %@\nSize: %@\nThis experimental GIF exceeds 24 MiB, so it can be copied but not uploaded.";
+"alert.video_upload_failed" = "Video Upload Failed";
+"alert.video_failed" = "Couldn’t Record Video";
+"alert.video_ready" = "Video Ready";
+"alert.video_ready_body" = "Duration: %@\nSize: %@";
+"alert.video_ready_body_large" = "Duration: %@\nSize: %@\nThis video exceeds 24 MiB, so it can be copied but not uploaded.";
 "alert.screen_permission_title" = "Screen Recording Permission Required";
-"alert.screen_permission_body" = "PocketIMG Shot captures a static image for screenshots and records the selected area only when you start GIF recording. It never records audio. Allow this app in System Settings → Privacy & Security → Screen & System Audio Recording, then reopen it.";
+"alert.screen_permission_body" = "PocketIMG Shot captures a static image for screenshots and records the selected area only when you start video recording. It never records audio. Allow this app in System Settings → Privacy & Security → Screen & System Audio Recording, then reopen it.";
 
 "button.retry" = "Retry";
 "button.cancel" = "Cancel";
 "button.ok" = "OK";
 "button.open_system_settings" = "Open System Settings";
-"button.copy_gif" = "Copy GIF";
-"button.upload_gif" = "Upload GIF";
+"button.copy_video" = "Copy Video";
+"button.upload_video" = "Upload Video";
 
 "diagnostic_log" = "Diagnostic log: %@";
-"gif_experiment_log" = "GIF experiment log: %@";
+"video_experiment_log" = "Video diagnostic log: %@";
 "error.hotkey_registration" = "The shortcut is already in use, or macOS rejected it (%d).";
 "error.invalid_server_address" = "The server address must be a complete HTTP or HTTPS URL.";
 "error.server_address_has_path" = "The server address cannot contain a path. Enter only the scheme, host, and port.";

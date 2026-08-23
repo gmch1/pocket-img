@@ -7,6 +7,8 @@ import (
 	"crypto/sha256"
 	"database/sql"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"image"
 	"image/color"
 	"image/gif"
@@ -128,6 +130,9 @@ func TestBrowserSecurityHeaders(t *testing.T) {
 	}
 	if !strings.Contains(response.Header.Get("Content-Security-Policy"), "frame-ancestors 'none'") {
 		t.Fatalf("Content-Security-Policy=%q", response.Header.Get("Content-Security-Policy"))
+	}
+	if !strings.Contains(response.Header.Get("Content-Security-Policy"), "media-src 'self' blob:") {
+		t.Fatalf("Content-Security-Policy does not allow hosted video: %q", response.Header.Get("Content-Security-Policy"))
 	}
 }
 
@@ -349,7 +354,7 @@ func TestStaticImageEndToEnd(t *testing.T) {
 	backend.login(t)
 	source := makePNG(t, 1280, 720)
 	result := backend.upload(t, "screenshot.png", source)
-	if result.Animated || result.Width != 1280 || result.Height != 720 {
+	if result.MediaType != "image/webp" || result.Animated || result.Width != 1280 || result.Height != 720 {
 		t.Fatalf("unexpected image metadata: %#v", result)
 	}
 	if result.URL[len(result.URL)-5:] != ".webp" {
@@ -436,7 +441,7 @@ func TestGIFIsPreservedAndGetsWebPThumbnail(t *testing.T) {
 	backend.login(t)
 	source := makeGIF(t)
 	result := backend.upload(t, "animation.gif", source)
-	if !result.Animated || result.URL[len(result.URL)-4:] != ".gif" {
+	if result.MediaType != "image/gif" || !result.Animated || result.URL[len(result.URL)-4:] != ".gif" {
 		t.Fatalf("unexpected gif metadata: %#v", result)
 	}
 	if result.ThumbnailSize != 0 || result.ThumbnailURL != result.URL {
@@ -465,6 +470,111 @@ func TestGIFIsPreservedAndGetsWebPThumbnail(t *testing.T) {
 	thumbnailResponse.Body.Close()
 	if err != nil {
 		t.Fatalf("decode gif thumbnail: %v", err)
+	}
+}
+
+func TestH264MP4IsValidatedPreservedAndServedWithRange(t *testing.T) {
+	backend := newTestBackend(t)
+	backend.login(t)
+	source := makeH264MP4(t, 1280, 720)
+
+	// A misleading name is intentional: detection must use the file contents.
+	result := backend.upload(t, "recording.png", source)
+	if result.MediaType != "video/mp4" || result.Width != 1280 || result.Height != 720 || result.Animated {
+		t.Fatalf("unexpected video metadata: %#v", result)
+	}
+	if !strings.HasSuffix(result.URL, ".mp4") || result.ThumbnailSize != thumbnailSkippedSize || result.ThumbnailURL != result.URL {
+		t.Fatalf("unexpected video URLs or thumbnail state: %#v", result)
+	}
+
+	record, found, err := backend.server.store.getImageByID(t.Context(), result.ID)
+	if err != nil || !found {
+		t.Fatalf("load stored video: found=%v err=%v", found, err)
+	}
+	if record.ThumbnailSize != thumbnailSkippedSize || record.ThumbnailAttempts != 0 {
+		t.Fatalf("video entered thumbnail processing: %#v", record)
+	}
+	pending, err := backend.server.store.listPendingThumbnails(t.Context(), time.Now(), 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(pending) != 0 {
+		t.Fatalf("video was queued for image thumbnail generation: %#v", pending)
+	}
+	if _, err := os.Stat(backend.server.processor.thumbnailPath("alice", result.ID)); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("video unexpectedly has an image thumbnail: %v", err)
+	}
+
+	publicResponse, err := http.Get(backend.http.URL + result.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	stored, readErr := io.ReadAll(publicResponse.Body)
+	publicResponse.Body.Close()
+	if readErr != nil {
+		t.Fatal(readErr)
+	}
+	if publicResponse.StatusCode != http.StatusOK || publicResponse.Header.Get("Content-Type") != "video/mp4" {
+		t.Fatalf("public video status=%d type=%q", publicResponse.StatusCode, publicResponse.Header.Get("Content-Type"))
+	}
+	if !bytes.Equal(stored, source) {
+		t.Fatal("MP4 bytes changed during storage")
+	}
+
+	rangeRequest, err := http.NewRequest(http.MethodGet, backend.http.URL+result.URL, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rangeRequest.Header.Set("Range", "bytes=4-15")
+	rangeResponse, err := http.DefaultClient.Do(rangeRequest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rangeBody, readErr := io.ReadAll(rangeResponse.Body)
+	rangeResponse.Body.Close()
+	if readErr != nil {
+		t.Fatal(readErr)
+	}
+	if rangeResponse.StatusCode != http.StatusPartialContent || rangeResponse.Header.Get("Content-Type") != "video/mp4" {
+		t.Fatalf("range status=%d type=%q", rangeResponse.StatusCode, rangeResponse.Header.Get("Content-Type"))
+	}
+	if rangeResponse.Header.Get("Content-Range") != fmt.Sprintf("bytes 4-15/%d", len(source)) {
+		t.Fatalf("Content-Range=%q", rangeResponse.Header.Get("Content-Range"))
+	}
+	if !bytes.Equal(rangeBody, source[4:16]) {
+		t.Fatalf("range body=%x want=%x", rangeBody, source[4:16])
+	}
+
+	images := listForClient(t, backend, backend.client)
+	if len(images) != 1 || images[0].MediaType != "video/mp4" || images[0].ID != result.ID {
+		t.Fatalf("video list response=%#v", images)
+	}
+}
+
+func TestMP4UploadDoesNotTrustFileNameAndEnforcesPixelLimit(t *testing.T) {
+	backend := newTestBackend(t)
+	backend.login(t)
+
+	renamedImage := backend.upload(t, "fake-video.mp4", makePNG(t, 32, 24))
+	if renamedImage.MediaType != "image/webp" || !strings.HasSuffix(renamedImage.URL, ".webp") {
+		t.Fatalf("image file name was trusted: %#v", renamedImage)
+	}
+
+	malformed := makeMP4Box(t, "ftyp", []byte("mp42\x00\x00\x00\x00isom"))
+	malformedResponse := uploadRequest(t, backend.http.URL, backend.client, malformed)
+	malformedResponse.Body.Close()
+	if malformedResponse.StatusCode != http.StatusUnsupportedMediaType {
+		t.Fatalf("malformed MP4 status=%d", malformedResponse.StatusCode)
+	}
+
+	cfg := testConfig(t.TempDir(), map[string]string{"alice": testToken})
+	cfg.MaxPixels = 100
+	limited := newTestBackendWithConfig(t, cfg)
+	limited.login(t)
+	tooLarge := uploadRequest(t, limited.http.URL, limited.client, makeH264MP4(t, 20, 10))
+	tooLarge.Body.Close()
+	if tooLarge.StatusCode != http.StatusRequestEntityTooLarge {
+		t.Fatalf("oversized MP4 dimensions status=%d", tooLarge.StatusCode)
 	}
 }
 

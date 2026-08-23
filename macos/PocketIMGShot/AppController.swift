@@ -12,25 +12,25 @@ final class AppController: ObservableObject {
     private enum Activity {
         case idle
         case screenshot
-        case gif(GIFRecordingState)
-        case gifResult
+        case video(VideoRecordingState)
+        case videoResult
         case uploading
         case uploadFailure
     }
 
     @Published private(set) var isCapturing = false
     @Published private(set) var isUploading = false
-    @Published private(set) var isGIFRecording = false
-    @Published private(set) var canToggleGIFRecording = true
+    @Published private(set) var isVideoRecording = false
+    @Published private(set) var canToggleVideoRecording = true
     @Published private(set) var statusMessage = ""
     @Published private(set) var canCheckForUpdates = false
 
     let settings = AppSettings()
 
     private let captureHotKey = GlobalHotKey(identifier: 1)
-    private let gifHotKey = GlobalHotKey(identifier: 3)
+    private let videoHotKey = GlobalHotKey(identifier: 3)
     private let captureCoordinator = CaptureCoordinator()
-    private let gifRecordingCoordinator = GIFRecordingCoordinator()
+    private let videoRecordingCoordinator = VideoRecordingCoordinator()
     private let pinnedImages = PinnedImagePresenter()
     private let toast = ToastPresenter()
     private let updaterController: SPUStandardUpdaterController
@@ -60,15 +60,15 @@ final class AppController: ObservableObject {
 
     func stop() {
         captureHotKey.unregister()
-        gifHotKey.unregister()
+        videoHotKey.unregister()
         captureCoordinator.cancel(notify: false)
-        gifRecordingCoordinator.cancel(notify: false)
+        videoRecordingCoordinator.cancel(notify: false)
         settings.flushAnnotationStyle()
     }
 
     func registerHotKey() {
         captureHotKey.unregister()
-        gifHotKey.unregister()
+        videoHotKey.unregister()
 
         var registrationErrors: [String] = []
         do {
@@ -79,15 +79,15 @@ final class AppController: ObservableObject {
             registrationErrors.append(localizedDescription(for: error))
         }
 
-        if settings.hotKey.keyCode == settings.gifHotKey.keyCode,
-           settings.hotKey.carbonModifiers == settings.gifHotKey.carbonModifiers {
+        if settings.hotKey.keyCode == settings.videoHotKey.keyCode,
+           settings.hotKey.carbonModifiers == settings.videoHotKey.carbonModifiers {
             registrationErrors.append(
                 L10n.text("settings.hotkey_conflict", language: settings.language)
             )
         } else {
             do {
-                try gifHotKey.register(settings.gifHotKey) { [weak self] in
-                    self?.toggleGIFRecording()
+                try videoHotKey.register(settings.videoHotKey) { [weak self] in
+                    self?.toggleVideoRecording()
                 }
             } catch {
                 registrationErrors.append(localizedDescription(for: error))
@@ -103,7 +103,7 @@ final class AppController: ObservableObject {
     func setHotKeyRecording(_ recording: Bool) {
         if recording {
             captureHotKey.unregister()
-            gifHotKey.unregister()
+            videoHotKey.unregister()
         } else {
             registerHotKey()
         }
@@ -119,8 +119,8 @@ final class AppController: ObservableObject {
         settings.persistHotKey(value)
     }
 
-    func persistGIFHotKey(_ value: HotKey) {
-        settings.persistGIFHotKey(value)
+    func persistVideoHotKey(_ value: HotKey) {
+        settings.persistVideoHotKey(value)
     }
 
     func setLanguage(_ language: AppLanguage) {
@@ -212,34 +212,34 @@ final class AppController: ObservableObject {
         )
     }
 
-    func toggleGIFRecording() {
+    func toggleVideoRecording() {
         switch activity {
         case .idle:
-            startGIFRecording()
-        case .gif(.recording):
-            gifRecordingCoordinator.stopRecording()
+            startVideoRecording()
+        case .video(.recording):
+            videoRecordingCoordinator.stopRecording()
         default:
             break
         }
     }
 
-    private func startGIFRecording() {
-        guard ensureScreenCaptureAccess(for: settings.gifHotKey) else { return }
+    private func startVideoRecording() {
+        guard ensureScreenCaptureAccess(for: settings.videoHotKey) else { return }
 
-        transition(to: .gif(.preparing))
-        statusMessage = L10n.text("status.gif.selecting", language: settings.language)
-        gifRecordingCoordinator.begin(
+        transition(to: .video(.preparing))
+        statusMessage = L10n.text("status.video.selecting", language: settings.language)
+        videoRecordingCoordinator.begin(
             language: settings.language,
-            stopShortcutDisplayName: settings.gifHotKey.localizedDisplayName(
+            stopShortcutDisplayName: settings.videoHotKey.localizedDisplayName(
                 language: settings.language
             ),
             onStateChange: { [weak self] state in
-                self?.handleGIFStateChange(state)
+                self?.handleVideoStateChange(state)
             },
             onFinish: { [weak self] result in
                 guard let self else { return }
-                self.transition(to: .gifResult)
-                self.presentGIFResult(result)
+                self.transition(to: .videoResult)
+                self.presentVideoResult(result)
             },
             onCancel: { [weak self] in
                 self?.transition(to: .idle)
@@ -250,8 +250,8 @@ final class AppController: ObservableObject {
                 self.transition(to: .idle)
                 self.statusMessage = ""
                 self.showError(
-                    title: L10n.text("alert.gif_failed", language: self.settings.language),
-                    message: self.messageWithGIFExperimentLog(
+                    title: L10n.text("alert.video_failed", language: self.settings.language),
+                    message: self.messageWithVideoExperimentLog(
                         self.localizedDescription(for: error)
                     )
                 )
@@ -259,38 +259,38 @@ final class AppController: ObservableObject {
         )
     }
 
-    private func handleGIFStateChange(_ state: GIFRecordingState) {
-        guard case .gif = activity else { return }
+    private func handleVideoStateChange(_ state: VideoRecordingState) {
+        guard case .video = activity else { return }
         switch state {
         case .idle:
             // The matching finish, cancel, or error callback owns the terminal
             // transition so a new capture cannot start between callbacks.
             break
         case .preparing, .selecting:
-            transition(to: .gif(state))
-            statusMessage = L10n.text("status.gif.selecting", language: settings.language)
+            transition(to: .video(state))
+            statusMessage = L10n.text("status.video.selecting", language: settings.language)
         case .countdown:
-            transition(to: .gif(state))
-            statusMessage = L10n.text("status.gif.countdown", language: settings.language)
+            transition(to: .video(state))
+            statusMessage = L10n.text("status.video.countdown", language: settings.language)
         case .recording:
-            transition(to: .gif(state))
-            statusMessage = L10n.text("status.gif.recording", language: settings.language)
+            transition(to: .video(state))
+            statusMessage = L10n.text("status.video.recording", language: settings.language)
         case .stopping:
-            transition(to: .gif(state))
-            statusMessage = L10n.text("status.gif.stopping", language: settings.language)
+            transition(to: .video(state))
+            statusMessage = L10n.text("status.video.stopping", language: settings.language)
         case .editing:
-            transition(to: .gif(state))
-            statusMessage = L10n.text("status.gif.editing", language: settings.language)
-        case .encoding:
-            transition(to: .gif(state))
-            statusMessage = L10n.text("status.gif.encoding", language: settings.language)
+            transition(to: .video(state))
+            statusMessage = L10n.text("status.video.editing", language: settings.language)
+        case .exporting:
+            transition(to: .video(state))
+            statusMessage = L10n.text("status.video.exporting", language: settings.language)
         }
     }
 
-    private func presentGIFResult(_ result: GIFRecordingResult) {
+    private func presentVideoResult(_ result: VideoRecordingResult) {
         let duration = String(format: "%.1f s", result.duration)
         let bytes = ByteCountFormatter.string(
-            fromByteCount: result.metrics.gifBytes,
+            fromByteCount: result.metrics.videoBytes,
             countStyle: .file
         )
         let canUpload = settings.hasUploadConfiguration
@@ -298,29 +298,29 @@ final class AppController: ObservableObject {
 
         let alert = NSAlert()
         alert.alertStyle = .informational
-        alert.messageText = L10n.text("alert.gif_ready", language: settings.language)
+        alert.messageText = L10n.text("alert.video_ready", language: settings.language)
         alert.informativeText = L10n.format(
             result.metrics.exceedsMaximumBytes
-                ? "alert.gif_ready_body_large"
-                : "alert.gif_ready_body",
+                ? "alert.video_ready_body_large"
+                : "alert.video_ready_body",
             language: settings.language,
             duration,
             bytes
         )
-        alert.addButton(withTitle: L10n.text("button.copy_gif", language: settings.language))
         if canUpload {
-            alert.addButton(withTitle: L10n.text("button.upload_gif", language: settings.language))
+            alert.addButton(withTitle: L10n.text("button.upload_video", language: settings.language))
         }
+        alert.addButton(withTitle: L10n.text("button.copy_video", language: settings.language))
         alert.addButton(withTitle: L10n.text("button.cancel", language: settings.language))
 
         NSApplication.shared.activate(ignoringOtherApps: true)
         let response = alert.runModal()
-        if response == .alertFirstButtonReturn {
-            transition(to: .idle)
-            copyGIF(result)
-        } else if canUpload, response == .alertSecondButtonReturn {
+        if canUpload, response == .alertFirstButtonReturn {
             try? FileManager.default.removeItem(at: result.fileURL)
             upload(result.payload, experimentSessionID: result.sessionID)
+        } else if response == (canUpload ? .alertSecondButtonReturn : .alertFirstButtonReturn) {
+            transition(to: .idle)
+            copyVideo(result)
         } else {
             try? FileManager.default.removeItem(at: result.fileURL)
             transition(to: .idle)
@@ -328,11 +328,11 @@ final class AppController: ObservableObject {
         }
     }
 
-    private func copyGIF(_ result: GIFRecordingResult) {
+    private func copyVideo(_ result: VideoRecordingResult) {
         let item = NSPasteboardItem()
-        let gifType = NSPasteboard.PasteboardType(UTType.gif.identifier)
-        guard item.setData(result.data, forType: gifType) else {
-            GIFExperimentLogger.recordOutcome(
+        let videoType = NSPasteboard.PasteboardType(UTType.mpeg4Movie.identifier)
+        guard item.setData(result.data, forType: videoType) else {
+            VideoExperimentLogger.recordOutcome(
                 sessionID: result.sessionID,
                 stage: .clipboard,
                 event: "clipboard_failed"
@@ -340,7 +340,7 @@ final class AppController: ObservableObject {
             try? FileManager.default.removeItem(at: result.fileURL)
             statusMessage = ""
             showError(
-                title: L10n.text("alert.gif_failed", language: settings.language),
+                title: L10n.text("alert.video_failed", language: settings.language),
                 message: L10n.text("error.clipboard_write_failed", language: settings.language)
             )
             return
@@ -350,7 +350,7 @@ final class AppController: ObservableObject {
         let pasteboard = NSPasteboard.general
         pasteboard.clearContents()
         guard pasteboard.writeObjects([item]) else {
-            GIFExperimentLogger.recordOutcome(
+            VideoExperimentLogger.recordOutcome(
                 sessionID: result.sessionID,
                 stage: .clipboard,
                 event: "clipboard_failed"
@@ -358,20 +358,20 @@ final class AppController: ObservableObject {
             try? FileManager.default.removeItem(at: result.fileURL)
             statusMessage = ""
             showError(
-                title: L10n.text("alert.gif_failed", language: settings.language),
+                title: L10n.text("alert.video_failed", language: settings.language),
                 message: L10n.text("error.clipboard_write_failed", language: settings.language)
             )
             return
         }
 
-        GIFExperimentLogger.recordOutcome(
+        VideoExperimentLogger.recordOutcome(
             sessionID: result.sessionID,
             stage: .clipboard,
             event: "clipboard_succeeded"
         )
-        let copiedStatus = L10n.text("status.gif.copied", language: settings.language)
+        let copiedStatus = L10n.text("status.video.copied", language: settings.language)
         statusMessage = copiedStatus
-        toast.show(L10n.text("toast.gif_copied", language: settings.language))
+        toast.show(L10n.text("toast.video_copied", language: settings.language))
         clearStatusLater(expected: copiedStatus)
     }
 
@@ -383,7 +383,7 @@ final class AppController: ObservableObject {
         pendingUpload = payload
         pendingUploadExperimentSessionID = experimentSessionID
         if let experimentSessionID {
-            GIFExperimentLogger.recordOutcome(
+            VideoExperimentLogger.recordOutcome(
                 sessionID: experimentSessionID,
                 stage: .upload,
                 event: "upload_started"
@@ -408,7 +408,7 @@ final class AppController: ObservableObject {
                 NSPasteboard.general.clearContents()
                 NSPasteboard.general.setString(url.absoluteString, forType: .string)
                 if let experimentSessionID {
-                    GIFExperimentLogger.recordOutcome(
+                    VideoExperimentLogger.recordOutcome(
                         sessionID: experimentSessionID,
                         stage: .upload,
                         event: "upload_succeeded"
@@ -425,7 +425,7 @@ final class AppController: ObservableObject {
             } catch {
                 DiagnosticLog.record(error, phase: "upload")
                 if let experimentSessionID {
-                    GIFExperimentLogger.recordError(
+                    VideoExperimentLogger.recordError(
                         sessionID: experimentSessionID,
                         stage: .upload,
                         error: error
@@ -481,13 +481,13 @@ final class AppController: ObservableObject {
     private func offerUploadRetry(error: Error) {
         let alert = NSAlert()
         alert.alertStyle = .warning
-        let isGIFUpload = pendingUpload?.contentType == "image/gif"
-        let titleKey = isGIFUpload
-            ? "alert.gif_upload_failed"
+        let isVideoUpload = pendingUpload?.contentType == "video/mp4"
+        let titleKey = isVideoUpload
+            ? "alert.video_upload_failed"
             : "alert.upload_failed"
         alert.messageText = L10n.text(titleKey, language: settings.language)
-        alert.informativeText = isGIFUpload
-            ? messageWithGIFExperimentLog(localizedDescription(for: error))
+        alert.informativeText = isVideoUpload
+            ? messageWithVideoExperimentLog(localizedDescription(for: error))
             : messageWithDiagnosticLog(localizedDescription(for: error))
         alert.addButton(withTitle: L10n.text("button.retry", language: settings.language))
         alert.addButton(withTitle: L10n.text("button.cancel", language: settings.language))
@@ -499,7 +499,7 @@ final class AppController: ObservableObject {
             )
         } else {
             if let pendingUploadExperimentSessionID {
-                GIFExperimentLogger.recordOutcome(
+                VideoExperimentLogger.recordOutcome(
                     sessionID: pendingUploadExperimentSessionID,
                     stage: .upload,
                     event: "upload_cancelled"
@@ -527,23 +527,23 @@ final class AppController: ObservableObject {
         case .idle:
             isCapturing = false
             isUploading = false
-            isGIFRecording = false
-            canToggleGIFRecording = true
-        case .screenshot, .gifResult:
+            isVideoRecording = false
+            canToggleVideoRecording = true
+        case .screenshot, .videoResult:
             isCapturing = true
             isUploading = false
-            isGIFRecording = false
-            canToggleGIFRecording = false
-        case .gif(let state):
+            isVideoRecording = false
+            canToggleVideoRecording = false
+        case .video(let state):
             isCapturing = true
             isUploading = false
-            isGIFRecording = state == .recording || state == .stopping
-            canToggleGIFRecording = state == .recording
+            isVideoRecording = state == .recording || state == .stopping
+            canToggleVideoRecording = state == .recording
         case .uploading, .uploadFailure:
             isCapturing = false
             isUploading = true
-            isGIFRecording = false
-            canToggleGIFRecording = false
+            isVideoRecording = false
+            canToggleVideoRecording = false
         }
     }
 
@@ -605,11 +605,11 @@ final class AppController: ObservableObject {
         )
     }
 
-    private func messageWithGIFExperimentLog(_ message: String) -> String {
+    private func messageWithVideoExperimentLog(_ message: String) -> String {
         messageWithDiagnosticLog(message) + "\n" + L10n.format(
-            "gif_experiment_log",
+            "video_experiment_log",
             language: settings.language,
-            "~/Library/Logs/PocketIMGShot-GIF-Experiment.jsonl"
+            "~/Library/Logs/PocketIMGShot-Video-Experiment.jsonl"
         )
     }
 }
