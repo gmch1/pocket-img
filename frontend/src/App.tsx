@@ -497,7 +497,18 @@ export default function App() {
         </nav>
         <div className="topbar__actions">
           {account?.is_admin ? <button className="icon-button" type="button" aria-label="用户管理" onClick={() => setAdminOpen(true)}><UsersIcon /></button> : null}
-          {clientSetup ? <button className="icon-button" type="button" aria-label="客户端设置" onClick={() => setClientSetupOpen(true)}><LaptopIcon /></button> : null}
+          {clientSetup ? (
+            <button
+              className={`client-setup-trigger${clientSetup.token_configured ? "" : " needs-credential"}`}
+              type="button"
+              aria-label="连接 Mac 客户端"
+              onClick={() => setClientSetupOpen(true)}
+            >
+              <LaptopIcon />
+              <span>连接 Mac</span>
+              {!clientSetup.token_configured ? <small>尚未生成凭证</small> : null}
+            </button>
+          ) : null}
           {!clientSetup ? (
             <>
               <button className="icon-button" type="button" aria-label="设置 Token" onClick={() => setSettingsOpen(true)}><KeyIcon /></button>

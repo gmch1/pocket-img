@@ -44,7 +44,10 @@ struct SettingsView: View {
                         .textFieldStyle(.roundedBorder)
                         .frame(width: 240)
                 }
-                SecureField("Token", text: $settings.token)
+                SecureField(
+                    L10n.text("settings.connection_credential", language: settings.language),
+                    text: $settings.token
+                )
                     .textFieldStyle(.roundedBorder)
             }
 

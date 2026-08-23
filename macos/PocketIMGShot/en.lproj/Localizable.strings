@@ -14,6 +14,7 @@
 "settings.service.section" = "PocketIMG Service";
 "settings.server_address" = "Server Address";
 "settings.server_address.help" = "HTTP is supported for local network addresses.";
+"settings.connection_credential" = "Connection Credential (Token)";
 "settings.capture.section" = "Capture Shortcuts";
 "settings.global_hotkey" = "Global Shortcut";
 "settings.screenshot_hotkey" = "Screenshot Shortcut";
@@ -95,7 +96,7 @@
 "error.hotkey_registration" = "The shortcut is already in use, or macOS rejected it (%d).";
 "error.invalid_server_address" = "The server address must be a complete HTTP or HTTPS URL.";
 "error.server_address_has_path" = "The server address cannot contain a path. Enter only the scheme, host, and port.";
-"error.missing_token" = "Token cannot be empty.";
+"error.missing_token" = "Connection credential (Token) cannot be empty.";
 "error.capture.no_displays" = "No display is available for capture.";
 "error.capture.encoding_failed" = "Couldn’t create the screenshot file.";
 "error.clipboard_write_failed" = "Couldn’t write to the system clipboard.";
