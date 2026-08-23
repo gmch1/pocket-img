@@ -26,7 +26,10 @@ import (
 	"phone-image-host/internal/webui"
 )
 
-const sessionCookieName = "pih_session"
+const (
+	sessionCookieName     = "pih_session"
+	browserMutationHeader = "X-PocketIMG-Request"
+)
 
 type credential struct {
 	ownerID     string
@@ -528,17 +531,21 @@ func (s *Server) deleteSession(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) requireSession(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !sameOrigin(r) {
-			writeError(w, http.StatusForbidden, "cross-origin request rejected")
-			return
-		}
 		if identity, ok := fnosIdentityFromRequest(r); ok {
+			if !validFNOSBrowserRequest(r) {
+				writeError(w, http.StatusForbidden, "cross-origin request rejected")
+				return
+			}
 			authenticatedRequest, err := s.authenticateFNOSRequest(r, identity)
 			if err != nil {
 				writeError(w, http.StatusInternalServerError, "validate FNOS account")
 				return
 			}
 			next.ServeHTTP(w, authenticatedRequest)
+			return
+		}
+		if !sameOrigin(r) {
+			writeError(w, http.StatusForbidden, "cross-origin request rejected")
 			return
 		}
 		cookie, err := r.Cookie(sessionCookieName)
@@ -559,6 +566,21 @@ func (s *Server) requireSession(next http.Handler) http.Handler {
 		contextWithPrincipal := context.WithValue(r.Context(), principalContextKey{}, value)
 		next.ServeHTTP(w, r.WithContext(contextWithPrincipal))
 	})
+}
+
+func validFNOSBrowserRequest(r *http.Request) bool {
+	switch r.Method {
+	case http.MethodGet, http.MethodHead, http.MethodOptions:
+		return true
+	}
+	if r.Header.Get(browserMutationHeader) != "1" {
+		return false
+	}
+	// Fetch Metadata headers are browser-controlled. Keep legacy clients that
+	// omit them working, but reject an explicitly cross-origin browser request
+	// even if an intermediary were to allow its custom-header preflight.
+	fetchSite := r.Header.Get("Sec-Fetch-Site")
+	return fetchSite == "" || strings.EqualFold(fetchSite, "same-origin")
 }
 
 func authenticatedOwner(r *http.Request) string {

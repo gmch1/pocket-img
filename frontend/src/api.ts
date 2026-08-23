@@ -1,5 +1,7 @@
 import type { AccountInfo, ClientSetup, CreatedUser, GalleryRange, GalleryResponse, ImageItem } from "./types";
 
+const browserMutationHeaders = { "X-PocketIMG-Request": "1" } as const;
+
 export class APIError extends Error {
   readonly status: number;
 
@@ -29,7 +31,7 @@ export async function createSession(token: string): Promise<void> {
   const response = await fetch(appURL("api/auth/session"), {
     method: "POST",
     credentials: "same-origin",
-    headers: { Authorization: `Bearer ${token}` },
+    headers: { ...browserMutationHeaders, Authorization: `Bearer ${token}` },
   });
   if (!response.ok) throw await responseError(response);
 }
@@ -38,6 +40,7 @@ export async function deleteSession(): Promise<void> {
   const response = await fetch(appURL("api/auth/session"), {
     method: "DELETE",
     credentials: "same-origin",
+    headers: browserMutationHeaders,
   });
   if (!response.ok && response.status !== 401) throw await responseError(response);
 }
@@ -74,7 +77,7 @@ export async function createUser(spaceID: string): Promise<CreatedUser> {
   const response = await fetch(appURL("api/admin/users"), {
     method: "POST",
     credentials: "same-origin",
-    headers: { "Content-Type": "application/json" },
+    headers: { ...browserMutationHeaders, "Content-Type": "application/json" },
     body: JSON.stringify({ space_id: spaceID }),
   });
   if (!response.ok) throw await responseError(response);
@@ -85,7 +88,7 @@ export async function deleteImages(ids: string[]): Promise<number> {
   const response = await fetch(appURL("api/images"), {
     method: "DELETE",
     credentials: "same-origin",
-    headers: { "Content-Type": "application/json" },
+    headers: { ...browserMutationHeaders, "Content-Type": "application/json" },
     body: JSON.stringify({ ids }),
   });
   if (!response.ok) throw await responseError(response);
@@ -102,6 +105,7 @@ export function uploadImage(
     const request = new XMLHttpRequest();
     request.open("POST", appURL("api/images").href);
     request.withCredentials = true;
+    request.setRequestHeader("X-PocketIMG-Request", "1");
     request.upload.addEventListener("progress", (event) => {
       if (event.lengthComputable) onProgress(Math.min(99, Math.round((event.loaded / event.total) * 100)));
     });
@@ -143,6 +147,7 @@ export async function rotateClientSetupToken(): Promise<string> {
   const response = await fetch(appURL("api/client-setup/token"), {
     method: "POST",
     credentials: "same-origin",
+    headers: browserMutationHeaders,
   });
   if (!response.ok) throw await responseError(response);
   const body = (await response.json()) as { token: string };
@@ -153,6 +158,7 @@ export async function revokeClientSetupToken(): Promise<void> {
   const response = await fetch(appURL("api/client-setup/token"), {
     method: "DELETE",
     credentials: "same-origin",
+    headers: browserMutationHeaders,
   });
   if (!response.ok) throw await responseError(response);
 }

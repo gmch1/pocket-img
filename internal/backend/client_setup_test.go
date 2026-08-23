@@ -173,6 +173,57 @@ func TestFNOSGatewaySSOAndTCPTrustBoundary(t *testing.T) {
 	}
 }
 
+func TestFNOSBrowserMutationBehindPortStrippingGateway(t *testing.T) {
+	cfg := fnosTestConfig(t.TempDir())
+	app, err := New(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	server := httptest.NewServer(app.FNOSHandler())
+	t.Cleanup(func() {
+		server.Close()
+		if err := app.Close(); err != nil {
+			t.Errorf("close backend: %v", err)
+		}
+	})
+
+	request := func(intentHeader, fetchSite string) *http.Response {
+		t.Helper()
+		value := mustRequest(t, http.MethodPost, server.URL+"/app/pocket-img/api/client-setup/token", nil)
+		value.Host = "nas.example.test"
+		value.Header.Set("Origin", "https://nas.example.test:5667")
+		value.Header.Set("Sec-Fetch-Site", fetchSite)
+		if intentHeader != "" {
+			value.Header.Set(browserMutationHeader, intentHeader)
+		}
+		setFNOSHeaders(value, "1000", "Alice", true)
+		response, err := http.DefaultClient.Do(value)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return response
+	}
+
+	missingIntent := request("", "same-origin")
+	missingIntent.Body.Close()
+	if missingIntent.StatusCode != http.StatusForbidden {
+		t.Fatalf("missing intent header status=%d", missingIntent.StatusCode)
+	}
+
+	crossSite := request("1", "cross-site")
+	crossSite.Body.Close()
+	if crossSite.StatusCode != http.StatusForbidden {
+		t.Fatalf("cross-site Fetch Metadata status=%d", crossSite.StatusCode)
+	}
+
+	allowed := request("1", "same-origin")
+	defer allowed.Body.Close()
+	if allowed.StatusCode != http.StatusCreated {
+		body, _ := io.ReadAll(allowed.Body)
+		t.Fatalf("port-stripped same-origin mutation status=%d body=%s", allowed.StatusCode, body)
+	}
+}
+
 func TestFNOSClientDownloadManifestAndServing(t *testing.T) {
 	downloadsDir := t.TempDir()
 	archive := []byte("signed macOS archive fixture")
@@ -300,6 +351,9 @@ func doFNOSRequest(t *testing.T, serverURL, method, path, userID, username strin
 	t.Helper()
 	request := mustRequest(t, method, serverURL+"/app/pocket-img"+path, body)
 	setFNOSHeaders(request, userID, username, isAdmin)
+	if method != http.MethodGet && method != http.MethodHead && method != http.MethodOptions {
+		request.Header.Set(browserMutationHeader, "1")
+	}
 	response, err := http.DefaultClient.Do(request)
 	if err != nil {
 		t.Fatal(err)
