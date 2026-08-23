@@ -1,6 +1,7 @@
 package main
 
 import (
+	"net"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -106,6 +107,94 @@ func TestConfiguredTokensRejectsMissingConflictingAndInvalidSources(t *testing.T
 		if _, err := configuredTokens(); err == nil {
 			t.Fatal("expected invalid JSON error")
 		}
+	})
+}
+
+func TestFNOSModeAllowsStartingWithoutBootstrapToken(t *testing.T) {
+	clearTokenEnvironment(t)
+	tokens, err := configuredTokensForMode(true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(tokens) != 0 {
+		t.Fatalf("tokens=%#v", tokens)
+	}
+}
+
+func TestListenUnixSocketSafelyHandlesExistingPaths(t *testing.T) {
+	t.Run("rejects relative paths", func(t *testing.T) {
+		if _, err := listenUnixSocket("app.sock"); err == nil {
+			t.Fatal("expected relative socket path rejection")
+		}
+	})
+
+	t.Run("preserves ordinary files", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), "app.sock")
+		if err := os.WriteFile(path, []byte("do not remove"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := listenUnixSocket(path); err == nil {
+			t.Fatal("expected ordinary file rejection")
+		}
+		content, err := os.ReadFile(path)
+		if err != nil || string(content) != "do not remove" {
+			t.Fatalf("ordinary path changed: content=%q err=%v", content, err)
+		}
+	})
+
+	t.Run("preserves symbolic links", func(t *testing.T) {
+		directory := t.TempDir()
+		target := filepath.Join(directory, "target")
+		path := filepath.Join(directory, "app.sock")
+		if err := os.WriteFile(target, []byte("target"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Symlink(target, path); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := listenUnixSocket(path); err == nil {
+			t.Fatal("expected symbolic link rejection")
+		}
+		if info, err := os.Lstat(path); err != nil || info.Mode()&os.ModeSymlink == 0 {
+			t.Fatalf("symbolic link changed: info=%v err=%v", info, err)
+		}
+	})
+
+	t.Run("replaces a stale socket", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), "app.sock")
+		stale, err := net.Listen("unix", path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := stale.Close(); err != nil {
+			t.Fatal(err)
+		}
+		listener, err := listenUnixSocket(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer listener.Close()
+		info, err := os.Stat(path)
+		if err != nil || info.Mode()&os.ModeSocket == 0 || info.Mode().Perm() != 0o660 {
+			t.Fatalf("socket info=%v err=%v", info, err)
+		}
+	})
+
+	t.Run("does not replace an active socket", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), "app.sock")
+		active, err := net.Listen("unix", path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer active.Close()
+		if _, err := listenUnixSocket(path); err == nil {
+			t.Fatal("expected active socket rejection")
+		}
+		connection, err := net.Dial("unix", path)
+		if err != nil {
+			t.Fatalf("active socket was replaced: %v", err)
+		}
+		connection.Close()
 	})
 }
 

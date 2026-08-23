@@ -36,31 +36,43 @@ type credential struct {
 type principalContextKey struct{}
 
 type Server struct {
-	cfg           Config
-	store         *store
-	processor     *processor
-	handler       http.Handler
-	queueSlots    chan struct{}
-	processSlots  chan struct{}
-	location      *time.Location
-	thumbnailCtx  context.Context
-	thumbnailStop context.CancelFunc
-	thumbnailWake chan struct{}
-	rateLimits    *rateLimiter
-	galleryEvents *galleryEvents
-	workerWG      sync.WaitGroup
-	thumbnailMu   sync.Mutex
-	closeOnce     sync.Once
-	closeErr      error
+	cfg            Config
+	store          *store
+	processor      *processor
+	handler        http.Handler
+	queueSlots     chan struct{}
+	processSlots   chan struct{}
+	location       *time.Location
+	thumbnailCtx   context.Context
+	thumbnailStop  context.CancelFunc
+	thumbnailWake  chan struct{}
+	rateLimits     *rateLimiter
+	galleryEvents  *galleryEvents
+	clientDownload *clientDownload
+	workerWG       sync.WaitGroup
+	thumbnailMu    sync.Mutex
+	closeOnce      sync.Once
+	closeErr       error
 }
 
 func New(cfg Config) (*Server, error) {
 	if cfg.DataDir == "" {
 		return nil, errors.New("data directory is required")
 	}
-	credentials, err := configuredCredentials(cfg.Tokens)
-	if err != nil {
+	if err := normalizeFNOSConfig(&cfg.FNOS); err != nil {
 		return nil, err
+	}
+	var credentials []credential
+	var err error
+	if len(cfg.Tokens) == 0 {
+		if !cfg.FNOS.Enabled {
+			return nil, errors.New("at least one configured token is required")
+		}
+	} else {
+		credentials, err = configuredCredentials(cfg.Tokens)
+		if err != nil {
+			return nil, err
+		}
 	}
 	if cfg.SessionTTL <= 0 {
 		cfg.SessionTTL = 7 * 24 * time.Hour
@@ -93,18 +105,24 @@ func New(cfg Config) (*Server, error) {
 		cfg.QueueDepth = 8
 	}
 	cfg.RateLimits = cfg.RateLimits.withDefaults()
-	if !validOwnerID(cfg.AdminSpaceID) {
-		return nil, errors.New("a valid admin space id is required")
-	}
-	adminConfigured := false
-	for _, configured := range credentials {
-		if configured.ownerID == cfg.AdminSpaceID {
-			adminConfigured = true
-			break
+	if len(credentials) > 0 {
+		if !validOwnerID(cfg.AdminSpaceID) {
+			return nil, errors.New("a valid admin space id is required")
+		}
+		adminConfigured := false
+		for _, configured := range credentials {
+			if configured.ownerID == cfg.AdminSpaceID {
+				adminConfigured = true
+				break
+			}
+		}
+		if !adminConfigured {
+			return nil, fmt.Errorf("admin space %q is not one of the configured token spaces", cfg.AdminSpaceID)
 		}
 	}
-	if !adminConfigured {
-		return nil, fmt.Errorf("admin space %q is not one of the configured token spaces", cfg.AdminSpaceID)
+	clientDownload, err := loadClientDownload(cfg.FNOS.DownloadsDir)
+	if err != nil {
+		return nil, err
 	}
 
 	for _, directory := range []string{
@@ -130,17 +148,18 @@ func New(cfg Config) (*Server, error) {
 
 	thumbnailCtx, thumbnailStop := context.WithCancel(context.Background())
 	server := &Server{
-		cfg:           cfg,
-		store:         database,
-		processor:     newProcessor(cfg),
-		queueSlots:    make(chan struct{}, cfg.QueueDepth),
-		processSlots:  make(chan struct{}, 1),
-		location:      location,
-		thumbnailCtx:  thumbnailCtx,
-		thumbnailStop: thumbnailStop,
-		thumbnailWake: make(chan struct{}, 1),
-		rateLimits:    newRateLimiter(cfg.RateLimits),
-		galleryEvents: newGalleryEvents(),
+		cfg:            cfg,
+		store:          database,
+		processor:      newProcessor(cfg),
+		queueSlots:     make(chan struct{}, cfg.QueueDepth),
+		processSlots:   make(chan struct{}, 1),
+		location:       location,
+		thumbnailCtx:   thumbnailCtx,
+		thumbnailStop:  thumbnailStop,
+		thumbnailWake:  make(chan struct{}, 1),
+		rateLimits:     newRateLimiter(cfg.RateLimits),
+		galleryEvents:  newGalleryEvents(),
+		clientDownload: clientDownload,
 	}
 	legacyImages, err := server.store.hasLegacyImages(context.Background())
 	if err != nil {
@@ -180,11 +199,17 @@ func New(cfg Config) (*Server, error) {
 			}
 		}
 	}
-	if err := server.store.syncUsers(
-		context.Background(), credentials, cfg.AdminSpaceID, cfg.DefaultQuotaBytes, cfg.DefaultRetentionDays,
-	); err != nil {
-		server.Close()
-		return nil, fmt.Errorf("sync configured users: %w", err)
+	// An FNOS-only deployment has no static token source. In that mode, keep
+	// accounts already stored in /data enabled so an existing Linux data
+	// directory remains reachable with its old tokens. FNOS identities are
+	// provisioned separately because there is no safe way to guess ownership.
+	if len(credentials) > 0 {
+		if err := server.store.syncUsers(
+			context.Background(), credentials, cfg.AdminSpaceID, cfg.DefaultQuotaBytes, cfg.DefaultRetentionDays,
+		); err != nil {
+			server.Close()
+			return nil, fmt.Errorf("sync configured users: %w", err)
+		}
 	}
 	if err := server.store.deleteExpiredSessions(context.Background(), time.Now()); err != nil {
 		server.Close()
@@ -407,6 +432,10 @@ func (s *Server) routes() http.Handler {
 	mux.Handle("DELETE /api/images", s.requireSession(http.HandlerFunc(s.deleteImages)))
 	mux.Handle("GET /api/admin/users", s.requireAdmin(http.HandlerFunc(s.listUsers)))
 	mux.Handle("POST /api/admin/users", s.requireAdmin(http.HandlerFunc(s.createUser)))
+	mux.Handle("GET /api/client-setup", s.requireSession(http.HandlerFunc(s.clientSetup)))
+	mux.Handle("POST /api/client-setup/token", s.requireSession(http.HandlerFunc(s.rotateClientToken)))
+	mux.Handle("DELETE /api/client-setup/token", s.requireSession(http.HandlerFunc(s.revokeClientToken)))
+	mux.HandleFunc("GET /downloads/{name}", s.serveClientDownload)
 	mux.HandleFunc("GET /i/{name}", s.serveFullImage)
 	mux.HandleFunc("GET /t/{name}", s.serveThumbnail)
 	mux.Handle("GET /", webui.Handler())
@@ -501,6 +530,15 @@ func (s *Server) requireSession(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !sameOrigin(r) {
 			writeError(w, http.StatusForbidden, "cross-origin request rejected")
+			return
+		}
+		if identity, ok := fnosIdentityFromRequest(r); ok {
+			authenticatedRequest, err := s.authenticateFNOSRequest(r, identity)
+			if err != nil {
+				writeError(w, http.StatusInternalServerError, "validate FNOS account")
+				return
+			}
+			next.ServeHTTP(w, authenticatedRequest)
 			return
 		}
 		cookie, err := r.Cookie(sessionCookieName)
@@ -615,7 +653,7 @@ func (s *Server) uploadImage(w http.ResponseWriter, r *http.Request) {
 		s.wakeThumbnailWorker()
 	}
 	s.galleryEvents.notify(ownerID)
-	writeJSON(w, http.StatusCreated, map[string]any{"image": record.response()})
+	writeJSON(w, http.StatusCreated, map[string]any{"image": s.responseForRequest(r, record)})
 }
 
 var errUploadTooLarge = errors.New("upload exceeds configured size limit")
@@ -697,14 +735,16 @@ func (s *Server) listImages(w http.ResponseWriter, r *http.Request) {
 	}
 	images := make([]imageResponse, 0, len(records))
 	for _, record := range records {
-		images = append(images, record.response())
+		images = append(images, s.responseForRequest(r, record))
 	}
 	account, found, err := s.store.account(r.Context(), authenticatedOwner(r))
 	if err != nil || !found {
 		writeError(w, http.StatusInternalServerError, "load account")
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"images": images, "account": account.response()})
+	accountValue := account.response()
+	accountValue.IsAdmin = authenticatedPrincipal(r).IsAdmin
+	writeJSON(w, http.StatusOK, map[string]any{"images": images, "account": accountValue})
 }
 
 func (s *Server) streamGalleryEvents(w http.ResponseWriter, r *http.Request) {
@@ -947,9 +987,15 @@ func (s *Server) serveFile(w http.ResponseWriter, r *http.Request, path, mediaTy
 
 func (s *Server) securityHeaders(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; worker-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'")
+		frameAncestors := "'none'"
+		frameOption := "DENY"
+		if _, ok := fnosIdentityFromRequest(r); ok {
+			frameAncestors = "'self'"
+			frameOption = "SAMEORIGIN"
+		}
+		w.Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; worker-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors "+frameAncestors+"; form-action 'self'")
 		w.Header().Set("X-Content-Type-Options", "nosniff")
-		w.Header().Set("X-Frame-Options", "DENY")
+		w.Header().Set("X-Frame-Options", frameOption)
 		w.Header().Set("Referrer-Policy", "no-referrer")
 		w.Header().Set("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
 		next.ServeHTTP(w, r)

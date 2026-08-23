@@ -52,6 +52,9 @@ func openStore(dataDir string) (*store, error) {
 		`CREATE TABLE IF NOT EXISTS users (
 			id TEXT PRIMARY KEY,
 			token_fingerprint BLOB UNIQUE,
+			display_name TEXT NOT NULL DEFAULT '',
+			identity_provider TEXT NOT NULL DEFAULT '',
+			external_subject TEXT NOT NULL DEFAULT '',
 			enabled INTEGER NOT NULL,
 			is_admin INTEGER NOT NULL DEFAULT 0,
 			quota_bytes INTEGER NOT NULL DEFAULT 10737418240,
@@ -83,6 +86,9 @@ func openStore(dataDir string) (*store, error) {
 		{"users", "quota_bytes", fmt.Sprintf(`ALTER TABLE users ADD COLUMN quota_bytes INTEGER NOT NULL DEFAULT %d`, defaultUserQuotaBytes)},
 		{"users", "retention_days", fmt.Sprintf(`ALTER TABLE users ADD COLUMN retention_days INTEGER NOT NULL DEFAULT %d`, defaultRetentionDays)},
 		{"users", "managed_by_config", `ALTER TABLE users ADD COLUMN managed_by_config INTEGER NOT NULL DEFAULT 1`},
+		{"users", "display_name", `ALTER TABLE users ADD COLUMN display_name TEXT NOT NULL DEFAULT ''`},
+		{"users", "identity_provider", `ALTER TABLE users ADD COLUMN identity_provider TEXT NOT NULL DEFAULT ''`},
+		{"users", "external_subject", `ALTER TABLE users ADD COLUMN external_subject TEXT NOT NULL DEFAULT ''`},
 		{"images", "thumbnail_attempts", `ALTER TABLE images ADD COLUMN thumbnail_attempts INTEGER NOT NULL DEFAULT 0`},
 		{"images", "thumbnail_next_attempt_ms", `ALTER TABLE images ADD COLUMN thumbnail_next_attempt_ms INTEGER NOT NULL DEFAULT 0`},
 	} {
@@ -96,6 +102,8 @@ func openStore(dataDir string) (*store, error) {
 		`CREATE INDEX IF NOT EXISTS sessions_expiry_idx ON sessions(expires_at_ms)`,
 		`CREATE INDEX IF NOT EXISTS sessions_owner_idx ON sessions(owner_id)`,
 		`CREATE INDEX IF NOT EXISTS images_thumbnail_queue_idx ON images(thumbnail_size, thumbnail_next_attempt_ms, created_at_ms)`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS users_external_identity_idx
+			ON users(identity_provider, external_subject) WHERE identity_provider <> ''`,
 	} {
 		if _, err := db.Exec(statement); err != nil {
 			db.Close()
@@ -322,13 +330,13 @@ func (s *store) listAllImagesForOwner(ctx context.Context, ownerID string) ([]im
 
 func (s *store) account(ctx context.Context, ownerID string) (accountRecord, bool, error) {
 	var record accountRecord
-	err := s.db.QueryRowContext(ctx, `SELECT users.id, users.is_admin, users.quota_bytes,
+	err := s.db.QueryRowContext(ctx, `SELECT users.id, users.display_name, users.is_admin, users.quota_bytes,
 		COALESCE(SUM(images.byte_size + CASE WHEN images.thumbnail_size > 0 THEN images.thumbnail_size ELSE 0 END), 0),
 		COUNT(images.id), users.retention_days, users.enabled, users.created_at_ms
 		FROM users LEFT JOIN images ON images.owner_id = users.id
 		WHERE users.id = ?
 		GROUP BY users.id`, ownerID).Scan(
-		&record.SpaceID, &record.IsAdmin, &record.QuotaBytes, &record.UsedBytes,
+		&record.SpaceID, &record.DisplayName, &record.IsAdmin, &record.QuotaBytes, &record.UsedBytes,
 		&record.ImageCount, &record.RetentionDays, &record.Enabled, &record.CreatedAtMilli,
 	)
 	if err == sql.ErrNoRows {
@@ -338,7 +346,7 @@ func (s *store) account(ctx context.Context, ownerID string) (accountRecord, boo
 }
 
 func (s *store) listAccounts(ctx context.Context) ([]accountRecord, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT users.id, users.is_admin, users.quota_bytes,
+	rows, err := s.db.QueryContext(ctx, `SELECT users.id, users.display_name, users.is_admin, users.quota_bytes,
 		COALESCE(SUM(images.byte_size + CASE WHEN images.thumbnail_size > 0 THEN images.thumbnail_size ELSE 0 END), 0),
 		COUNT(images.id), users.retention_days, users.enabled, users.created_at_ms
 		FROM users LEFT JOIN images ON images.owner_id = users.id
@@ -352,7 +360,7 @@ func (s *store) listAccounts(ctx context.Context) ([]accountRecord, error) {
 	for rows.Next() {
 		var record accountRecord
 		if err := rows.Scan(
-			&record.SpaceID, &record.IsAdmin, &record.QuotaBytes, &record.UsedBytes,
+			&record.SpaceID, &record.DisplayName, &record.IsAdmin, &record.QuotaBytes, &record.UsedBytes,
 			&record.ImageCount, &record.RetentionDays, &record.Enabled, &record.CreatedAtMilli,
 		); err != nil {
 			return nil, err
@@ -374,6 +382,114 @@ func (s *store) createAccount(ctx context.Context, ownerID string, fingerprint [
 	}
 	created, err := result.RowsAffected()
 	return created == 1, err
+}
+
+func (s *store) upsertExternalAccount(
+	ctx context.Context,
+	provider string,
+	subject string,
+	ownerID string,
+	displayName string,
+	isAdmin bool,
+	quotaBytes int64,
+	retentionDays int,
+) (string, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return "", err
+	}
+	defer tx.Rollback()
+
+	var storedOwnerID string
+	err = tx.QueryRowContext(ctx, `SELECT id FROM users
+		WHERE identity_provider = ? AND external_subject = ?`, provider, subject).Scan(&storedOwnerID)
+	switch err {
+	case nil:
+		ownerID = storedOwnerID
+	case sql.ErrNoRows:
+		_, err = tx.ExecContext(ctx, `INSERT INTO users (
+			id, token_fingerprint, display_name, identity_provider, external_subject,
+			enabled, created_at_ms, is_admin, quota_bytes, retention_days, managed_by_config
+		) VALUES (?, NULL, ?, ?, ?, 1, ?, ?, ?, ?, 0)`,
+			ownerID, displayName, provider, subject, time.Now().UTC().UnixMilli(),
+			isAdmin, quotaBytes, retentionDays,
+		)
+		if err != nil {
+			return "", fmt.Errorf("create external account: %w", err)
+		}
+	default:
+		return "", err
+	}
+
+	if _, err := tx.ExecContext(ctx, `UPDATE users
+		SET display_name = ?, is_admin = ?, enabled = 1
+		WHERE id = ? AND identity_provider = ? AND external_subject = ?`,
+		displayName, isAdmin, ownerID, provider, subject,
+	); err != nil {
+		return "", err
+	}
+	if err := tx.Commit(); err != nil {
+		return "", err
+	}
+	return ownerID, nil
+}
+
+func (s *store) replaceAccountCredential(ctx context.Context, ownerID string, fingerprint []byte) (bool, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return false, err
+	}
+	defer tx.Rollback()
+	result, err := tx.ExecContext(ctx, `UPDATE users SET token_fingerprint = ?
+		WHERE id = ? AND enabled = 1`, fingerprint, ownerID)
+	if err != nil {
+		return false, err
+	}
+	updated, err := result.RowsAffected()
+	if err != nil || updated != 1 {
+		return false, err
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM sessions WHERE owner_id = ?`, ownerID); err != nil {
+		return false, err
+	}
+	if err := tx.Commit(); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+func (s *store) revokeAccountCredential(ctx context.Context, ownerID string) (bool, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return false, err
+	}
+	defer tx.Rollback()
+	result, err := tx.ExecContext(ctx, `UPDATE users SET token_fingerprint = NULL
+		WHERE id = ? AND enabled = 1 AND token_fingerprint IS NOT NULL`, ownerID)
+	if err != nil {
+		return false, err
+	}
+	updated, err := result.RowsAffected()
+	if err != nil {
+		return false, err
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM sessions WHERE owner_id = ?`, ownerID); err != nil {
+		return false, err
+	}
+	if err := tx.Commit(); err != nil {
+		return false, err
+	}
+	return updated == 1, nil
+}
+
+func (s *store) accountHasCredential(ctx context.Context, ownerID string) (bool, error) {
+	var configured bool
+	err := s.db.QueryRowContext(ctx, `SELECT token_fingerprint IS NOT NULL
+		FROM users WHERE id = ? AND enabled = 1`, ownerID).Scan(&configured)
+	if err == sql.ErrNoRows {
+		return false, nil
+	}
+	return configured, err
 }
 
 func (s *store) credentialByFingerprint(ctx context.Context, fingerprint []byte) (credential, bool, error) {
@@ -512,7 +628,8 @@ func (s *store) sessionOwner(ctx context.Context, hash []byte, now time.Time) (s
 
 func (s *store) sessionPrincipal(ctx context.Context, hash []byte, now time.Time) (principal, bool, error) {
 	var value principal
-	err := s.db.QueryRowContext(ctx, `SELECT sessions.owner_id, users.is_admin
+	err := s.db.QueryRowContext(ctx, `SELECT sessions.owner_id,
+		CASE WHEN users.identity_provider = '' THEN users.is_admin ELSE 0 END
 		FROM sessions JOIN users ON users.id = sessions.owner_id
 		WHERE sessions.token_hash = ?
 			AND sessions.expires_at_ms > ?

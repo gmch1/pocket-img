@@ -2,8 +2,14 @@
 
 ## Unreleased
 
+## 0.5.0 - 2026-08-24
+
 ### Added
 
+- 增加单容器 Docker 部署：React 页面编译进 Go 服务，SQLite 与媒体数据集中持久化到 `/data`，镜像以非 root 用户运行并同时支持 linux/amd64、linux/arm64。
+- 增加飞牛 fnOS 应用包：通过统一网关和 Unix Socket 接入 NAS 登录态，以稳定 UID 自动创建隔离空间，并保留独立 TCP 服务供 Mac 客户端及公开媒体访问。
+- 增加 fnOS 客户端引导页：展示管理地址和客户端服务地址，从 NAS 本地提供同版本 Apple Silicon 客户端，并支持生成、轮换和撤销每用户客户端 Token。
+- 增加 Docker、macOS 和多架构容器 CI，以及 `fnos-v*` 独立发布通道；全平台发布会同步生成 FPK、GHCR 镜像和本地客户端安装包。
 - macOS 客户端增加 `F2` 选区视频录制：支持倒计时、再次按 `F2` 或点击悬浮按钮停止、时间轴裁剪，以及复制或上传最终 H.264 MP4。
 - 视频录制流程会将选区、输出尺寸、录制帧、MOV/MP4 大小和导出耗时等非敏感指标写入独立的 `~/Library/Logs/PocketIMGShot-Video-Experiment.jsonl`。
 - 后端和网页画廊支持经过真实容器与 H.264 轨道校验的无音频 MP4；公开 URL 支持 Range 播放，网页可粘贴、展示和预览视频。

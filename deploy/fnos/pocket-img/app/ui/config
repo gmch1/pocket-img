@@ -1,0 +1,14 @@
+{
+  ".url": {
+    "pocket-img.main": {
+      "title": "PocketIMG",
+      "icon": "images/icon_{0}.png",
+      "type": "iframe",
+      "protocol": "",
+      "gatewayPrefix": "/app/pocket-img",
+      "gatewaySocket": "app.sock",
+      "url": "/app/pocket-img",
+      "allUsers": true
+    }
+  }
+}

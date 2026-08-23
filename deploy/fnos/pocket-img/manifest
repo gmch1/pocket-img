@@ -1,0 +1,15 @@
+appname=pocket-img
+version=__VERSION__
+display_name=PocketIMG
+desc=轻量、自托管的图片与视频分享服务。
+source=thirdparty
+platform=all
+maintainer=PocketIMG
+distributor=PocketIMG
+os_min_version=1.1.3100
+desktop_uidir=ui
+desktop_applaunchname=pocket-img.main
+service_port=8080
+checkport=true
+ctl_stop=true
+disable_authorization_path=true

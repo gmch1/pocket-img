@@ -1,0 +1,23 @@
+#!/bin/bash
+
+set -u
+
+readonly CONTAINER_NAME="pocket-img"
+
+case "${1:-}" in
+  start|stop)
+    # Docker project lifecycle is managed by fnOS from config/resource.
+    exit 0
+    ;;
+  status)
+    if [ "$(docker inspect --format '{{.State.Running}}' "$CONTAINER_NAME" 2>/dev/null || true)" = "true" ]; then
+      exit 0
+    fi
+    exit 3
+    ;;
+  *)
+    log_file="${TRIM_TEMP_LOGFILE:-/tmp/pocket-img-fnos-error.log}"
+    echo "Unknown command: ${1:-<empty>}" > "$log_file"
+    exit 1
+    ;;
+esac

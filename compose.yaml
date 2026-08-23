@@ -1,0 +1,32 @@
+name: pocketimg
+
+services:
+  pocketimg:
+    image: ${PIH_IMAGE:-pocketimg:local}
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "${PIH_PORT:-8080}:8080"
+    environment:
+      PIH_ADDR: 0.0.0.0:8080
+      PIH_DATA_DIR: /data
+      PIH_COOKIE_SECURE: ${PIH_COOKIE_SECURE:-false}
+      PIH_TOKEN: ${PIH_TOKEN:-}
+      PIH_TOKENS_FILE: ${PIH_TOKENS_FILE:-}
+      PIH_ADMIN_SPACE_ID: ${PIH_ADMIN_SPACE_ID:-}
+    volumes:
+      - pocketimg-data:/data
+      - ${PIH_CONFIG_DIR:-./config}:/config:ro
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    stop_grace_period: 20s
+
+volumes:
+  pocketimg-data:

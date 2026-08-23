@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
-import { APIError, absoluteImageURL, createSession, deleteImages, deleteSession, listImages, subscribeGalleryChanges, uploadImage } from "./api";
+import { APIError, absoluteImageURL, createSession, deleteImages, deleteSession, getClientSetup, listImages, subscribeGalleryChanges, uploadImage } from "./api";
 import { copyText } from "./clipboard";
 import { prepareImageForUpload } from "./image-compression";
 import { ImageCard } from "./components/ImageCard";
@@ -7,8 +7,9 @@ import { ImagePreview } from "./components/ImagePreview";
 import { AdminPanel } from "./components/AdminPanel";
 import { TokenPanel } from "./components/TokenPanel";
 import { GlobalUploadProgress } from "./components/GlobalUploadProgress";
-import { AlertIcon, ImageIcon, KeyIcon, LogoutIcon, TrashIcon, UsersIcon } from "./icons";
-import type { AccountInfo, GalleryRange, ImageItem, UploadTask } from "./types";
+import { ClientSetupGuide } from "./components/ClientSetupGuide";
+import { AlertIcon, ImageIcon, KeyIcon, LaptopIcon, LogoutIcon, TrashIcon, UsersIcon } from "./icons";
+import type { AccountInfo, ClientSetup, GalleryRange, ImageItem, UploadTask } from "./types";
 
 type AuthState = "checking" | "required" | "authenticated";
 type Toast = { id: number; message: string; error: boolean };
@@ -31,6 +32,7 @@ const MAX_PASTE_FILES = 20;
 const MAX_FILE_BYTES = 25 * 1024 * 1024;
 const MARQUEE_DRAG_THRESHOLD = 5;
 const TIMELINE_TIME_ZONE = "Asia/Shanghai";
+const CLIENT_SETUP_SEEN_PREFIX = "pocketimg:fnos-client-setup-seen:";
 const TIMELINE_DATE_KEY = new Intl.DateTimeFormat("en-CA", {
   timeZone: TIMELINE_TIME_ZONE,
   year: "numeric",
@@ -100,6 +102,17 @@ function intersectsSelectionBox(rect: DOMRect, box: SelectionBox): boolean {
     && rect.top < box.top + box.height;
 }
 
+function shouldOpenClientSetup(spaceID: string): boolean {
+  const key = `${CLIENT_SETUP_SEEN_PREFIX}${spaceID}`;
+  try {
+    if (window.localStorage.getItem(key) === "1") return false;
+    window.localStorage.setItem(key, "1");
+  } catch {
+    // Storage may be unavailable in a restricted browser; the guide can still open.
+  }
+  return true;
+}
+
 export default function App() {
   const [auth, setAuth] = useState<AuthState>("checking");
   const [range, setRange] = useState<GalleryRange>("7d");
@@ -108,6 +121,8 @@ export default function App() {
   const [galleryError, setGalleryError] = useState("");
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [adminOpen, setAdminOpen] = useState(false);
+  const [clientSetup, setClientSetup] = useState<ClientSetup | null>(null);
+  const [clientSetupOpen, setClientSetupOpen] = useState(false);
   const [account, setAccount] = useState<AccountInfo | null>(null);
   const [preview, setPreview] = useState<ImageItem | null>(null);
   const [selected, setSelected] = useState<Set<string>>(() => new Set());
@@ -147,6 +162,8 @@ export default function App() {
     setPreview(null);
     setSettingsOpen(false);
     setAdminOpen(false);
+    setClientSetup(null);
+    setClientSetupOpen(false);
     setAccount(null);
   }, []);
 
@@ -215,6 +232,25 @@ export default function App() {
       controller?.abort();
     };
   }, [auth, range, refresh]);
+
+  useEffect(() => {
+    if (auth !== "authenticated") return;
+    let active = true;
+    void getClientSetup()
+      .then((setup) => {
+        if (!active) return;
+        setClientSetup(setup);
+        if (shouldOpenClientSetup(setup.user.space_id)) setClientSetupOpen(true);
+      })
+      .catch((reason) => {
+        if (!active) return;
+        if (reason instanceof APIError && reason.status === 401) expireSession();
+        else if (!(reason instanceof APIError && (reason.status === 403 || reason.status === 404))) {
+          notify(reason instanceof Error ? reason.message : "客户端设置加载失败", true);
+        }
+      });
+    return () => { active = false; };
+  }, [auth, expireSession, notify]);
 
   useEffect(() => {
     let wasHidden = document.visibilityState === "hidden";
@@ -461,8 +497,13 @@ export default function App() {
         </nav>
         <div className="topbar__actions">
           {account?.is_admin ? <button className="icon-button" type="button" aria-label="用户管理" onClick={() => setAdminOpen(true)}><UsersIcon /></button> : null}
-          <button className="icon-button" type="button" aria-label="设置 Token" onClick={() => setSettingsOpen(true)}><KeyIcon /></button>
-          <button className="icon-button" type="button" aria-label="退出会话" onClick={() => void logout()}><LogoutIcon /></button>
+          {clientSetup ? <button className="icon-button" type="button" aria-label="客户端设置" onClick={() => setClientSetupOpen(true)}><LaptopIcon /></button> : null}
+          {!clientSetup ? (
+            <>
+              <button className="icon-button" type="button" aria-label="设置 Token" onClick={() => setSettingsOpen(true)}><KeyIcon /></button>
+              <button className="icon-button" type="button" aria-label="退出会话" onClick={() => void logout()}><LogoutIcon /></button>
+            </>
+          ) : null}
         </div>
       </header>
 
@@ -556,8 +597,17 @@ export default function App() {
           onNext={previewIndex >= 0 && previewIndex < images.length - 1 ? () => setPreview(images[previewIndex + 1]) : undefined}
         />
       ) : null}
-      {settingsOpen ? <TokenPanel modal onClose={() => setSettingsOpen(false)} onAuthenticate={authenticate} /> : null}
+      {!clientSetup && settingsOpen ? <TokenPanel modal onClose={() => setSettingsOpen(false)} onAuthenticate={authenticate} /> : null}
       {adminOpen ? <AdminPanel onClose={() => setAdminOpen(false)} onSessionExpired={expireSession} onNotify={notify} /> : null}
+      {clientSetup && clientSetupOpen ? (
+        <ClientSetupGuide
+          setup={clientSetup}
+          onClose={() => setClientSetupOpen(false)}
+          onTokenConfigured={(configured) => setClientSetup((current) => current ? { ...current, token_configured: configured } : null)}
+          onSessionExpired={expireSession}
+          onNotify={notify}
+        />
+      ) : null}
       {toast ? <div key={toast.id} className={`toast${toast.error ? " toast--error" : ""}`} role="status">{toast.message}</div> : null}
     </div>
   );

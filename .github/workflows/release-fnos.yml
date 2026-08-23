@@ -1,0 +1,209 @@
+name: Release PocketIMG for fnOS
+
+on:
+  push:
+    tags:
+      - "fnos-v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "fnOS version, for example 0.5.0"
+        required: true
+        type: string
+  workflow_call:
+    inputs:
+      version:
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: pocketimg-fnos-release-${{ github.ref }}-${{ inputs.version }}
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
+      version: ${{ steps.version.outputs.version }}
+      image: ${{ steps.version.outputs.image }}
+    steps:
+      - name: Resolve fnOS version
+        id: version
+        shell: bash
+        env:
+          DISPATCH_VERSION: ${{ inputs.version }}
+        run: |
+          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+            release_tag="${GITHUB_REF_NAME}"
+          else
+            release_tag="fnos-v${DISPATCH_VERSION}"
+          fi
+          if [[ ! "${release_tag}" =~ ^fnos-v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "fnOS release tag must look like fnos-v0.5.0" >&2
+            exit 1
+          fi
+          version="${release_tag#fnos-v}"
+          echo "tag=${release_tag}" >> "${GITHUB_OUTPUT}"
+          echo "version=${version}" >> "${GITHUB_OUTPUT}"
+          echo "image=ghcr.io/gmch1/pocket-img:${version}" >> "${GITHUB_OUTPUT}"
+
+  build:
+    needs: prepare
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Download matching published macOS artifact
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          install -d release-macos
+          gh release download "macos-v${RELEASE_VERSION}" \
+            --pattern "PocketIMGShot-${RELEASE_VERSION}-macos-arm64.zip" \
+            --pattern "PocketIMGShot-${RELEASE_VERSION}-macos-arm64.zip.sha256" \
+            --dir release-macos
+
+      - name: Select the signed macOS archive
+        id: macos
+        shell: bash
+        env:
+          RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          archive="release-macos/PocketIMGShot-${RELEASE_VERSION}-macos-arm64.zip"
+          test -f "${archive}"
+          (
+            cd release-macos
+            sha256sum --check "$(basename "${archive}").sha256"
+          )
+          unzip -tqq "${archive}"
+          echo "archive=${archive}" >> "${GITHUB_OUTPUT}"
+
+      - name: Log in to GitHub Container Registry
+        shell: bash
+        env:
+          GHCR_TOKEN: ${{ github.token }}
+        run: printf '%s' "${GHCR_TOKEN}" | docker login ghcr.io --username "${GITHUB_ACTOR}" --password-stdin
+
+      - name: Create Buildx builder
+        run: docker buildx create --name pocketimg-release --driver docker-container --use
+
+      - name: Build and publish multi-architecture image
+        shell: bash
+        env:
+          RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
+          RELEASE_IMAGE: ${{ needs.prepare.outputs.image }}
+        run: |
+          docker buildx build \
+            --platform linux/amd64,linux/arm64 \
+            --build-arg "VERSION=${RELEASE_VERSION}" \
+            --tag "${RELEASE_IMAGE}" \
+            --provenance=true \
+            --sbom=true \
+            --push \
+            .
+          docker buildx imagetools inspect "${RELEASE_IMAGE}"
+
+      - name: Verify the fnOS image is anonymously pullable
+        shell: bash
+        env:
+          RELEASE_IMAGE: ${{ needs.prepare.outputs.image }}
+        run: |
+          docker logout ghcr.io
+          docker buildx imagetools inspect "${RELEASE_IMAGE}"
+
+      - name: Install the pinned fnOS packager
+        shell: bash
+        run: |
+          fnpack_path="${RUNNER_TEMP}/fnpack"
+          curl --fail --location --proto '=https' --tlsv1.2 \
+            --output "${fnpack_path}" \
+            https://static2.fnnas.com/fnpack/fnpack-1.2.3-linux-amd64
+          echo "54b97fa7b70968c4d05c79840f5daeff508957d0bb2062fdb0376d00d9615c93  ${fnpack_path}" | sha256sum --check
+          chmod 755 "${fnpack_path}"
+          echo "${RUNNER_TEMP}" >> "${GITHUB_PATH}"
+
+      - name: Build fnOS package with the local macOS client
+        shell: bash
+        env:
+          RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
+          MACOS_ARCHIVE: ${{ steps.macos.outputs.archive }}
+        run: |
+          scripts/build_fnos_package.sh \
+            --version "${RELEASE_VERSION}" \
+            --macos-zip "${MACOS_ARCHIVE}" \
+            --output-dir release-fnos
+          package="release-fnos/pocket-img-${RELEASE_VERSION}.fpk"
+          test -f "${package}"
+          (
+            cd release-fnos
+            sha256sum "$(basename "${package}")" > "$(basename "${package}").sha256"
+          )
+
+      - name: Upload fnOS artifacts
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: release-fnos
+          path: release-fnos/*
+          if-no-files-found: error
+          compression-level: 0
+
+  publish:
+    needs: [prepare, build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Check out source and tags
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+
+      - name: Download fnOS artifacts
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        with:
+          name: release-fnos
+          path: release-fnos
+
+      - name: Publish fnOS release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.prepare.outputs.tag }}
+          RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
+          RELEASE_IMAGE: ${{ needs.prepare.outputs.image }}
+        run: |
+          if gh release view "${RELEASE_TAG}" >/dev/null 2>&1; then
+            gh release upload "${RELEASE_TAG}" release-fnos/* --clobber
+            exit 0
+          fi
+
+          previous_tag="$(
+            git tag --list 'fnos-v*' --sort=-version:refname \
+              | grep -Fxv "${RELEASE_TAG}" \
+              | head -n 1 \
+              || true
+          )"
+          notes=(--notes "Docker image: ${RELEASE_IMAGE}")
+          if [[ -n "${previous_tag}" ]]; then
+            notes=(--generate-notes --notes-start-tag "${previous_tag}" --notes "Docker image: ${RELEASE_IMAGE}")
+          fi
+          tag_args=(--target "${GITHUB_SHA}")
+          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+            tag_args=(--verify-tag)
+          fi
+          gh release create "${RELEASE_TAG}" release-fnos/* \
+            "${tag_args[@]}" \
+            "${notes[@]}" \
+            --latest=false \
+            --title "PocketIMG for fnOS ${RELEASE_VERSION}"

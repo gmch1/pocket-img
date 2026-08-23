@@ -1,0 +1,21 @@
+services:
+  pocket-img:
+    image: "ghcr.io/gmch1/pocket-img:__VERSION__"
+    container_name: pocket-img
+    restart: unless-stopped
+    user: "${TRIM_UID:-10001}:${TRIM_GID:-10001}"
+    ports:
+      - "${TRIM_SERVICE_PORT}:8080"
+    volumes:
+      - "${TRIM_PKGVAR}:/data:rw"
+      - "${TRIM_APPDEST}:/fnos-target:rw"
+      - "${TRIM_APPDEST}/downloads:/downloads:ro"
+    environment:
+      PIH_DATA_DIR: /data
+      PIH_ADDR: 0.0.0.0:8080
+      PIH_COOKIE_SECURE: "false"
+      PIH_FNOS_SOCKET: /fnos-target/app.sock
+      PIH_FNOS_PREFIX: /app/pocket-img
+      PIH_SERVICE_PORT: "${TRIM_SERVICE_PORT}"
+      PIH_DOWNLOADS_DIR: /downloads
+      PIH_VERSION: "__VERSION__"
