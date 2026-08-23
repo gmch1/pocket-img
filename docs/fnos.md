@@ -153,6 +153,8 @@ GET /app/pocket-img/api/images
 
 不能继续使用无条件的 `fetch("/api/...")`，否则请求会落到 fnOS 自身的 `/api`。直接 TCP 部署仍需保留根路径兼容。
 
+fnOS nginx 会通过 `$host` 转发 Host，因此浏览器使用 `5666`、`5667` 等非默认端口时，应用收到的 Host 可能不再包含端口，不能只靠公开 Origin 与内部 Host 的逐字比较判断写请求。网页所有 POST、DELETE 等写请求必须携带 `X-PocketIMG-Request: 1`；后端只在已经由 Unix Socket 建立的 fnOS SSO 身份上下文中接受该 Header，并拒绝显式为 cross-site 的 Fetch Metadata。普通 TCP listener 不信任这个 Header，仍使用原有 Origin 与 Session 校验。
+
 ## 本地 macOS 客户端
 
 FNOS 包不在安装时访问 GitHub。发布流水线必须先准备同版本、已签名的 Apple Silicon ZIP，再把它交给打包脚本。当前 Android APK 是“在 Android 上运行后端”的管理壳，不是连接 FNOS 的上传客户端，不应出现在 FNOS 引导页。

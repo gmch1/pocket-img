@@ -55,6 +55,10 @@ describe("API base URL handling", () => {
     expect(urls[2].searchParams.get("limit")).toBe("100");
     expect(fetchMock.mock.calls[7][1]?.method).toBe("POST");
     expect(fetchMock.mock.calls[8][1]?.method).toBe("DELETE");
+    for (const index of [0, 1, 4, 5, 7, 8]) {
+      const headers = new Headers(fetchMock.mock.calls[index][1]?.headers);
+      expect(headers.get("X-PocketIMG-Request")).toBe("1");
+    }
   });
 
   test("resolves SSE and XHR endpoints below document.baseURI", () => {
@@ -74,10 +78,12 @@ describe("API base URL handling", () => {
     expect(sources[0].close).toHaveBeenCalledOnce();
 
     const open = vi.spyOn(XMLHttpRequest.prototype, "open");
+    const setRequestHeader = vi.spyOn(XMLHttpRequest.prototype, "setRequestHeader");
     vi.spyOn(XMLHttpRequest.prototype, "send").mockImplementation(() => undefined);
     void uploadImage(new File(["image"], "image.webp", { type: "image/webp" }), () => undefined);
     expect(open.mock.calls[0][0]).toBe("POST");
     expect(open.mock.calls[0][1]).toBe("https://nas.example/app/pocket-img/api/images");
+    expect(setRequestHeader).toHaveBeenCalledWith("X-PocketIMG-Request", "1");
   });
 
   test("resolves relative public media while preserving absolute public URLs", () => {
