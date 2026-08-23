@@ -10,6 +10,7 @@ on:
 
 permissions:
   contents: write
+  packages: write
 
 jobs:
   server:
@@ -26,6 +27,13 @@ jobs:
 
   macos:
     uses: ./.github/workflows/release-macos.yml
+    with:
+      version: ${{ inputs.version }}
+    secrets: inherit
+
+  fnos:
+    needs: macos
+    uses: ./.github/workflows/release-fnos.yml
     with:
       version: ${{ inputs.version }}
     secrets: inherit

@@ -57,3 +57,7 @@ export function ExpandIcon(props: IconProps) {
 export function UsersIcon(props: IconProps) {
   return <IconBase {...props}><path d="M16 20v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M22 20v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" /></IconBase>;
 }
+
+export function LaptopIcon(props: IconProps) {
+  return <IconBase {...props}><rect x="4" y="4" width="16" height="12" rx="2" /><path d="M2 20h20M9 20v-1h6v1" /></IconBase>;
+}

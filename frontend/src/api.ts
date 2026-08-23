@@ -1,4 +1,4 @@
-import type { AccountInfo, CreatedUser, GalleryRange, GalleryResponse, ImageItem } from "./types";
+import type { AccountInfo, ClientSetup, CreatedUser, GalleryRange, GalleryResponse, ImageItem } from "./types";
 
 export class APIError extends Error {
   readonly status: number;
@@ -21,8 +21,12 @@ async function responseError(response: Response): Promise<APIError> {
   return new APIError(response.status, message);
 }
 
+export function appURL(relativePath: string): URL {
+  return new URL(relativePath, document.baseURI);
+}
+
 export async function createSession(token: string): Promise<void> {
-  const response = await fetch("/api/auth/session", {
+  const response = await fetch(appURL("api/auth/session"), {
     method: "POST",
     credentials: "same-origin",
     headers: { Authorization: `Bearer ${token}` },
@@ -31,7 +35,7 @@ export async function createSession(token: string): Promise<void> {
 }
 
 export async function deleteSession(): Promise<void> {
-  const response = await fetch("/api/auth/session", {
+  const response = await fetch(appURL("api/auth/session"), {
     method: "DELETE",
     credentials: "same-origin",
   });
@@ -39,8 +43,9 @@ export async function deleteSession(): Promise<void> {
 }
 
 export async function listImages(range: GalleryRange, signal?: AbortSignal): Promise<GalleryResponse> {
-  const query = new URLSearchParams({ range, limit: "100" });
-  const response = await fetch(`/api/images?${query}`, {
+  const url = appURL("api/images");
+  url.search = new URLSearchParams({ range, limit: "100" }).toString();
+  const response = await fetch(url, {
     credentials: "same-origin",
     signal,
   });
@@ -50,7 +55,7 @@ export async function listImages(range: GalleryRange, signal?: AbortSignal): Pro
 
 export function subscribeGalleryChanges(onChange: () => void): () => void {
   if (typeof EventSource === "undefined") return () => undefined;
-  const source = new EventSource("/api/images/events", { withCredentials: true });
+  const source = new EventSource(appURL("api/images/events"), { withCredentials: true });
   source.addEventListener("gallery", onChange);
   return () => {
     source.removeEventListener("gallery", onChange);
@@ -59,14 +64,14 @@ export function subscribeGalleryChanges(onChange: () => void): () => void {
 }
 
 export async function listUsers(): Promise<AccountInfo[]> {
-  const response = await fetch("/api/admin/users", { credentials: "same-origin" });
+  const response = await fetch(appURL("api/admin/users"), { credentials: "same-origin" });
   if (!response.ok) throw await responseError(response);
   const body = (await response.json()) as { users: AccountInfo[] };
   return body.users;
 }
 
 export async function createUser(spaceID: string): Promise<CreatedUser> {
-  const response = await fetch("/api/admin/users", {
+  const response = await fetch(appURL("api/admin/users"), {
     method: "POST",
     credentials: "same-origin",
     headers: { "Content-Type": "application/json" },
@@ -77,7 +82,7 @@ export async function createUser(spaceID: string): Promise<CreatedUser> {
 }
 
 export async function deleteImages(ids: string[]): Promise<number> {
-  const response = await fetch("/api/images", {
+  const response = await fetch(appURL("api/images"), {
     method: "DELETE",
     credentials: "same-origin",
     headers: { "Content-Type": "application/json" },
@@ -95,7 +100,7 @@ export function uploadImage(
 ): Promise<ImageItem> {
   return new Promise((resolve, reject) => {
     const request = new XMLHttpRequest();
-    request.open("POST", "/api/images");
+    request.open("POST", appURL("api/images").href);
     request.withCredentials = true;
     request.upload.addEventListener("progress", (event) => {
       if (event.lengthComputable) onProgress(Math.min(99, Math.round((event.loaded / event.total) * 100)));
@@ -125,5 +130,29 @@ export function uploadImage(
 }
 
 export function absoluteImageURL(path: string): string {
-  return new URL(path, window.location.origin).href;
+  return new URL(path, document.baseURI).href;
+}
+
+export async function getClientSetup(): Promise<ClientSetup> {
+  const response = await fetch(appURL("api/client-setup"), { credentials: "same-origin" });
+  if (!response.ok) throw await responseError(response);
+  return (await response.json()) as ClientSetup;
+}
+
+export async function rotateClientSetupToken(): Promise<string> {
+  const response = await fetch(appURL("api/client-setup/token"), {
+    method: "POST",
+    credentials: "same-origin",
+  });
+  if (!response.ok) throw await responseError(response);
+  const body = (await response.json()) as { token: string };
+  return body.token;
+}
+
+export async function revokeClientSetupToken(): Promise<void> {
+  const response = await fetch(appURL("api/client-setup/token"), {
+    method: "DELETE",
+    credentials: "same-origin",
+  });
+  if (!response.ok) throw await responseError(response);
 }

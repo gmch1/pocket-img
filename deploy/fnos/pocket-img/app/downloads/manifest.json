@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "artifacts": [
+    {
+      "id": "pocketimg-shot-macos-arm64",
+      "display_name": "PocketIMG Shot",
+      "version": "__VERSION__",
+      "platform": "macos",
+      "architecture": "arm64",
+      "minimum_os_version": "14.0",
+      "filename": "PocketIMGShot-__VERSION__-macos-arm64.zip",
+      "content_type": "application/zip",
+      "sha256": "__MACOS_ZIP_SHA256__"
+    }
+  ]
+}

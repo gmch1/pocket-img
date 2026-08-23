@@ -47,6 +47,90 @@ jobs:
       - name: Test Go backend
         run: go test -tags=nodynamic ./...
 
+  container:
+    name: Container image
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Create Buildx builder
+        run: docker buildx create --name pocketimg-ci --driver docker-container --use
+
+      - name: Build amd64 and arm64 images
+        run: >-
+          docker buildx build
+          --platform linux/amd64,linux/arm64
+          --build-arg VERSION=ci
+          --output type=oci,dest=${RUNNER_TEMP}/pocketimg-multiarch.tar
+          .
+
+      - name: Load smoke-test image
+        run: >-
+          docker buildx build
+          --platform linux/amd64
+          --build-arg VERSION=ci
+          --tag pocketimg:ci
+          --load
+          .
+
+      - name: Smoke-test container and persistent volume
+        shell: bash
+        run: |
+          volume="pocketimg-ci-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          container="pocketimg-ci-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          cleanup() {
+            docker rm --force "${container}" >/dev/null 2>&1 || true
+            docker volume rm --force "${volume}" >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+
+          docker volume create "${volume}" >/dev/null
+          docker run --detach \
+            --name "${container}" \
+            --mount "type=volume,src=${volume},dst=/data" \
+            --publish 127.0.0.1::8080 \
+            --env PIH_TOKEN='ci-container-smoke-token' \
+            --env PIH_COOKIE_SECURE=false \
+            pocketimg:ci >/dev/null
+
+          address="$(docker port "${container}" 8080/tcp)"
+          for attempt in $(seq 1 50); do
+            if curl --fail --silent --show-error "http://${address}/healthz"; then
+              break
+            fi
+            if [[ "${attempt}" -eq 50 ]]; then
+              docker logs "${container}" >&2
+              exit 1
+            fi
+            sleep 0.2
+          done
+
+          test "$(docker inspect --format '{{.Config.User}}' "${container}")" = '10001:10001'
+          test "$(docker image inspect --format '{{index .Config.Labels "org.opencontainers.image.version"}}' pocketimg:ci)" = 'ci'
+          docker exec "${container}" test -f /data/metadata.sqlite3
+          docker exec "${container}" test -d /data/objects
+          docker exec "${container}" test -d /data/thumbnails
+
+          docker rm --force "${container}" >/dev/null
+          docker run --detach \
+            --name "${container}" \
+            --mount "type=volume,src=${volume},dst=/data" \
+            --env PIH_TOKEN='ci-container-smoke-token' \
+            --env PIH_COOKIE_SECURE=false \
+            pocketimg:ci >/dev/null
+          for attempt in $(seq 1 50); do
+            if docker exec "${container}" wget -q -O /dev/null http://127.0.0.1:8080/healthz; then
+              break
+            fi
+            if [[ "${attempt}" -eq 50 ]]; then
+              docker logs "${container}" >&2
+              exit 1
+            fi
+            sleep 0.2
+          done
+          docker exec "${container}" test -f /data/metadata.sqlite3
+
   macos:
     name: macOS client
     runs-on: macos-15

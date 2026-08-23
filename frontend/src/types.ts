@@ -10,7 +10,32 @@ export interface ImageItem {
   animated: boolean;
   created_at: string;
   url: string;
+  display_url?: string;
   thumbnail_url: string;
+}
+
+export interface ClientSetupDownload {
+  url: string;
+  filename: string;
+  version: string;
+  sha256: string;
+  architecture: string;
+  minimum_macos: string;
+  size_bytes: number;
+}
+
+export interface ClientSetup {
+  mode: "fnos";
+  app_version: string;
+  management_url: string;
+  service_url: string;
+  token_configured: boolean;
+  user: {
+    space_id: string;
+    display_name: string;
+    is_admin: boolean;
+  };
+  download?: ClientSetupDownload;
 }
 
 export interface AccountInfo {

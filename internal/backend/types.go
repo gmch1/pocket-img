@@ -23,6 +23,7 @@ type Config struct {
 	DataDir              string
 	Tokens               map[string]string
 	AdminSpaceID         string
+	FNOS                 FNOSConfig
 	CookieSecure         bool
 	SessionTTL           time.Duration
 	DefaultQuotaBytes    int64
@@ -35,6 +36,18 @@ type Config struct {
 	ThumbQuality         int
 	QueueDepth           int
 	RateLimits           RateLimitConfig
+}
+
+// FNOSConfig enables the authenticated FNOS gateway entry point and the
+// installation-specific client setup page. The public TCP listener remains a
+// separate trust boundary and never consumes FNOS identity headers.
+type FNOSConfig struct {
+	Enabled            bool
+	GatewayPrefix      string
+	ServicePort        int
+	PublicBaseURL      string
+	DownloadsDir       string
+	ApplicationVersion string
 }
 
 type RateLimitConfig struct {
@@ -106,6 +119,7 @@ type principal struct {
 
 type accountResponse struct {
 	SpaceID       string `json:"space_id"`
+	DisplayName   string `json:"display_name,omitempty"`
 	IsAdmin       bool   `json:"is_admin"`
 	QuotaBytes    int64  `json:"quota_bytes"`
 	UsedBytes     int64  `json:"used_bytes"`
@@ -117,6 +131,7 @@ type accountResponse struct {
 
 type accountRecord struct {
 	SpaceID        string
+	DisplayName    string
 	IsAdmin        bool
 	QuotaBytes     int64
 	UsedBytes      int64
@@ -129,6 +144,7 @@ type accountRecord struct {
 func (record accountRecord) response() accountResponse {
 	return accountResponse{
 		SpaceID:       record.SpaceID,
+		DisplayName:   record.DisplayName,
 		IsAdmin:       record.IsAdmin,
 		QuotaBytes:    record.QuotaBytes,
 		UsedBytes:     record.UsedBytes,
@@ -149,6 +165,7 @@ type imageResponse struct {
 	Animated      bool   `json:"animated"`
 	CreatedAt     string `json:"created_at"`
 	URL           string `json:"url"`
+	DisplayURL    string `json:"display_url,omitempty"`
 	ThumbnailURL  string `json:"thumbnail_url"`
 }
 

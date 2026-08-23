@@ -12,7 +12,7 @@ import (
 
 func fixtureHandler() http.Handler {
 	return newHandler(fstest.MapFS{
-		"index.html": &fstest.MapFile{Data: []byte(`<!doctype html><div id="root"></div>`)},
+		"index.html": &fstest.MapFile{Data: []byte(`<!doctype html><base href="/" /><div id="root"></div>`)},
 	})
 }
 
@@ -36,13 +36,27 @@ func TestHandlerServesIndexAndSPAFallback(t *testing.T) {
 
 func TestHandlerDoesNotMaskReservedBackendPaths(t *testing.T) {
 	handler := fixtureHandler()
-	for _, requestPath := range []string{"/api/unknown", "/i/unknown.webp", "/t/unknown.webp"} {
+	for _, requestPath := range []string{"/api/unknown", "/downloads/client.zip", "/i/unknown.webp", "/t/unknown.webp"} {
 		request := httptest.NewRequest(http.MethodGet, requestPath, nil)
 		response := httptest.NewRecorder()
 		handler.ServeHTTP(response, request)
 		if response.Code != http.StatusNotFound {
 			t.Fatalf("path=%s status=%d", requestPath, response.Code)
 		}
+	}
+}
+
+func TestHandlerInjectsGatewayBasePath(t *testing.T) {
+	handler := fixtureHandler()
+	request := httptest.NewRequest(http.MethodGet, "http://backend/", nil)
+	request = WithBasePath(request, "/app/pocket-img")
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if response.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
+	}
+	if !strings.Contains(response.Body.String(), `<base href="/app/pocket-img/" />`) {
+		t.Fatalf("gateway base path was not injected: %s", response.Body.String())
 	}
 }
 

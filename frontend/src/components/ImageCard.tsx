@@ -18,6 +18,7 @@ export function ImageCard({ image, selected, selectionMode, onOpen, onCopy, onDe
   const origin = useRef({ x: 0, y: 0 });
   const suppressClick = useRef(false);
   const isVideo = image.media_type === "video/mp4";
+  const displayURL = image.display_url ?? image.url;
 
   function cancelLongPress() {
     if (timer.current !== undefined) window.clearTimeout(timer.current);
@@ -71,8 +72,8 @@ export function ImageCard({ image, selected, selectionMode, onOpen, onCopy, onDe
       <div className="image-card__media">
         {isVideo ? (
           <video
-            src={image.url}
-            poster={image.thumbnail_url !== image.url ? image.thumbnail_url : undefined}
+            src={displayURL}
+            poster={image.thumbnail_url !== displayURL ? image.thumbnail_url : undefined}
             muted
             preload="metadata"
             playsInline

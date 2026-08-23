@@ -1,0 +1,46 @@
+# Keep the build context on an explicit allowlist. In particular, never send
+# local tokens, signing material, generated applications, or repository history
+# to the Docker daemon.
+**
+
+!Dockerfile
+!go.mod
+!go.sum
+
+!cmd/
+!cmd/**/
+!cmd/**/*.go
+
+!internal/
+!internal/**/
+!internal/**/*.go
+
+!frontend/
+!frontend/package.json
+!frontend/package-lock.json
+!frontend/index.html
+!frontend/tsconfig.json
+!frontend/tsconfig.app.json
+!frontend/tsconfig.node.json
+!frontend/vite.config.ts
+!frontend/public/
+!frontend/public/**/
+!frontend/public/**/*
+!frontend/src/
+!frontend/src/**/
+!frontend/src/**/*
+
+# Directory-negation rules above are needed so Docker can traverse to the
+# allowlisted sources. Re-exclude every generated or dependency tree last so a
+# local build can never make them part of the context.
+frontend/node_modules
+frontend/node_modules/**
+frontend/.vite
+frontend/.vite/**
+frontend/dist
+frontend/dist/**
+frontend/*.tsbuildinfo
+frontend/vite.config.js
+frontend/vite.config.d.ts
+internal/webui/dist
+internal/webui/dist/**

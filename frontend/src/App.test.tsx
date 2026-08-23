@@ -1,10 +1,10 @@
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import App from "./App";
-import { APIError, createSession, createUser, listImages, listUsers, uploadImage } from "./api";
+import { APIError, createSession, createUser, getClientSetup, listImages, listUsers, uploadImage } from "./api";
 import { copyText } from "./clipboard";
 import { prepareImageForUpload } from "./image-compression";
-import type { GalleryResponse, ImageItem } from "./types";
+import type { ClientSetup, GalleryResponse, ImageItem } from "./types";
 
 vi.mock("./api", async () => {
   const actual = await vi.importActual<typeof import("./api")>("./api");
@@ -14,6 +14,7 @@ vi.mock("./api", async () => {
     createUser: vi.fn(),
     deleteImages: vi.fn(),
     deleteSession: vi.fn(),
+    getClientSetup: vi.fn(),
     listImages: vi.fn(),
     listUsers: vi.fn(),
     uploadImage: vi.fn(),
@@ -46,6 +47,28 @@ const video: ImageItem = {
   thumbnail_url: "/i/abcdefabcdefabcdefabcdefabcdefab.mp4",
 };
 
+const fnosSetup: ClientSetup = {
+  mode: "fnos",
+  app_version: "0.5.0",
+  management_url: "/app/pocket-img/",
+  service_url: "http://192.168.1.20:8080",
+  token_configured: false,
+  user: {
+    space_id: "fnos-user-1000",
+    display_name: "小明",
+    is_admin: true,
+  },
+  download: {
+    url: "downloads/PocketIMGShot-0.5.0-macos-arm64.zip",
+    filename: "PocketIMGShot-0.5.0-macos-arm64.zip",
+    version: "0.5.0",
+    sha256: "a".repeat(64),
+    architecture: "arm64",
+    minimum_macos: "14",
+    size_bytes: 12 * 1024 * 1024,
+  },
+};
+
 function gallery(images: ImageItem[], isAdmin = false): GalleryResponse {
   return {
     images,
@@ -66,12 +89,15 @@ describe("App", () => {
     vi.mocked(listImages).mockReset();
     vi.mocked(createSession).mockResolvedValue();
     vi.mocked(createUser).mockReset();
+    vi.mocked(getClientSetup).mockReset();
+    vi.mocked(getClientSetup).mockRejectedValue(new APIError(404, "not fnos"));
     vi.mocked(listUsers).mockReset();
     vi.mocked(copyText).mockReset();
     vi.mocked(copyText).mockResolvedValue();
     vi.mocked(prepareImageForUpload).mockReset();
     vi.mocked(prepareImageForUpload).mockImplementation(async (file) => file);
     vi.mocked(uploadImage).mockReset();
+    window.localStorage.clear();
   });
 
   afterEach(() => vi.useRealTimers());
@@ -89,6 +115,50 @@ describe("App", () => {
     await waitFor(() => expect(createSession).toHaveBeenCalledWith("test-token"));
     expect(await screen.findByText("粘贴第一张图片或视频")).toBeTruthy();
     expect(screen.queryByLabelText("Token")).toBeNull();
+  });
+
+  test("discovers FNOS after login and opens the per-user client guide once", async () => {
+    vi.mocked(listImages).mockResolvedValue(gallery([]));
+    vi.mocked(getClientSetup).mockResolvedValue(fnosSetup);
+
+    const firstView = render(<App />);
+
+    const dialog = await screen.findByRole("dialog", { name: "客户端设置" });
+    expect(dialog.textContent).toContain("管理地址");
+    expect(dialog.textContent).toContain(new URL(fnosSetup.management_url, window.location.origin).href);
+    expect(dialog.textContent).toContain("macOS 客户端服务地址");
+    expect(dialog.textContent).toContain(fnosSetup.service_url);
+    expect(dialog.textContent).toContain("不要填写飞牛用户名或密码");
+    expect(dialog.textContent).toContain("手机无需安装客户端");
+    expect(screen.queryByRole("button", { name: "设置 Token" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "退出会话" })).toBeNull();
+    const download = screen.getByRole("link", { name: "下载 macOS 客户端" });
+    expect(download.getAttribute("href")).toContain("/downloads/PocketIMGShot-0.5.0-macos-arm64.zip");
+    expect(download.getAttribute("download")).toBe(fnosSetup.download?.filename);
+    expect(window.localStorage.getItem("pocketimg:fnos-client-setup-seen:fnos-user-1000")).toBe("1");
+
+    fireEvent.click(screen.getByRole("button", { name: "关闭客户端设置" }));
+    expect(screen.queryByRole("dialog", { name: "客户端设置" })).toBeNull();
+    expect(screen.getByRole("button", { name: "客户端设置" })).toBeTruthy();
+
+    firstView.unmount();
+    render(<App />);
+    expect(await screen.findByRole("button", { name: "客户端设置" })).toBeTruthy();
+    expect(screen.queryByRole("dialog", { name: "客户端设置" })).toBeNull();
+  });
+
+  test("treats a forbidden client setup probe as a normal non-FNOS deployment", async () => {
+    vi.mocked(listImages).mockResolvedValue(gallery([]));
+    vi.mocked(getClientSetup).mockRejectedValue(new APIError(403, "not available"));
+
+    render(<App />);
+
+    await screen.findByText("粘贴第一张图片或视频");
+    await waitFor(() => expect(getClientSetup).toHaveBeenCalled());
+    expect(screen.queryByRole("button", { name: "客户端设置" })).toBeNull();
+    expect(screen.queryByRole("dialog", { name: "客户端设置" })).toBeNull();
+    expect(screen.getByRole("button", { name: "设置 Token" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "退出会话" })).toBeTruthy();
   });
 
   test("uploads a pasted image and copies its public URL", async () => {
@@ -183,6 +253,43 @@ describe("App", () => {
     fireEvent.click(screen.getByRole("button", { name: "下一个媒体" }));
     expect(dialog.querySelector("video")).toBeNull();
     expect(dialog.querySelector("img")?.getAttribute("src")).toBe(image.url);
+  });
+
+  test("uses display_url for the FNOS full preview but copies the public url", async () => {
+    const proxied = { ...image, display_url: "media/display/0123456789abcdef.webp" };
+    vi.mocked(listImages).mockResolvedValue(gallery([proxied]));
+
+    const { container } = render(<App />);
+    await screen.findByRole("button", { name: "复制媒体链接" });
+    const cardImage = container.querySelector<HTMLImageElement>(".image-card img");
+    expect(cardImage?.getAttribute("src")).toBe(proxied.thumbnail_url);
+
+    fireEvent.click(cardImage!.closest(".image-card")!);
+    expect(screen.getByRole("dialog", { name: "媒体预览" }).querySelector("img")?.getAttribute("src")).toBe(proxied.display_url);
+    fireEvent.click(screen.getAllByRole("button", { name: "复制媒体链接" })[0]);
+    await waitFor(() => expect(copyText).toHaveBeenCalled());
+    expect(vi.mocked(copyText).mock.calls.at(-1)?.[0]).toContain(proxied.url);
+    expect(vi.mocked(copyText).mock.calls.at(-1)?.[0]).not.toContain(proxied.display_url);
+  });
+
+  test("uses display_url for FNOS video playback while keeping the prefixed poster", async () => {
+    const proxiedVideo = {
+      ...video,
+      display_url: "media/display/clip.mp4",
+      thumbnail_url: "media/display/clip-poster.webp",
+    };
+    vi.mocked(listImages).mockResolvedValue(gallery([proxiedVideo]));
+
+    const { container } = render(<App />);
+    await screen.findByRole("button", { name: "复制媒体链接" });
+    const cardVideo = container.querySelector<HTMLVideoElement>(".image-card video");
+    expect(cardVideo?.getAttribute("src")).toBe(proxiedVideo.display_url);
+    expect(cardVideo?.getAttribute("poster")).toBe(proxiedVideo.thumbnail_url);
+
+    fireEvent.click(cardVideo!.closest(".image-card")!);
+    const previewVideo = screen.getByRole("dialog", { name: "媒体预览" }).querySelector("video");
+    expect(previewVideo?.getAttribute("src")).toBe(proxiedVideo.display_url);
+    expect(previewVideo?.getAttribute("poster")).toBe(proxiedVideo.thumbnail_url);
   });
 
   test("keeps animated images on the existing image rendering path", async () => {

@@ -2,13 +2,13 @@
 
 PocketIMG 是面向单实例、自托管场景的轻量图床。
 
-Go 后端内嵌 React 管理网页，可作为 Linux 单文件服务运行，也可以通过 Android 管理 App 部署。仓库还提供独立的 macOS 截图上传客户端。
+Go 后端内嵌 React 管理网页，可作为 Linux 单文件、Docker 容器或 fnOS 应用运行，也可以通过 Android 管理 App 部署。仓库还提供独立的 macOS 截图上传客户端。
 
 ## 当前状态
 
 核心的登录、上传、浏览、复制链接、删除、用户隔离和自动清理链路已经实现。
 
-Linux x86_64 后端、Android ARM64 App 和 macOS Apple Silicon 客户端均可通过 GitHub Release 获取。
+Linux x86_64 后端、Android ARM64 管理 App、macOS Apple Silicon 客户端和 fnOS 安装包均有独立发布通道。Docker 镜像同时支持 `linux/amd64` 与 `linux/arm64`。
 
 项目已经在 Android 13 / Linux 4.14 设备上完成浏览器到真机的端到端验证。
 
@@ -49,6 +49,15 @@ Linux x86_64 后端、Android ARM64 App 和 macOS Apple Silicon 客户端均可�
 - 支持使用 Caddy、Nginx 等外部 HTTPS 反向代理。
 - 源码同时支持构建 Linux ARM64 单文件。
 
+### Docker 与飞牛 fnOS
+
+- 一个非 root 容器同时提供内嵌网页、Go API、SQLite 和媒体文件服务，不需要外置数据库或第二个业务容器。
+- 镜像全部可变数据集中写入 `/data`，支持 amd64 与 arm64。
+- fnOS 网页入口通过统一网关复用 NAS 登录态，并按飞牛用户自动隔离图库空间。
+- 飞牛身份 Header 只在 Unix Socket 网关 listener 上可信；对外 TCP listener 不接受客户端伪造身份。
+- fnOS 引导页给出 Mac 客户端服务地址，可生成、轮换和撤销专属 Token，并从 NAS 本地下载同版本 PocketIMG Shot。
+- 公开图片和视频仍走无需 NAS Cookie 的服务端口，复制到聊天软件后可以直接加载。
+
 ### Android 管理 App
 
 - 支持 Android 8.0（API 26）及以上的 ARM64 设备。
@@ -59,6 +68,7 @@ Linux x86_64 后端、Android ARM64 App 和 macOS Apple Silicon 客户端均可�
 - Go 子进程异常退出或健康检查持续失败时自动恢复。
 - 支持开机后恢复用户先前要求运行的服务。
 - 可选配置受限 SSH 反向隧道和断线自动重连。
+- 该 App 的用途是在 Android 设备上运行和管理后端，并不是连接 fnOS 的手机上传客户端；fnOS 手机用户直接使用 Web 页面。
 
 ### macOS 截图客户端
 
@@ -93,6 +103,8 @@ Linux x86_64 后端、Android ARM64 App 和 macOS Apple Silicon 客户端均可�
 ### 使用和部署
 
 - [Linux x86_64 后端部署](docs/linux-amd64.md)
+- [Docker 部署](docs/docker.md)
+- [飞牛 fnOS 部署与打包](docs/fnos.md)
 - [Android 管理 App](docs/android-app.md)
 - [macOS 截图上传客户端](docs/macos-shot.md)
 - [组件发布流程](docs/releases.md)
