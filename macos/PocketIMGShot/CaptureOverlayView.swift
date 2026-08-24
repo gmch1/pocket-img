@@ -228,14 +228,16 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
     private var hoveredSelectionResizeHandle: SelectionResizeHandle?
     private var annotationsAtDragStart: [Annotation]?
     private var selection: CGRect?
+    private var annotationEditingState = AnnotationEditingState()
     private var selectedTool: AnnotationTool? {
-        didSet {
-            window?.invalidateCursorRects(for: self)
-        }
+        annotationEditingState.selectedTool
     }
     private var annotations: [Annotation] = []
     private var currentAnnotation: Annotation?
-    private var selectedAnnotationIndex: Int?
+    private var selectedAnnotationIndex: Int? {
+        get { annotationEditingState.selectedAnnotationIndex }
+        set { annotationEditingState.selectedAnnotationIndex = newValue }
+    }
     private var hoveredAnnotationHit: AnnotationHit?
     private var annotationAtDragStart: Annotation?
     private var annotationResizeHandle: AnnotationResizeHandle?
@@ -2062,11 +2064,12 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
     }
 
     private func toggleAnnotationTool(_ tool: AnnotationTool) {
-        selectedTool = selectedTool == tool ? nil : tool
+        annotationEditingState.toggleTool(tool)
         currentAnnotation = nil
         hoveredAnnotationHit = nil
         toolSizeHintVisible = false
         toolSizeHintTool = nil
+        window?.invalidateCursorRects(for: self)
     }
 
     private func toolSize(for tool: AnnotationTool) -> CGFloat {
