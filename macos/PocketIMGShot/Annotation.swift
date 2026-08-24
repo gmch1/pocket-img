@@ -7,6 +7,24 @@ enum AnnotationTool: Equatable, Sendable {
     case text
 }
 
+struct AnnotationEditingState: Equatable, Sendable {
+    private(set) var selectedTool: AnnotationTool?
+    var selectedAnnotationIndex: Int?
+
+    init(
+        selectedTool: AnnotationTool? = nil,
+        selectedAnnotationIndex: Int? = nil
+    ) {
+        self.selectedTool = selectedTool
+        self.selectedAnnotationIndex = selectedAnnotationIndex
+    }
+
+    mutating func toggleTool(_ tool: AnnotationTool) {
+        selectedTool = selectedTool == tool ? nil : tool
+        selectedAnnotationIndex = nil
+    }
+}
+
 enum AnnotationColor: String, CaseIterable, Codable, Equatable, Sendable {
     case red
     case yellow

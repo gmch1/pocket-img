@@ -2,6 +2,30 @@ import XCTest
 @testable import PocketIMGShot
 
 final class AnnotationTests: XCTestCase {
+    func testSwitchingAnnotationToolsConfirmsTheSelectedAnnotation() {
+        let tools: [AnnotationTool] = [.rectangle, .arrow, .text]
+
+        for currentTool in tools {
+            for nextTool in tools {
+                var state = AnnotationEditingState(
+                    selectedTool: currentTool,
+                    selectedAnnotationIndex: 4
+                )
+
+                state.toggleTool(nextTool)
+
+                XCTAssertEqual(
+                    state.selectedTool,
+                    currentTool == nextTool ? nil : nextTool
+                )
+                XCTAssertNil(
+                    state.selectedAnnotationIndex,
+                    "Switching from \(currentTool) to \(nextTool) retained an editable annotation"
+                )
+            }
+        }
+    }
+
     func testCursorRectsAreClippedAndInvalidRectsAreRejected() {
         let bounds = CGRect(x: 0, y: 0, width: 100, height: 80)
 
