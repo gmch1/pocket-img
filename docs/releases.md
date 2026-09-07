@@ -19,7 +19,7 @@ Server 构建会调用 `scripts/package-linux-installer.sh`，把二进制、`sc
 
 Server 现在同时发布 `ghcr.io/gmch1/pocket-img:<version>` 的 amd64/arm64 镜像。构建测试通过后推送镜像并检查匿名可拉取，再以镜像摘要生成 `PocketIMG-<version>-docker-install.tar.gz` 和 SHA-256，最后发布包含两类安装包的 Server Release。根目录入口的 `--docker` 只选择含 Docker 部署包的稳定 Server 版本。升级入口不依赖 Mac 或 fnOS 发布。
 
-同版本镜像若已存在，只允许同一源码提交重试，其他提交必须使用新版本；历史无 revision 标签的镜像也不覆盖。不更新浮动 `latest`。首次上线必须发布新版本，不能直接使用旧 `0.5.2` 镜像。
+同版本镜像若已存在，只允许同一源码提交重试，其他提交必须使用新版本；历史无 revision 标签的镜像也不覆盖。不更新浮动 `latest`。Server `0.5.3` 是首个同时提供两类安装包和 Server 镜像发布的新版本，不能直接使用旧 `0.5.2` 镜像进行自动初始化。
 
 确认目标提交已经进入 `main` 且 CI 通过后，只推送需要发布的标签：
 

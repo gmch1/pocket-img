@@ -66,7 +66,7 @@ curl -fsSL https://raw.githubusercontent.com/gmch1/pocket-img/main/install.sh | 
 curl -fsSL https://raw.githubusercontent.com/gmch1/pocket-img/main/install.sh | bash -s -- --docker --port 19876 --directory ./pocketimg-docker
 ```
 
-此入口需在代码发布到 `main` 且新 Server Release 带 Docker 部署包后使用；旧 `0.5.2` 镜像不支持自动初始化，不会被自动选中。升级时指定原安装目录，复用数据卷和凭证。源码构建、离线安装和备份见 [Docker 部署](docs/docker.md)。
+从 [Server 0.5.3](https://github.com/gmch1/pocket-img/releases/tag/server-v0.5.3) 起提供 Docker 部署包；旧 `0.5.2` 镜像不支持自动初始化，不会被自动选中。升级时指定原安装目录，复用数据卷和凭证。源码构建、离线安装和备份见 [Docker 部署](docs/docker.md)。
 
 ### Linux
 
@@ -78,7 +78,7 @@ curl -fsSL https://raw.githubusercontent.com/gmch1/pocket-img/main/install.sh | 
 
 脚本自动选择带安装附件的稳定 Server 版本，下载并校验 SHA-256，安装 systemd 服务，启动后输出管理员 Token。主机需要 Bash、curl、Python 3 和常规 systemd 管理工具。
 
-该入口需在本次脚本发布到 `main`，且新 Server Release 带有安装附件后使用；旧 `server-v0.5.2` 不支持，脚本不会回退安装旧版。
+从 Server `0.5.3` 起提供安装附件；旧 `server-v0.5.2` 不支持，脚本不会回退安装旧版。
 
 新安装默认只提供 `127.0.0.1:18746` 上的 **HTTP**，可自定义端口：
 

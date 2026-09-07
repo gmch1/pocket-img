@@ -24,7 +24,7 @@ curl -fsSL https://raw.githubusercontent.com/gmch1/pocket-img/main/install.sh | 
   bash -s -- --docker --version X.Y.Z --port 19876 --directory ./pocketimg-docker
 ```
 
-脚本自动在持久化卷生成管理员 Token，然后启动并等待服务健康。完成后直接输出访问地址、管理员空间、Token 和保存位置，无需执行随机数命令或手工编辑配置。新流程发布前，旧 Release 不会被选中；请等待带 Docker 部署包的新 Server Release。
+脚本自动在持久化卷生成管理员 Token，然后启动并等待服务健康。完成后直接输出访问地址、管理员空间、Token 和保存位置，无需执行随机数命令或手工编辑配置。从 [Server 0.5.3](https://github.com/gmch1/pocket-img/releases/tag/server-v0.5.3) 起提供 Docker 部署包，旧 Release 不会被自动选中。
 
 默认使用发布包指定的镜像；高级用户可通过 `PIH_IMAGE` 覆盖，但必须自行确保镜像兼容。旧版本（包括 `0.5.2`）不支持 `init`，不能用于此自动安装入口。
 

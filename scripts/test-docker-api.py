@@ -45,9 +45,16 @@ body = (f'--{boundary}\r\nContent-Disposition: form-data; name="file"; filename=
         + png + f'\r\n--{boundary}--\r\n'.encode())
 uploaded, _ = request(authenticated, '/api/images', method='POST', data=body,
                       headers={'Content-Type': 'multipart/form-data; boundary=' + boundary, 'Origin': address}, expected=201)
-path = json.loads(uploaded)['image']['url']
+record = json.loads(uploaded)['image']
+path = record['url']
 assert path.startswith('/i/'), 'Expected a public image path'
 image, headers = request(anonymous, path)
 assert image and headers.get_content_type() == 'image/webp'
 request(anonymous, '/api/images', expected=401)
+# Remove only the original sample created by this invocation, so the smoke
+# check can also run against a newly installed service retained by the user.
+request(authenticated, '/api/images', method='DELETE',
+        data=json.dumps({'ids': [record['id']]}).encode(),
+        headers={'Content-Type': 'application/json', 'Origin': address})
+request(anonymous, path, expected=404)
 print('PASS: anonymous upload/list=401; authenticated upload/list succeed; image URL without Cookie/Token=200')

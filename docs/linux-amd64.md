@@ -50,7 +50,7 @@ curl -fsSL https://raw.githubusercontent.com/gmch1/pocket-img/main/install.sh | 
 
 安装会创建服务账号、生成 32 字节随机 Token、设置文件权限并启动 systemd 服务。健康检查成功后直接输出访问地址、管理员空间、登录 Token 和保存位置。下载或校验失败时，不会进入服务安装阶段。校验文件用于检查下载完整性；安装信任来源是该 GitHub 仓库及其发布附件。
 
-本次改动需要先提交推送，再发布带安装附件的 Server 版本，一键入口才可供公众使用。现有 `server-v0.5.2` 不支持自动初始化；尚无兼容版本时脚本明确提示，不会安装旧包。
+从 [Server 0.5.3](https://github.com/gmch1/pocket-img/releases/tag/server-v0.5.3) 起提供自动初始化与安装附件。旧 `server-v0.5.2` 不支持；尚无兼容版本时脚本明确提示，不会安装旧包。
 
 也可以先保存脚本供检查，并指定版本：
 
