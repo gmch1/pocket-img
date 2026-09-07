@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Changed
+
+- 产品介绍聚焦自托管图床与 PocketIMG Shot；Android 调整为可选后端部署入口，保留原有能力与文档。README 增加真实 Web 截图与明确标注的 Mac 工作流程示意，本地构建说明移至开发文档。
+
 ### Added
 
 - Linux systemd 和 Docker Compose 安装脚本自动生成、保存并展示初始管理员 Token，重复安装复用原凭证；已有数据但配置缺失时停止初始化。
