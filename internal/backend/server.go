@@ -225,6 +225,12 @@ func New(cfg Config) (*Server, error) {
 	return server, nil
 }
 
+// ValidateTokens checks the same credential rules used when starting the server.
+func ValidateTokens(tokens map[string]string) error {
+	_, err := configuredCredentials(tokens)
+	return err
+}
+
 func configuredCredentials(tokens map[string]string) ([]credential, error) {
 	if len(tokens) == 0 {
 		return nil, errors.New("at least one configured token is required")

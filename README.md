@@ -97,7 +97,7 @@ Linux x86_64 后端、Android ARM64 管理 App、macOS Apple Silicon 客户端�
 - Android App 尚未提供正式的数据导出和备份界面。
 - macOS 截图客户端尚未实现马赛克、画笔、窗口吸附、长截图和本地历史记录。
 - 核心服务不管理域名、DDNS、TLS 证书或外部反向代理。
-- Linux 后端不包含自动更新器或系统服务安装器。
+- Linux 后端提供 systemd 安装脚本；不包含自动更新器。
 
 ## 文档
 
@@ -121,7 +121,27 @@ Linux x86_64 后端、Android ARM64 管理 App、macOS Apple Silicon 客户端�
 - [后端链路预研报告](docs/backend-spike.md)
 - [版本变更记录](CHANGELOG.md)
 
-## 本地构建和运行
+## 自动安装后端
+
+首次安装会自动生成并保存管理员 Token，服务健康检查通过后直接显示访问地址、管理员空间和登录 Token，无需手工生成或编辑 JSON。
+
+Linux x86_64：取得并校验发布二进制，在本仓库中执行：
+
+```bash
+sudo bash scripts/install-linux.sh /绝对路径/PocketIMG-<version>-linux-amd64
+```
+
+Docker（从当前源码构建）：
+
+```bash
+bash scripts/install-docker.sh
+```
+
+重复安装复用原凭证；已有数据但配置丢失时会停止并要求恢复配置。飞牛继续使用平台登录，无需此步骤。详细环境要求、地址和备份位置见 [Linux 部署](docs/linux-amd64.md)和 [Docker 部署](docs/docker.md)。
+
+## 本地构建和手工运行（高级方式）
+
+以下用于开发或自定义部署；普通安装使用上面的脚本，不需要手工准备 Token。
 
 ### 1. 准备 Token
 
