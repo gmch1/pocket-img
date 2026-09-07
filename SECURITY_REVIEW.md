@@ -1,9 +1,10 @@
 # PocketIMG 安全审查报告
 
 审查日期：2026-08-12
-审查范围：Go 后端、React/TypeScript 前端、Android 管理 App、发布工作流，以及公网入口可观察到的 HTTP 安全头。外部反向代理与 SSH/网络中转配置位于 `private operations notes`，不在本次源码审查范围内。
+本文为历史审查记录，原始风险与验证结果不代表当前版本的完整安全状态；已落地的改进见“后续实现状态”。
+审查范围：Go 后端、React/TypeScript 前端、Android 管理 App、发布工作流，以及公网入口可观察到的 HTTP 安全头。外部反向代理与 SSH/网络中转配置位于私有运维记录，不在本次源码审查范围内。
 
-> 2026-08-12 后续：0.3.0 已为 SEC-005 增加可选的 App 内置 SSH 反向隧道。设备密钥在 App 私有目录生成并以 `0600` 保存，SSH 主机密钥必须固定；远端监听和本机目标强制为回环地址。启用“仅允许本机访问 HTTP”后后端绑定 `127.0.0.1`，可消除原先 边缘代理到手机的局域网明文最后一跳。实际边缘账号、授权和 Caddy 状态仍需在 `private operations notes` 单独核验。
+> 2026-08-12 后续：0.3.0 已为 SEC-005 增加可选的 App 内置 SSH 反向隧道。设备密钥在 App 私有目录生成并以 `0600` 保存，SSH 主机密钥必须固定；远端监听和本机目标强制为回环地址。启用“仅允许本机访问 HTTP”后后端绑定 `127.0.0.1`，可消除边缘代理到手机的局域网明文最后一跳。实际边缘账号、授权和 Caddy 状态仍需在私有运维记录单独核验。
 
 ## 执行摘要
 
@@ -68,7 +69,7 @@
 
 - Rule ID：GO-HTTP-004 / REACT-HEADERS-001
 - Severity：Medium
-- Location：`internal/backend/server.go:687-692` `securityHeaders`；公网 `https://img.example.com/` 运行时响应
+- Location：`internal/backend/server.go:687-692` `securityHeaders`；公网测试入口的运行时响应
 - Evidence：应用只设置 `nosniff` 和 `Referrer-Policy`。公网入口补充了 HSTS，但实测没有 `Content-Security-Policy`、`X-Frame-Options`/`frame-ancestors` 或 `Permissions-Policy`。
 - Impact：缺少 CSP 会放大未来 XSS 或依赖供应链问题的影响；页面可被其他站点嵌入，在浏览器允许 Cookie 的场景（尤其同站点兄弟子域）可能进行点击劫持，诱导已登录用户执行永久删除等操作。
 - Fix：在应用或 Caddy 集中加入与当前纯同源前端兼容的策略，例如 `default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; worker-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'`，并补 `X-Frame-Options: DENY` 与最小 `Permissions-Policy`。先在预发布验证 Worker 与图片粘贴。
@@ -81,9 +82,9 @@
 - Severity：Medium
 - Location：`android/app/src/main/java/com/gmch/pocketimg/BackendRuntime.kt:58-64`；`android/app/src/main/AndroidManifest.xml:18`；`docs/lan-development.md:59-66`
 - Evidence：Go 服务固定监听 `0.0.0.0:<port>`，设备端只提供 HTTP。文档已明确局域网 HTTP 下 Token 和 Session 可被同网段监听者窃取。切换“外部 HTTPS”只会把 Cookie 标记为 `Secure`，并不会禁止直连设备 HTTP 的 `/api/auth/session` 接收 Bearer Token。
-- Impact：用户若误从局域网 HTTP 页面输入 Token，长期凭据会以明文经过网络；被动监听者可换取自己的 Session 并完整管理对应空间。外部 HTTPS 到设备 HTTP 的最后一跳安全性取决于 `private operations notes` 中的隧道与局域网信任边界。
+- Impact：用户若误从局域网 HTTP 页面输入 Token，长期凭据会以明文经过网络；被动监听者可换取自己的 Session 并完整管理对应空间。外部 HTTPS 到设备 HTTP 的最后一跳安全性取决于 私有运维记录 中的隧道与局域网信任边界。
 - Fix：外部模式优先让隧道直接落到手机回环地址并让服务绑定 `127.0.0.1`；若必须监听 LAN，使用主机防火墙只允许固定代理来源，或通过加密隧道覆盖最后一跳。可增加配置，使外部模式拒绝从非回环/非允许来源调用登录接口。
-- Mitigation：继续禁用 Android App 在外部模式下的“打开局域网页”按钮；在 UI 与文档突出提示不要在 HTTP 页面输入 Token；用 `private operations notes` 验证 8080 未暴露公网且 LAN ACL 正确。
+- Mitigation：继续禁用 Android App 在外部模式下的“打开局域网页”按钮；在 UI 与文档突出提示不要在 HTTP 页面输入 Token；用 私有运维记录 验证 8080 未暴露公网且 LAN ACL 正确。
 - False positive notes：若设备、代理主机及最后一跳都位于完全可信且不可监听的网络，本项概率会降低；该基础设施不在本仓库，需单独核验。
 
 ### SEC-006：发布流水线缺少持续安全扫描与最小权限分层
@@ -145,5 +146,5 @@
 2. 给缩略图任务加失败状态、批次、重试上限与退避（SEC-002）。
 3. 一并增加每空间上传限速、Session 上限与周期清理（SEC-003）。
 4. 在应用或 Caddy 加 CSP/`frame-ancestors`，并给写请求加自定义 CSRF 头（SEC-004、SEC-007）。
-5. 在 `private operations notes` 核验 8080 暴露面和最后一跳加密/ACL（SEC-005）。
+5. 在 私有运维记录 核验 8080 暴露面和最后一跳加密/ACL（SEC-005）。
 6. 拆分只读构建与发布权限，启用持续依赖/代码扫描（SEC-006）。

@@ -19,7 +19,7 @@ CLI 图仅说明剪贴板流转，依据 `AppController.swift` 上传成功后�
 
 ## 图标与矢量素材
 
-`frontend/public/favicon.svg` 是统一图标母版：绿色渐变底、浅色图片卡片与上传箭头。Mac 菜单栏继续使用高对比单色截图模板图标，以适配系统深浅色外观；Android 启动图标本次不变。
+`frontend/public/favicon.svg` 是统一图标母版：绿色渐变底、浅色图片卡片与上传箭头。Mac 菜单栏继续使用高对比单色截图模板图标，以适配系统深浅色外观；Android 启动图标使用独立资源。
 
 沿用下方的 Playwright 安装方式后，可重新生成 Mac 的全部 10 个 AppIcon 文件、fnOS 的 64/256 像素图标，以及包含 16/32/48/64/128/256 六个尺寸的 `frontend/public/favicon.ico`：
 
@@ -49,6 +49,6 @@ PLAYWRIGHT_MODULE="$visual_tools/node_modules/playwright/index.mjs" \
   node scripts/capture-docs.mjs
 ```
 
-如使用已有 Chromium，可额外设置 `CHROMIUM_PATH` 指向可执行文件。`POCKETIMG_BINARY` 可覆盖后端路径，默认是 `dist/phone-image-host-linux-amd64`。环境应包含中文字体（本次使用 Noto CJK）。
+如使用已有 Chromium，可额外设置 `CHROMIUM_PATH` 指向可执行文件。`POCKETIMG_BINARY` 可覆盖后端路径，默认是 `dist/phone-image-host-linux-amd64`。环境应包含中文字体（例如 Noto CJK）。
 
 脚本会覆盖这两张演示截图，使用随机回环端口，不连接生产实例；完成或失败后关闭浏览器、停止后端并清理临时数据。图库日期为拍摄时的实际日期，重新拍摄时可能变化。`shot-workflow.svg` 直接编辑 SVG 即可，不依赖图片生成服务。
