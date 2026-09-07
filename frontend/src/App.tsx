@@ -487,7 +487,7 @@ export default function App() {
     <div className={`app-shell${selected.size > 0 ? " app-shell--selecting" : ""}`}>
       <GlobalUploadProgress tasks={uploadTasks} />
       <header className="topbar">
-        <div className="brand"><ImageIcon /><span>图床</span></div>
+        <div className="brand"><ImageIcon /><span>PocketIMG</span></div>
         <nav className="range-switch" aria-label="时间范围">
           {RANGE_OPTIONS.map((option) => (
             <button key={option.value} type="button" className={range === option.value ? "is-active" : ""} onClick={() => setRange(option.value)}>

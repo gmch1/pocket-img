@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="400" viewBox="0 0 1280 400" role="img" aria-labelledby="title desc">
+  <title id="title">PocketIMG Shot：从截图到分享</title>
+  <desc id="desc">工作流程示意，非应用实拍。按 F1 选择区域，添加方框、箭头或文字，上传至自己的 PocketIMG 图床，成功后自动复制公开链接。</desc>
+  <rect width="1280" height="400" rx="24" fill="#f4f3ef"/>
+  <g font-family="Inter, -apple-system, 'Noto Sans CJK SC', sans-serif">
+    <text x="44" y="56" font-size="17" font-weight="700" fill="#245b49">PocketIMG Shot</text>
+    <text x="44" y="100" font-size="30" font-weight="700" fill="#1d1d1b">从截图到分享</text>
+    <text x="1236" y="56" text-anchor="end" font-size="13" fill="#77766f">工作流程示意 · 非应用实拍</text>
+    <g fill="#fffefb" stroke="#deddd7">
+      <rect x="44" y="136" width="270" height="208" rx="18"/>
+      <rect x="350" y="136" width="270" height="208" rx="18"/>
+      <rect x="656" y="136" width="270" height="208" rx="18"/>
+      <rect x="962" y="136" width="274" height="208" rx="18"/>
+    </g>
+    <g fill="none" stroke="#245b49" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M78 200v-25h25m42 0h25v25m0 23v25h-25m-42 0H78v-25"/>
+      <rect x="90" y="187" width="68" height="49" rx="4" stroke-dasharray="4 6" stroke-width="1.5"/>
+      <rect x="385" y="181" width="60" height="49" rx="3"/><path d="m422 247 45-43m-17 0h17v17"/>
+      <path d="M710 231v-53m-17 17 17-17 17 17m-37 29v28h71v-28"/>
+      <rect x="1004" y="184" width="45" height="56" rx="5"/><path d="M1020 171h41v55m-46-16 8 8 16-20"/>
+      <g stroke="#a9ada6" stroke-width="2"><path d="M326 235h12m-5-5 5 5-5 5M632 235h12m-5-5 5 5-5 5M938 235h12m-5-5 5 5-5 5"/></g>
+    </g>
+    <g fill="#1d1d1b" font-size="22" font-weight="650">
+      <text x="72" y="287">01  选区截图</text><text x="378" y="287">02  添加标注</text>
+      <text x="684" y="287">03  上传图床</text><text x="990" y="287">04  复制链接</text>
+    </g>
+    <g fill="#77766f" font-size="14">
+      <text x="72" y="317">按 F1，选择想分享的区域</text><text x="378" y="317">方框、箭头和文字</text>
+      <text x="684" y="317">连接自己的 PocketIMG</text><text x="990" y="317">上传成功后自动复制</text>
+      <text x="44" y="377">也可以直接复制截图或贴图置顶，无需连接图床。</text>
+    </g>
+  </g>
+</svg>

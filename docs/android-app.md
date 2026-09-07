@@ -1,6 +1,10 @@
-# Android 管理 App
+# Android 部署与管理（可选）
 
-PocketIMG 提供一个轻量 Android 管理壳。它把 Go 后端作为 ARM64 原生程序打进 APK，由用户在页面中手动启动、停止或重启；设备不需要 Root，也不需要安装 Go、Node、Docker 或终端环境。
+Android 管理 App 是 PocketIMG 的一种可选后端部署方式，适合希望在 Android 设备上运行图床的用户。常规服务器或 NAS 部署可使用 [Docker](docker.md)、[Linux](linux-amd64.md) 或 [fnOS](fnos.md)。
+
+手机访问已有的 PocketIMG 图库直接使用浏览器，无需安装这个 App。Mac 截图、标注与上传使用 [PocketIMG Shot](macos-shot.md)。
+
+管理 App 把 Go 后端作为 ARM64 原生程序打进 APK，由用户启动、停止或重启；设备不需要 Root，也不需要安装 Go、Node、Docker 或终端环境。
 
 ## 能力和边界
 

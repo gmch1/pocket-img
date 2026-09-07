@@ -1,6 +1,20 @@
-# macOS 截图上传客户端
+# PocketIMG Shot · Mac 截图工具
 
-`PocketIMG Shot` 是 PocketIMG 的原生 macOS 菜单栏客户端。它提供一条精简工作流：
+`PocketIMG Shot` 是原生 macOS 菜单栏截图工具。用快捷键选区、标注和贴图；连接自己的 PocketIMG 图床后，还可以上传并自动复制分享链接。复制截图和贴图无需部署后端。
+
+支持 **macOS 14+、Apple Silicon**。
+
+![截图、标注、上传与复制链接的工作流程示意](assets/shot-workflow.svg)
+
+*工作流程示意，并非应用实拍。*
+
+## 下载与安装
+
+在 [GitHub Releases](https://github.com/gmch1/pocket-img/releases) 中选择 `macos-v<version>` 发布，下载 `PocketIMGShot-<version>-macos-arm64.zip`，解压后将应用放入“应用程序”。当前版本不支持 Intel Mac。
+
+首次启动在 Finder 中右键选择“打开”；首次截图或录屏时按系统提示授予屏幕录制权限。当前发布使用自签名证书，尚未进行 Apple 公证。快捷键与服务器连接方法见下方“首次配置”。
+
+## 从截图到分享
 
 ```text
 F1 → 拖拽选择区域 → 方框/箭头/文字标注 → 贴图置顶、复制图片或上传并复制公开 URL
