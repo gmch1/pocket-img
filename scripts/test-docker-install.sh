@@ -11,10 +11,30 @@ tested_port=$PIH_PORT
 export PIH_TOKEN='' PIH_TOKENS='' PIH_TOKENS_FILE='' PIH_ADMIN_SPACE_ID=''
 export PIH_COOKIE_SECURE=false
 unset PIH_INSTALL_QUIET
-cleanup() { docker compose down --volumes --remove-orphans >/dev/null 2>&1; }
+bundle_work=''
+cleanup() {
+  docker compose down --volumes --remove-orphans >/dev/null 2>&1
+  if [[ -n $bundle_work ]]; then rm -rf -- "$bundle_work"; fi
+}
 trap cleanup EXIT
 
-first=$(bash scripts/install-docker.sh --port "$tested_port")
+if [[ ${PIH_TEST_RELEASE_BUNDLE:-0} == 1 ]]; then
+  bundle_work=$(mktemp -d /tmp/pocketimg-bundle-smoke.XXXXXX)
+  # Local smoke image overrides the placeholder digest; no registry writes.
+  bash scripts/package-docker-installer.sh 0.0.0 "sha256:$(printf '%064d' 0)" "$bundle_work"
+  mkdir "$bundle_work/source"
+  tar -xzf "$bundle_work/PocketIMG-0.0.0-docker-install.tar.gz" -C "$bundle_work/source"
+  export COMPOSE_FILE="$bundle_work/installed/compose.yaml"
+fi
+install_test() {
+  if [[ -n $bundle_work ]]; then
+    python3 "$bundle_work/source/scripts/deploy-docker.py" "$bundle_work/source" "$bundle_work/installed" "${2:-}"
+  else
+    bash scripts/install-docker.sh "$@"
+  fi
+}
+
+first=$(install_test --port "$tested_port")
 token=$(printf '%s\n' "$first" | sed -n 's/^登录 Token：//p')
 [[ $token =~ ^[a-f0-9]{64}$ ]]
 container=$(docker compose ps -q pocketimg)
@@ -29,7 +49,7 @@ login() {
 }
 login
 unset PIH_PORT
-second=$(bash scripts/install-docker.sh)
+second=$(install_test)
 [[ $(printf '%s\n' "$second" | sed -n 's/^登录 Token：//p') == "$token" ]]
 [[ $second == *":$tested_port"* ]]
 login

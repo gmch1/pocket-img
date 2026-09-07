@@ -134,6 +134,7 @@ jobs:
         run: |
           bash -n install.sh scripts/package-linux-installer.sh scripts/install-linux.sh
           python3 scripts/test-github-install.py
+          python3 scripts/test-docker-release.py
           bash scripts/package-linux-installer.sh "$RELEASE_VERSION" "release/PocketIMG-$RELEASE_VERSION-linux-amd64" release
 
       - name: Upload server artifact
@@ -144,8 +145,54 @@ jobs:
           if-no-files-found: error
           compression-level: 0
 
-  publish:
+  container:
     needs: [prepare, build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Log in to GitHub Container Registry
+        env:
+          GHCR_TOKEN: ${{ github.token }}
+        run: printf '%s' "$GHCR_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
+
+      - name: Create Buildx builder
+        run: docker buildx create --name pocketimg-server --driver docker-container --use
+
+      - name: Publish versioned multi-architecture image
+        env:
+          RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          image="ghcr.io/gmch1/pocket-img:$RELEASE_VERSION"
+          if docker buildx imagetools inspect "$image" > image-info.txt 2> image-error.txt; then
+            docker pull --platform linux/amd64 "$image"
+            revision=$(docker image inspect --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$image")
+            test "$revision" = "$GITHUB_SHA" || { echo 'Version already belongs to another revision; choose a new version.' >&2; exit 1; }
+          else
+            grep -Eqi 'not found|manifest unknown|MANIFEST_UNKNOWN' image-error.txt || { cat image-error.txt >&2; exit 1; }
+            docker buildx build --platform linux/amd64,linux/arm64 \
+              --build-arg "VERSION=$RELEASE_VERSION" --build-arg "REVISION=$GITHUB_SHA" \
+              --tag "$image" --provenance=true --sbom=true --push .
+          fi
+          docker logout ghcr.io
+          docker buildx imagetools inspect "$image" > image-info.txt
+          digest=$(awk '$1 == "Digest:" {print $2; exit}' image-info.txt)
+          bash scripts/package-docker-installer.sh "$RELEASE_VERSION" "$digest" release-docker
+
+      - name: Upload Docker installer
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: release-docker
+          path: release-docker/*
+          if-no-files-found: error
+          compression-level: 0
+
+  publish:
+    needs: [prepare, build, container]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -159,6 +206,12 @@ jobs:
         uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
         with:
           name: release-server
+          path: release
+
+      - name: Download Docker installer
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        with:
+          name: release-docker
           path: release
 
       - name: Publish server release

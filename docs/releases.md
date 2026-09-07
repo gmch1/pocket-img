@@ -4,10 +4,10 @@ PocketIMG 的 Linux Server、Android App、macOS Shot 和 fnOS 应用使用独�
 
 | 组件 | 标签 | 工作流 | 主要产物 |
 | --- | --- | --- | --- |
-| Linux Server | `server-v<version>` | `release-server.yml` | Linux amd64 二进制、同版本安装包及各自 SHA-256 |
+| Server / Docker | `server-v<version>` | `release-server.yml` | Linux amd64 二进制、systemd 与 Docker 安装包及 SHA-256、amd64/arm64 GHCR 镜像 |
 | Android App | `android-v<version>` | `release-android.yml` | 签名 ARM64 APK 与 SHA-256 |
 | macOS Shot | `macos-v<version>` | `release-macos.yml` | Apple Silicon（arm64）应用 ZIP、自动更新 tar.xz、SHA-256 与签名 appcast |
-| fnOS | `fnos-v<version>` | `release-fnos.yml` | fnOS FPK、SHA-256 与 amd64/arm64 GHCR 镜像 |
+| fnOS | `fnos-v<version>` | `release-fnos.yml` | fnOS FPK 与 SHA-256，复用同版本 Server 镜像 |
 
 版本必须是三个非负整数，例如 `0.4.41`。发布标签不接受预发布后缀。首轮组件化发布以旧的全平台 `v0.4.40` 作为 Release Notes 比较基线，之后每个工作流只比较同组件的上一个标签。
 
@@ -17,7 +17,9 @@ PocketIMG 的 Linux Server、Android App、macOS Shot 和 fnOS 应用使用独�
 
 Server 构建会调用 `scripts/package-linux-installer.sh`，把二进制、`scripts/install-linux.sh` 与 systemd unit 打成 `PocketIMG-<version>-linux-amd64-install.tar.gz`，并附带 SHA-256。根目录 `install.sh` 只选择包含该附件及校验文件的稳定 Server Release。历史发布不补写附件；首次启用此流程必须发布新版本。
 
-Docker 镜像目前由 fnOS 发布流程生成，因此发布 Server 二进制不会自动更新 GHCR 镜像。需要交付更新后的容器时，按 fnOS 组件流程发布；不需要因此发布 Mac 截图客户端。
+Server 现在同时发布 `ghcr.io/gmch1/pocket-img:<version>` 的 amd64/arm64 镜像。构建测试通过后推送镜像并检查匿名可拉取，再以镜像摘要生成 `PocketIMG-<version>-docker-install.tar.gz` 和 SHA-256，最后发布包含两类安装包的 Server Release。根目录入口的 `--docker` 只选择含 Docker 部署包的稳定 Server 版本。升级入口不依赖 Mac 或 fnOS 发布。
+
+同版本镜像若已存在，只允许同一源码提交重试，其他提交必须使用新版本；历史无 revision 标签的镜像也不覆盖。不更新浮动 `latest`。首次上线必须发布新版本，不能直接使用旧 `0.5.2` 镜像。
 
 确认目标提交已经进入 `main` 且 CI 通过后，只推送需要发布的标签：
 
@@ -41,9 +43,9 @@ git push origin fnos-v0.4.41
 
 ## 全平台发布
 
-`Release all PocketIMG components` 不监听标签，只能从 Actions 手动运行。输入一个版本号后，它会先并行发布 Server、Android 和 macOS，再用已经发布并签名的同版本 macOS ZIP 构建 fnOS 包，最终创建四个标签和四个 Release。它适合共享协议或大版本同步更新，不作为日常发布入口。
+`Release all PocketIMG components` 不监听标签，只能从 Actions 手动运行。输入一个版本号后，它会先并行发布 Server、Android 和 macOS；fnOS 等待 Server 和 macOS 成功，再复用同版本镜像与签名 macOS ZIP 构建 FPK，最终创建四个标签和四个 Release。
 
-fnOS 流程通过仓库的 `GITHUB_TOKEN` 推送不可变的 `ghcr.io/gmch1/pocket-img:<version>` 标签，并在打包 FPK 前退出 Registry 登录、执行匿名镜像检查。流程不更新浮动的 `latest`，避免补发旧版本时让 Docker 用户意外降级。FPK 固定引用同一个版本标签，且把匹配版本的 macOS ZIP 直接放进安装包；NAS 安装后下载客户端不再依赖 GitHub Release。
+fnOS 不再写入 Registry 或重建后端镜像。单独发布 fnOS 前必须先发布同版本 Server 和 macOS；打包前检查 Server Release 存在及镜像可匿名拉取，缺失时直接失败。FPK 固定引用同版本镜像标签，且把匹配版本的 macOS ZIP 直接放进安装包；NAS 安装后下载客户端不再依赖 GitHub Release。
 
 旧的 `v*` 标签不再触发工作流。
 

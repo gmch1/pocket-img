@@ -18,7 +18,6 @@ on:
 
 permissions:
   contents: read
-  packages: write
 
 concurrency:
   group: pocketimg-fnos-release-${{ github.ref }}-${{ inputs.version }}
@@ -57,7 +56,6 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      packages: write
     steps:
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -89,37 +87,19 @@ jobs:
           unzip -tqq "${archive}"
           echo "archive=${archive}" >> "${GITHUB_OUTPUT}"
 
-      - name: Log in to GitHub Container Registry
+      - name: Require the matching Server release
         shell: bash
         env:
-          GHCR_TOKEN: ${{ github.token }}
-        run: printf '%s' "${GHCR_TOKEN}" | docker login ghcr.io --username "${GITHUB_ACTOR}" --password-stdin
-
-      - name: Create Buildx builder
-        run: docker buildx create --name pocketimg-release --driver docker-container --use
-
-      - name: Build and publish multi-architecture image
-        shell: bash
-        env:
+          GH_TOKEN: ${{ github.token }}
           RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
-          RELEASE_IMAGE: ${{ needs.prepare.outputs.image }}
         run: |
-          docker buildx build \
-            --platform linux/amd64,linux/arm64 \
-            --build-arg "VERSION=${RELEASE_VERSION}" \
-            --tag "${RELEASE_IMAGE}" \
-            --provenance=true \
-            --sbom=true \
-            --push \
-            .
-          docker buildx imagetools inspect "${RELEASE_IMAGE}"
+          gh release view "server-v${RELEASE_VERSION}" >/dev/null
 
       - name: Verify the fnOS image is anonymously pullable
         shell: bash
         env:
           RELEASE_IMAGE: ${{ needs.prepare.outputs.image }}
         run: |
-          docker logout ghcr.io
           docker buildx imagetools inspect "${RELEASE_IMAGE}"
 
       - name: Install the pinned fnOS packager

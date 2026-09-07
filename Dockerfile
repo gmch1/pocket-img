@@ -31,6 +31,7 @@ COPY --from=frontend-build /workspace/internal/webui/dist/ ./internal/webui/dist
 
 RUN mkdir -p /runtime-data
 RUN chown 10001:10001 /runtime-data
+RUN chmod 0700 /runtime-data
 RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
     CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} GOPROXY=${GOPROXY} \
@@ -44,15 +45,16 @@ RUN --mount=type=cache,target=/go/pkg/mod \
 
 FROM ${RUNTIME_IMAGE} AS runtime
 ARG VERSION
+ARG REVISION=unknown
 
 LABEL org.opencontainers.image.title="PocketIMG" \
       org.opencontainers.image.description="Self-hosted PocketIMG web and API server" \
       org.opencontainers.image.source="https://github.com/gmch1/pocket-img" \
-      org.opencontainers.image.version="${VERSION}"
+      org.opencontainers.image.version="${VERSION}" \
+      org.opencontainers.image.revision="${REVISION}"
 
 COPY --from=backend-build /pocketimg /usr/local/bin/pocketimg
-COPY --from=backend-build --chown=10001:10001 /runtime-data/ /data/
-RUN chmod 0700 /data
+COPY --from=backend-build --chown=10001:10001 --chmod=0700 /runtime-data/ /data/
 
 ENV PIH_ADDR=0.0.0.0:8080 \
     PIH_DATA_DIR=/data

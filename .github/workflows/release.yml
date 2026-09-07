@@ -32,7 +32,7 @@ jobs:
     secrets: inherit
 
   fnos:
-    needs: macos
+    needs: [server, macos]
     uses: ./.github/workflows/release-fnos.yml
     with:
       version: ${{ inputs.version }}

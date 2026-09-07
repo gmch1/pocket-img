@@ -52,15 +52,21 @@
 
 ### Docker
 
-在本仓库目录执行，从当前源码构建并启动：
+主机已安装 Docker Engine、Docker Compose v2、Bash、curl、Python 3、tar 和 sha256sum，且当前用户可运行 Docker 后，直接执行：
 
 ```bash
-bash scripts/install-docker.sh
+curl -fsSL https://raw.githubusercontent.com/gmch1/pocket-img/main/install.sh | bash -s -- --docker
 ```
 
-安装流程自动生成、保存管理员 Token，健康检查通过后直接显示访问地址和登录 Token。重复安装复用原凭证。
+入口自动选择带 Docker 部署包的稳定 Server Release，校验 SHA-256，下载到当前目录下的 `pocketimg-docker`，拉取固定摘要的 amd64/arm64 镜像并启动服务。无需克隆源码或安装 Git、Go、Node.js，也不在用户机器上构建镜像。健康检查通过后直接显示访问地址和自动生成的登录 Token。
 
-已有包含自动初始化功能的镜像，也可以通过 `PIH_IMAGE` 指定版本。卷备份、自定义端口和配置方式见 [Docker 部署](docs/docker.md)。
+自定义端口和安装目录：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/gmch1/pocket-img/main/install.sh | bash -s -- --docker --port 19876 --directory ./pocketimg-docker
+```
+
+此入口需在代码发布到 `main` 且新 Server Release 带 Docker 部署包后使用；旧 `0.5.2` 镜像不支持自动初始化，不会被自动选中。升级时指定原安装目录，复用数据卷和凭证。源码构建、离线安装和备份见 [Docker 部署](docs/docker.md)。
 
 ### Linux
 

@@ -9,17 +9,32 @@ root UID/GID `10001:10001` 运行，并把全部可变数据写入 `/data`。
 
 ## 自动安装（推荐）
 
-需要 Docker Engine 和支持 `up --wait` 的 Docker Compose v2。在仓库中执行：
+需要 Docker Engine、支持 `up --wait` 的 Docker Compose v2、Bash、curl、Python 3、tar 和 sha256sum，当前用户须有运行 Docker 的权限。Docker 引擎支持 Linux amd64/arm64；无需 Git、Go、Node.js 或源代码。在准备存放部署配置的目录执行：
 
 ```bash
-bash scripts/install-docker.sh
+curl -fsSL https://raw.githubusercontent.com/gmch1/pocket-img/main/install.sh | bash -s -- --docker
 ```
 
-脚本从当前源码构建镜像，自动在持久化卷生成管理员 Token，然后启动并等待服务健康。完成后直接输出访问地址、管理员空间、Token 和保存位置，无需执行随机数命令或手工编辑配置。
+入口从 GitHub 的稳定 `server-v*` Release 中选择含 Docker 部署包及校验文件的最高版本，不使用属于 Mac 的 GitHub Latest，也不使用浮动镜像 `latest`。下载 `PocketIMG-<version>-docker-install.tar.gz` 并校验 SHA-256 和文件结构后，部署到当前目录下的 `pocketimg-docker`，拉取 GHCR 镜像。部署包的 Compose 固定镜像摘要；其中没有源码、Dockerfile 或 `build` 配置。需要访问 GitHub 与 GHCR，不需要构建依赖源。
 
-已有包含此初始化功能的发布镜像时，可设置 `PIH_IMAGE` 指定其版本；脚本会拉取该镜像。旧版本（例如 `0.5.0`）不支持 `init`，不能用于此自动安装入口。
+指定版本、端口或部署目录（版本号替换为已发布且带 Docker 部署包的版本）：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/gmch1/pocket-img/main/install.sh | \
+  bash -s -- --docker --version X.Y.Z --port 19876 --directory ./pocketimg-docker
+```
+
+脚本自动在持久化卷生成管理员 Token，然后启动并等待服务健康。完成后直接输出访问地址、管理员空间、Token 和保存位置，无需执行随机数命令或手工编辑配置。新流程发布前，旧 Release 不会被选中；请等待带 Docker 部署包的新 Server Release。
+
+默认使用发布包指定的镜像；高级用户可通过 `PIH_IMAGE` 覆盖，但必须自行确保镜像兼容。旧版本（包括 `0.5.2`）不支持 `init`，不能用于此自动安装入口。
 
 离线或本地已有镜像可同时设置 `PIH_INSTALL_PULL=0`，跳过拉取。
+
+升级时重新执行 GitHub 入口并用 `--directory` 指向原部署目录。入口只更新自身管理且未被修改的三个部署文件，保留 `.env`、数据卷和凭证；目录非空但无安装标记，或 Compose/脚本被手工修改时会拒绝覆盖。首次上线前请备份现有数据，源码部署不要直接混用此入口。保留原 Compose 项目名 `pocketimg`；部署第二个独立实例需另设 `COMPOSE_PROJECT_NAME` 和端口。
+
+如果只需重启或复用已下载版本，在部署目录执行 `bash scripts/install-docker.sh`，不会查询新 Release。自定义配置放在该目录的 `.env`，保留此目录以便管理服务。
+
+离线准备：在联网机器执行 `bash install.sh --docker --version X.Y.Z --download-only ./docker-bundle`，并另行导出部署包引用的镜像；目标机器加载镜像后，在解压目录执行 `PIH_INSTALL_PULL=0 bash scripts/install-docker.sh`。仅下载模式不拉取镜像、不启动服务。
 
 自动凭证保存在数据卷的 `/data/tokens.json`，权限为 `0600`，所有者为 `10001:10001`。初始化容器和服务使用同一卷、同一 UID；不会写入只读 `/config`。默认管理员空间为 `admin`，新安装入口为 `http://宿主机地址:18746`，容器内部仍监听 `8080`。修改宿主机端口：
 
@@ -34,6 +49,14 @@ bash scripts/install-docker.sh --port 19876
 安装脚本也支持下文的显式文件、`PIH_TOKENS` 或旧 `PIH_TOKEN`，只使用一种来源。保留相同 Compose 项目名、卷及自定义环境配置，不要在重装时更换它们。无人值守更新可设置 `PIH_INSTALL_QUIET=1` 隐藏 Token；默认安装输出包含登录凭证，普通服务日志不打印它。
 
 ## 手工构建镜像
+
+仅开发或修改源码时使用。需要 Git，首次获取源码并自动构建安装可执行：
+
+```bash
+git clone --depth 1 https://github.com/gmch1/pocket-img.git pocket-img && \
+  cd pocket-img && \
+  bash scripts/install-docker.sh
+```
 
 在仓库根目录执行：
 
