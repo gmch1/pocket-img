@@ -47,6 +47,11 @@ jobs:
       - name: Test Go backend
         run: go test -tags=nodynamic ./...
 
+      - name: Test GitHub installer
+        run: |
+          bash -n install.sh scripts/install-linux.sh scripts/package-linux-installer.sh
+          python3 scripts/test-github-install.py
+
   container:
     name: Container image
     runs-on: ubuntu-latest

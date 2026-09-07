@@ -8,7 +8,10 @@
 | --- | --- | --- |
 | 001 | 后端安装自动生成并展示 Token | 已实现；Docker 与 Linux systemd 实机验收通过 |
 | 002 | 图床与 Mac 产品文案和展示素材 | 首版完成；Web 实拍与 Mac 流程示意已校验 |
+| 003 | GitHub 一键安装后端 | 已实现，待提交和发布 |
 
 入口：[Spec 001](001-backend-token-bootstrap/spec.md) · [Plan](001-backend-token-bootstrap/plan.md) · [Tasks](001-backend-token-bootstrap/tasks.md)
 
 产品展示：[Spec 002](002-product-story/spec.md) · [Plan](002-product-story/plan.md) · [Tasks](002-product-story/tasks.md)
+
+GitHub 安装：[Spec 003](003-github-install/spec.md) · [Plan](003-github-install/plan.md) · [Tasks](003-github-install/tasks.md)

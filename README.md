@@ -56,13 +56,25 @@ bash scripts/install-docker.sh
 
 ### Linux
 
-取得并校验发布二进制后，在对应版本的仓库目录执行：
+Linux x86_64 / systemd 主机可直接从 GitHub 安装，无需克隆仓库或安装 Go、Node.js：
 
 ```bash
-sudo bash scripts/install-linux.sh /绝对路径/PocketIMG-<version>-linux-amd64
+curl -fsSL https://raw.githubusercontent.com/gmch1/pocket-img/main/install.sh | sudo bash
 ```
 
-脚本安装 systemd 服务并自动准备登录凭证。默认监听 `127.0.0.1:8080`，仅服务器本机可访问；局域网或外部 HTTPS 入口的配置见 [Linux 部署](docs/linux-amd64.md)。
+脚本自动选择带安装附件的稳定 Server 版本，下载并校验 SHA-256，安装 systemd 服务，启动后输出管理员 Token。主机需要 Bash、curl、Python 3 和常规 systemd 管理工具。
+
+该入口需在本次脚本发布到 `main`，且新 Server Release 带有安装附件后使用；旧 `server-v0.5.2` 不支持，脚本不会回退安装旧版。
+
+新安装默认只提供 `127.0.0.1:18746` 上的 **HTTP**，可自定义端口：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/gmch1/pocket-img/main/install.sh | sudo bash -s -- --port 19876
+```
+
+已有 Linux 安装保留原端口，显式传入 `--port` 才修改。Docker 也默认使用宿主机端口 `18746`，可执行 `bash scripts/install-docker.sh --port 19876` 指定。
+
+公网 **HTTPS** 由用户配置 Nginx、Caddy 等反向代理负责，脚本不自动申请证书或开放防火墙端口。指定版本、离线安装和局域网入口见 [Linux 部署](docs/linux-amd64.md)。
 
 ### 飞牛 fnOS
 

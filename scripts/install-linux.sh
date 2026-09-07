@@ -1,15 +1,28 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-if [[ $EUID -ne 0 || $# -ne 1 ]]; then
-  printf '%s\n' '用法：sudo bash scripts/install-linux.sh /绝对路径/PocketIMG-linux-amd64' >&2
+if [[ $EUID -ne 0 || $# -lt 1 ]]; then
+  printf '%s\n' '用法：sudo bash scripts/install-linux.sh /绝对路径/PocketIMG-linux-amd64 [--port PORT]' >&2
   exit 1
 fi
-for tool in systemctl runuser useradd install curl flock; do command -v "$tool" >/dev/null; done
+binary=$1
+shift
+requested_port=''
+while [[ $# -gt 0 ]]; do
+  case $1 in
+    --port) [[ $# -ge 2 ]] || { echo '--port requires a port' >&2; exit 1; }; requested_port=$2; shift 2 ;;
+    *) printf '未知参数：%s\n' "$1" >&2; exit 1 ;;
+  esac
+done
+if [[ -n $requested_port ]]; then
+  [[ $requested_port =~ ^[0-9]{1,5}$ ]] && ((10#$requested_port >= 1024 && 10#$requested_port <= 65535)) || { echo '端口必须为 1024–65535 的整数。' >&2; exit 1; }
+  requested_port=$((10#$requested_port))
+fi
+for tool in systemctl runuser useradd install curl flock ss; do command -v "$tool" >/dev/null; done
 exec 9>/run/lock/pocketimg-install.lock
 flock -n 9 || { printf '%s\n' '另一个安装进程正在运行，请稍后重试。' >&2; exit 1; }
 [[ $(uname -m) == x86_64 ]] || { printf '%s\n' '此安装入口支持 Linux x86_64。' >&2; exit 1; }
-[[ -f $1 && ! -L $1 ]] || { printf '%s\n' '需要已校验的后端发布文件。' >&2; exit 1; }
+[[ -f $binary && ! -L $binary ]] || { printf '%s\n' '需要已校验的后端发布文件。' >&2; exit 1; }
 unit=/etc/systemd/system/pocketimg.service
 config=/etc/pocketimg/service.env
 marker='# Managed by PocketIMG installer v1'
@@ -54,7 +67,17 @@ install -d -o pocketimg -g pocketimg -m 0700 /etc/pocketimg/credentials
 
 export PIH_DATA_DIR=${PIH_DATA_DIR:-/var/lib/pocketimg}
 [[ $PIH_DATA_DIR == /var/lib/pocketimg ]] || { printf '%s\n' '自动 systemd 安装使用 /var/lib/pocketimg；自定义数据路径请沿用手工部署。' >&2; exit 1; }
-export PIH_ADDR=${PIH_ADDR:-127.0.0.1:8080}
+previous_addr=${PIH_ADDR:-}
+export PIH_ADDR=${PIH_ADDR:-127.0.0.1:18746}
+if [[ -n $requested_port ]]; then export PIH_ADDR="${PIH_ADDR%:*}:$requested_port"; fi
+listen_port=${PIH_ADDR##*:}
+[[ $listen_port =~ ^[0-9]{1,5}$ ]] && ((10#$listen_port >= 1024 && 10#$listen_port <= 65535)) || { echo '监听端口必须为 1024–65535 的整数。' >&2; exit 1; }
+if [[ -n $(ss -H -ltn "sport = :$((10#$listen_port))") ]]; then
+  if [[ ! -f $config || $previous_addr != "$PIH_ADDR" ]] || ! systemctl is-active --quiet pocketimg; then
+    printf '端口 %s 已被占用，请使用 --port 选择其他端口。\n' "$listen_port" >&2
+    exit 1
+  fi
+fi
 export PIH_COOKIE_SECURE=${PIH_COOKIE_SECURE:-true}
 export PIH_TOKEN=${PIH_TOKEN:-} PIH_TOKENS=${PIH_TOKENS:-}
 export PIH_TOKENS_FILE=${PIH_TOKENS_FILE:-} PIH_ADMIN_SPACE_ID=${PIH_ADMIN_SPACE_ID:-}
@@ -62,20 +85,26 @@ export PIH_TOKENS_FILE=${PIH_TOKENS_FILE:-} PIH_ADMIN_SPACE_ID=${PIH_ADMIN_SPACE
 
 staged=$(mktemp /usr/local/bin/.pocketimg-install.XXXXXX)
 trap 'rm -f -- "$staged"' EXIT
-install -o root -g root -m 0755 "$1" "$staged"
+install -o root -g root -m 0755 "$binary" "$staged"
 result=$(runuser --preserve-environment -u pocketimg -- "$staged" init --output /etc/pocketimg/credentials/tokens.json)
 if [[ -z $PIH_TOKEN && -z $PIH_TOKENS && -z $PIH_TOKENS_FILE ]]; then
   export PIH_TOKENS_FILE=/etc/pocketimg/credentials/tokens.json
 fi
 # Bash quoting preserves arbitrary provided values without evaluating them.
-if [[ ! -e $config ]]; then
+if [[ ! -e $config || -n $requested_port ]]; then
   umask 077
   staged_config=$(mktemp /etc/pocketimg/.service-env.XXXXXX)
   {
-    printf '%s\n' "$marker"
-    for key in PIH_DATA_DIR PIH_ADDR PIH_COOKIE_SECURE PIH_TOKEN PIH_TOKENS PIH_TOKENS_FILE PIH_ADMIN_SPACE_ID; do
-      printf 'export %s=%q\n' "$key" "${!key}"
-    done
+    if [[ -e $config ]]; then
+      # Preserve any administrator additions and override only the requested port.
+      cat "$config"
+      printf '\nexport PIH_ADDR=%q\n' "$PIH_ADDR"
+    else
+      printf '%s\n' "$marker"
+      for key in PIH_DATA_DIR PIH_ADDR PIH_COOKIE_SECURE PIH_TOKEN PIH_TOKENS PIH_TOKENS_FILE PIH_ADMIN_SPACE_ID; do
+        printf 'export %s=%q\n' "$key" "${!key}"
+      done
+    fi
   } > "$staged_config"
   chown root:pocketimg "$staged_config"
   chmod 0640 "$staged_config"

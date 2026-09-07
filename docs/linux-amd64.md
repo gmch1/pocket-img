@@ -12,10 +12,14 @@ PocketIMG 的 Linux x86_64 版本是独立 Go 服务端，不包含 Android 管�
 
 ## 获取与校验
 
-GitHub Release 提供以下两个文件：
+GitHub Server Release 提供二进制及校验文件；新发布流程还提供一键安装所需的同版本安装包：
 
 - `PocketIMG-<version>-linux-amd64`
 - `PocketIMG-<version>-linux-amd64.sha256`
+- `PocketIMG-<version>-linux-amd64-install.tar.gz`
+- `PocketIMG-<version>-linux-amd64-install.tar.gz.sha256`
+
+安装包包含后端程序、安装脚本和 systemd unit。旧 Server Release 没有安装包，不能用于一键安装。
 
 正式服务端版本使用 `server-v<version>` 标签独立发布，不会同时构建 Android 或 macOS。完整规则见[组件发布流程](releases.md)。
 
@@ -36,13 +40,32 @@ make build-amd64
 
 ## 自动安装（推荐）
 
-部署主机需要 Linux x86_64、systemd、Bash、curl、flock、runuser 和 useradd。取得并校验发布二进制后，在与二进制版本匹配的仓库中执行：
+部署主机需要 Linux x86_64、运行中的 systemd、Bash、curl、Python 3、tar、sha256sum、flock、runuser、useradd 和 ss；不需要 Go、Node.js、Git 或 Docker。直接执行：
 
 ```bash
-sudo bash scripts/install-linux.sh /绝对路径/PocketIMG-<version>-linux-amd64
+curl -fsSL https://raw.githubusercontent.com/gmch1/pocket-img/main/install.sh | sudo bash
 ```
 
-脚本自动创建服务账号、生成 32 字节随机 Token、设置文件权限、安装并启动 systemd 服务。健康检查成功后直接输出访问地址、管理员空间、登录 Token 和保存位置。二进制仍需按上节自行下载与校验；脚本不自动下载版本。
+`install.sh` 自动从 GitHub Releases 选择带安装附件的最新稳定 `server-v*` 版本，下载安装包及 SHA-256，校验包内容后执行其中的同版本安装脚本。它不会使用可能指向 Mac 的 GitHub Latest，不会混用 main 分支的安装脚本与旧版二进制，也不会安装草稿或预发布。
+
+安装会创建服务账号、生成 32 字节随机 Token、设置文件权限并启动 systemd 服务。健康检查成功后直接输出访问地址、管理员空间、登录 Token 和保存位置。下载或校验失败时，不会进入服务安装阶段。校验文件用于检查下载完整性；安装信任来源是该 GitHub 仓库及其发布附件。
+
+本次改动需要先提交推送，再发布带安装附件的 Server 版本，一键入口才可供公众使用。现有 `server-v0.5.2` 不支持自动初始化；尚无兼容版本时脚本明确提示，不会安装旧包。
+
+也可以先保存脚本供检查，并指定版本：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/gmch1/pocket-img/main/install.sh -o pocketimg-install.sh
+sudo bash pocketimg-install.sh --version <version>
+```
+
+只下载、校验和解压，不修改系统服务：
+
+```bash
+bash pocketimg-install.sh --version <version> --download-only ./pocketimg-package
+```
+
+目标目录必须为空。若目标主机不能访问 GitHub，可在能联网的机器准备此目录，传入目标主机后执行 `sudo bash pocketimg-package/scripts/install-linux.sh /绝对路径/pocketimg-package/pocketimg`。本地源码方式仍支持 `sudo bash scripts/install-linux.sh /绝对路径/已校验二进制`。
 
 默认配置：
 
@@ -50,24 +73,35 @@ sudo bash scripts/install-linux.sh /绝对路径/PocketIMG-<version>-linux-amd64
 - 凭证文件：`/etc/pocketimg/credentials/tokens.json`，服务账号拥有，权限 `0600`。
 - 部署配置：`/etc/pocketimg/service.env`，root 拥有，权限 `0640`；由 Bash 读取，不是 systemd EnvironmentFile 格式。
 - 数据：`/var/lib/pocketimg`；程序：`/usr/local/bin/pocketimg`。
-- 监听：`127.0.0.1:8080`，仅本机可访问；保留 `PIH_COOKIE_SECURE=true`，适合外部 HTTPS 反向代理。
+- 监听：新安装使用 `127.0.0.1:18746`，仅本机可访问；保留 `PIH_COOKIE_SECURE=true`，适合外部 HTTPS 反向代理。
+
+自定义端口（范围 `1024–65535`）：
+
+```bash
+sudo bash pocketimg-install.sh --port 19876
+```
+
+本地安装脚本也支持在二进制路径后追加 `--port 19876`。安装器检测端口占用，冲突时提示选择其他端口，不会自动换成未知端口。重复安装默认保留原端口；显式 `--port` 会更新持久化配置并重启服务，Token 不变，之后需同步修改反向代理或客户端地址。
+
+`18746` 只是避开常见 `8080` 的默认选择，并不保证空闲。`--port` 只修改端口，不改变已有监听地址或 HTTP/HTTPS Cookie 设置。
 
 若直接在可信局域网通过 HTTP 使用，首次安装可执行：
 
 ```bash
-sudo env PIH_ADDR=0.0.0.0:8080 PIH_COOKIE_SECURE=false \
-  bash scripts/install-linux.sh /绝对路径/PocketIMG-<version>-linux-amd64
+sudo env PIH_ADDR=0.0.0.0:18746 PIH_COOKIE_SECURE=false bash pocketimg-install.sh
 ```
 
-此时浏览器访问 `http://服务器局域网地址:8080`。安装输出中的回环地址是服务器本机的健康检查入口。
+此时浏览器访问 `http://服务器局域网地址:18746`。安装输出中的回环地址是服务器本机的健康检查入口。
 
-重新运行安装脚本会复用原 Token、空间和保存的部署参数；提供新版本二进制即可更新本安装器管理的服务。无人值守更新设置 `PIH_INSTALL_QUIET=1` 可抑制明文 Token 输出。普通服务重启不会打印 Token。
+重新运行一键入口会选择最新兼容 Server Release，升级本安装器管理的服务，复用原 Token、空间和保存的部署参数；也可指定版本。无人值守更新设置 `PIH_INSTALL_QUIET=1` 可抑制明文 Token 输出。普通服务重启不会打印 Token。
 
 已有手工管理的 systemd unit 不会被覆盖，继续使用下文的手工升级方式。首次安装支持通过现有 `PIH_TOKENS_FILE`、`PIH_TOKENS` 或 `PIH_TOKEN` 提供凭证（只选一种）；文件须能由 `pocketimg` 读取。自定义数据目录继续使用手工部署。
 
 配置缺失但数据已存在时，安装停止，不会重建管理员。若生成凭证后启动失败，凭证会保留，修复启动问题后再次执行即可。备份时保存 `/etc/pocketimg/`、所有外部凭证文件以及完整数据目录；安装终端输出包含登录凭证，请按凭证管理。
 
 ## 手工启动（高级方式）
+
+为兼容历史手工部署，直接运行裸二进制时的默认地址仍为 `127.0.0.1:8080`；新安装器会显式保存 `127.0.0.1:18746`。以下示例沿用手工部署的 `8080`，可通过 `PIH_ADDR` 自定义。
 
 准备权限为 `0600` 的 Token 配置文件：
 
