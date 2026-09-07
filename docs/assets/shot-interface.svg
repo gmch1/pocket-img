@@ -1,0 +1,102 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="940" viewBox="0 0 1440 940" role="img" aria-labelledby="title desc">
+  <title id="title">PocketIMG Shot：桌面选区与应用截图界面示意</title>
+  <desc id="desc">非 macOS 实拍。左右展示完成选区后的桌面和应用背景：选区外变暗、八个调整手柄、像素尺寸、下方工具栏。工具栏依次为方框、箭头、文字、颜色、撤销、取消、贴图、复制图片和上传。上传按钮仅在配置连接后显示。</desc>
+  <defs>
+    <linearGradient id="wall" x2="1" y2="1"><stop stop-color="#9ccac2"/><stop offset=".55" stop-color="#527f8c"/><stop offset="1" stop-color="#233b62"/></linearGradient>
+    <linearGradient id="hill" x2="1" y2="1"><stop stop-color="#dddbaf"/><stop offset="1" stop-color="#759a81"/></linearGradient>
+    <clipPath id="screen"><rect width="648" height="400" rx="12"/></clipPath>
+    <g id="desktop">
+      <rect width="648" height="400" fill="url(#wall)"/>
+      <circle cx="495" cy="107" r="53" fill="#e9e4c3" opacity=".9"/>
+      <path d="M-40 320 Q170 105 363 265 T720 198 V430 H-40Z" fill="url(#hill)"/>
+      <path d="M-30 408 Q215 210 400 339 T710 267 V430H-30Z" fill="#376b69"/>
+      <rect width="648" height="26" fill="#e8f2ee" opacity=".75"/>
+      <g fill="#233e3e" font-size="10"><text x="17" y="17" font-weight="700">Finder</text><text x="66" y="17">文件　编辑　显示　前往</text><text x="548" y="17">周一  09:41</text></g>
+      <g transform="translate(520 7)" stroke="#233e3e" fill="none" stroke-width="1.4"><path d="M0 4V0H4 M10 0H14V4 M14 10V14H10 M4 14H0V10 M4 8L7 5L10 8 M7 5V12"/></g>
+      <rect x="191" y="355" width="266" height="39" rx="12" fill="#e8f1ed" opacity=".6"/>
+      <g stroke="#fff" stroke-opacity=".5"><rect x="203" y="362" width="26" height="26" rx="7" fill="#5b9ec8"/><rect x="239" y="362" width="26" height="26" rx="7" fill="#f6e8b3"/><rect x="275" y="362" width="26" height="26" rx="7" fill="#dc8b6c"/><rect x="311" y="362" width="26" height="26" rx="7" fill="#769583"/><rect x="347" y="362" width="26" height="26" rx="7" fill="#b7a8ca"/><rect x="383" y="362" width="26" height="26" rx="7" fill="#c6dce0"/><rect x="419" y="362" width="26" height="26" rx="7" fill="#eff0e8"/></g>
+    </g>
+    <g id="handle"><rect x="-3.5" y="-3.5" width="7" height="7" fill="white" stroke="#0a84ff" stroke-width="1"/></g>
+    <g id="selection">
+      <rect width="460" height="228" fill="none" stroke="#000" stroke-opacity=".65" stroke-width="3"/>
+      <rect width="460" height="228" fill="none" stroke="#0a84ff" stroke-width="1.5"/>
+      <use href="#handle"/><use href="#handle" x="230"/><use href="#handle" x="460"/>
+      <use href="#handle" y="114"/><use href="#handle" x="460" y="114"/>
+      <use href="#handle" y="228"/><use href="#handle" x="230" y="228"/><use href="#handle" x="460" y="228"/>
+      <rect x="0" y="-26" width="91" height="20" rx="5" fill="#171717" fill-opacity=".94"/>
+      <text x="9" y="-12" font-size="11" fill="white">920 × 456</text>
+    </g>
+    <g id="toolbar">
+      <rect width="247" height="32" rx="8" fill="#141414" fill-opacity=".94" stroke="#555" stroke-width=".5"/>
+      <path d="M135 8V24" stroke="#fff" stroke-opacity=".14"/>
+      <rect x="139" y="4" width="24" height="24" rx="5" fill="#ff453a" fill-opacity=".14"/>
+      <rect x="165" y="4" width="24" height="24" rx="5" fill="#fff" fill-opacity=".14"/>
+      <rect x="191" y="4" width="24" height="24" rx="5" fill="#fff" fill-opacity=".14"/>
+      <rect x="217" y="4" width="24" height="24" rx="5" fill="#0a84ff"/>
+      <g fill="none" stroke="#ddd" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="9" y="10" width="14" height="12" rx="1"/>
+        <path d="M36 22L48 10 M41 10H48V17 M62 10H74 M68 10V23 M65 23H71"/>
+        <circle cx="94" cy="16" r="6" fill="#ff0000"/>
+        <path d="M116 11L111 16L116 20 M112 16H122Q128 16 126 23"/>
+        <path d="M146 11L156 21 M156 11L146 21" stroke="#ff453a"/>
+        <path d="M174 9H182 M176 9V15L183 19H172L176 15 M178 19V25"/>
+        <rect x="197" y="10" width="12" height="14" rx="1"/><path d="M200 9H206V12H200Z M200 16H206 M200 20H206"/>
+        <path d="M229 20V9 M224 14L229 9L234 14 M222 20V24H236V20" stroke="white"/>
+      </g>
+    </g>
+  </defs>
+  <rect width="1440" height="940" fill="#f7f6f0"/>
+  <g font-family="Inter, -apple-system, BlinkMacSystemFont, 'Noto Sans CJK SC', sans-serif">
+    <text x="48" y="49" font-size="14" fill="#43786b" font-weight="700" letter-spacing="2">POCKETIMG SHOT / CAPTURE</text>
+    <text x="48" y="102" font-size="36" fill="#203a35" font-weight="700">框住想分享的部分，标注后直接带走。</text>
+    <text x="48" y="135" font-size="16" fill="#64736d">F1 开始截图 · 拖拽选区 · 调整范围 · 复制、贴图或上传</text>
+    <rect x="1130" y="33" width="262" height="32" rx="16" fill="#e5ebe4"/>
+    <text x="1261" y="54" text-anchor="middle" font-size="13" fill="#52665d">界面示意 · 非 macOS 实拍</text>
+
+    <text x="48" y="194" font-size="20" font-weight="700" fill="#203a35">01　桌面上，截取一块画面</text>
+    <text x="744" y="194" font-size="20" font-weight="700" fill="#203a35">02　应用里，把重点说明白</text>
+    <g transform="translate(48 215)" clip-path="url(#screen)">
+      <use href="#desktop"/>
+      <path d="M0 0H648V400H0Z M78 87V315H538V87Z" fill="#000" opacity=".42" fill-rule="evenodd"/>
+      <use href="#selection" x="78" y="87"/>
+      <use href="#toolbar" x="291" y="325"/>
+      <rect x="399" y="329" width="24" height="24" rx="5" fill="#141414" opacity=".65"/>
+      <path d="M540 307L546 323L549 316L557 315Z" fill="white" stroke="#222" stroke-width="1.3"/>
+    </g>
+    <g transform="translate(744 215)" clip-path="url(#screen)">
+      <use href="#desktop"/>
+      <rect x="26" y="42" width="596" height="305" rx="9" fill="#fcfbf6" stroke="#d3dcd3"/>
+      <path d="M35 42H613Q622 42 622 51V74H26V51Q26 42 35 42" fill="#e9ece5"/>
+      <circle cx="43" cy="58" r="4" fill="#e98679"/><circle cx="58" cy="58" r="4" fill="#e4c06d"/><circle cx="73" cy="58" r="4" fill="#7cba90"/>
+      <text x="324" y="62" text-anchor="middle" font-size="11" fill="#566960">项目手记 · 演示内容</text>
+      <text x="90" y="116" font-size="10" fill="#749187" letter-spacing="2">FIELD NOTES / 07</text>
+      <text x="90" y="147" font-size="26" font-weight="700" fill="#274c40">把灵感，留在这一页。</text>
+      <text x="90" y="173" font-size="12" fill="#6a7d74">记录、整理，再把清晰的想法分享出去。</text>
+      <rect x="90" y="194" width="176" height="96" rx="5" fill="#d7e2d3"/>
+      <circle cx="219" cy="220" r="15" fill="#f3ebbb"/>
+      <path d="M90 277L145 214L198 268L231 240L266 279V290H90Z" fill="#83a390"/>
+      <text x="292" y="208" font-size="14" fill="#315a48" font-weight="700">本周的三个想法</text>
+      <g font-size="12" fill="#6a7d74"><text x="292" y="233">01　减少干扰，突出内容</text><text x="292" y="256">02　让分享成为顺手的事</text><text x="292" y="279">03　给每个灵感一个位置</text></g>
+      <path d="M0 0H648V400H0Z M78 87V315H538V87Z" fill="#000" opacity=".42" fill-rule="evenodd"/>
+      <use href="#selection" x="78" y="87"/>
+      <rect x="283" y="215" width="201" height="28" fill="none" stroke="#ff0000" stroke-width="2"/>
+      <path d="M489 180L452 213 M452 213L458 200 M452 213L466 210" fill="none" stroke="#ff0000" stroke-width="2"/>
+      <text x="441" y="168" font-size="16" font-weight="600" fill="#ff0000">这里是重点</text>
+      <use href="#toolbar" x="291" y="325"/>
+    </g>
+    <g font-size="15" fill="#52685f">
+      <text x="48" y="649">选区外压暗，选区内保持清晰；尺寸标签显示像素大小。</text>
+      <text x="48" y="675">拖动边缘或八个手柄调整范围；取消标注工具后可移动选区。</text>
+      <text x="744" y="649">方框、箭头与文字，直接叠加在当前截图上。</text>
+      <text x="744" y="675">工具栏贴近选区右下方；下方空间不足时移到上方。</text>
+    </g>
+    <path d="M48 707H1392" stroke="#dce2d7"/>
+    <text x="48" y="749" font-size="20" font-weight="700" fill="#203a35">功能区，一眼看懂</text>
+    <text x="48" y="779" font-size="14" fill="#64736d">完成选区后的工具栏 · 放大示意</text>
+    <use href="#toolbar" transform="translate(550 737) scale(2.5)"/>
+    <g text-anchor="middle" font-size="13" fill="#435c51">
+      <text x="590" y="845">方框</text><text x="655" y="845">箭头</text><text x="720" y="845">文字</text><text x="785" y="845">颜色</text><text x="850" y="845">撤销</text><text x="927" y="845">取消</text><text x="992" y="845">贴图</text><text x="1057" y="845">复制图片</text><text x="1122" y="845">上传</text>
+    </g>
+    <text x="48" y="901" font-size="14" fill="#64736d">贴图与复制无需后端；上传需先配置服务地址与 Token，成功后自动复制链接。壁纸、应用内容及图外说明均为示意。</text>
+  </g>
+</svg>
