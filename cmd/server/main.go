@@ -23,6 +23,15 @@ import (
 var version = "dev"
 
 func main() {
+	if len(os.Args) > 1 {
+		if os.Args[1] != "init" {
+			log.Fatal("usage: pocketimg [init [--output PATH]]")
+		}
+		if err := runInit(os.Args[2:], os.Stdout); err != nil {
+			log.Fatal(err)
+		}
+		return
+	}
 	if err := run(); err != nil {
 		log.Fatal(err)
 	}
@@ -240,7 +249,9 @@ func configuredTokensForMode(allowEmpty bool) (map[string]string, error) {
 		if allowEmpty {
 			return map[string]string{}, nil
 		}
-		return nil, errors.New("configure PIH_TOKENS_FILE, PIH_TOKENS, or legacy PIH_TOKEN")
+		// Installation may have persisted credentials in the data volume. Never
+		// generate credentials during ordinary service startup.
+		return readManagedTokens(defaultTokensPath())
 	}
 	if sources > 1 {
 		return nil, errors.New("configure only one of PIH_TOKENS_FILE, PIH_TOKENS, or PIH_TOKEN")
@@ -263,6 +274,9 @@ func configuredTokensForMode(allowEmpty bool) (map[string]string, error) {
 	}
 	if len(tokens) == 0 {
 		return nil, errors.New("configured token map must not be empty")
+	}
+	if err := backend.ValidateTokens(tokens); err != nil {
+		return nil, err
 	}
 	return tokens, nil
 }

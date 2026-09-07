@@ -7,7 +7,31 @@ Go `embed` 编入静态后端；SQLite 也运行在同一个 Go 进程中，不�
 镜像同时支持 `linux/amd64` 和 `linux/arm64`。容器监听 `8080`，以固定的非
 root UID/GID `10001:10001` 运行，并把全部可变数据写入 `/data`。
 
-## 构建镜像
+## 自动安装（推荐）
+
+需要 Docker Engine 和支持 `up --wait` 的 Docker Compose v2。在仓库中执行：
+
+```bash
+bash scripts/install-docker.sh
+```
+
+脚本从当前源码构建镜像，自动在持久化卷生成管理员 Token，然后启动并等待服务健康。完成后直接输出访问地址、管理员空间、Token 和保存位置，无需执行随机数命令或手工编辑配置。
+
+已有包含此初始化功能的发布镜像时，可设置 `PIH_IMAGE` 指定其版本；脚本会拉取该镜像。旧版本（例如 `0.5.0`）不支持 `init`，不能用于此自动安装入口。
+
+离线或本地已有镜像可同时设置 `PIH_INSTALL_PULL=0`，跳过拉取。
+
+自动凭证保存在数据卷的 `/data/tokens.json`，权限为 `0600`，所有者为 `10001:10001`。初始化容器和服务使用同一卷、同一 UID；不会写入只读 `/config`。默认管理员空间为 `admin`，入口为 `http://宿主机地址:8080`。修改端口：
+
+```bash
+PIH_PORT=18080 bash scripts/install-docker.sh
+```
+
+重复安装、容器重建和升级复用原凭证。普通 `docker compose up -d` 能读取已有的自动凭证，但不会初始化新实例或直接展示 Token；首次安装使用脚本。安装失败后保留凭证，修复问题再运行；已有数据但凭证缺失时要求恢复原配置，不生成新身份。
+
+安装脚本也支持下文的显式文件、`PIH_TOKENS` 或旧 `PIH_TOKEN`，只使用一种来源。保留相同 Compose 项目名、卷及自定义环境配置，不要在重装时更换它们。无人值守更新可设置 `PIH_INSTALL_QUIET=1` 隐藏 Token；默认安装输出包含登录凭证，普通服务日志不打印它。
+
+## 手工构建镜像
 
 在仓库根目录执行：
 
@@ -47,7 +71,9 @@ Docker 构建上下文采用严格白名单，只包含 Go、React 构建所需�
 本地 `tokens.json`、签名文件、Git 历史、`node_modules`、应用构建产物和数据
 目录都不会发送给 Docker daemon，也不会进入镜像层。
 
-## 使用单 Token 启动
+## 手工配置单 Token（高级方式）
+
+自动安装无需以下步骤；此节保留给已有配置和自定义部署。
 
 先生成至少 32 字节随机 Token，并把它保存在部署主机的安全配置中：
 
@@ -72,7 +98,7 @@ docker compose up --detach
 
 环境变量会出现在容器配置中。长期部署更推荐使用 Token 文件。
 
-## 使用 Token 文件启动
+## 手工配置 Token 文件（高级方式）
 
 Compose 会把主机的 `./config` 只读挂载到容器 `/config`。先创建配置目录，
 再准备权限受限的 JSON 文件：
@@ -117,6 +143,7 @@ Compose 使用 `pocketimg-data` 命名卷挂载 `/data`。其中包含：
 
 ```text
 /data/
+├── tokens.json（自动安装的管理员凭证）
 ├── metadata.sqlite3
 ├── metadata.sqlite3-wal
 ├── metadata.sqlite3-shm
@@ -125,7 +152,7 @@ Compose 使用 `pocketimg-data` 命名卷挂载 `/data`。其中包含：
 └── tmp/
 ```
 
-SQLite 和媒体文件必须作为同一组备份。最可靠的方式是先停止服务，完整备份
+自动生成的 `tokens.json` 必须随数据卷一起备份；显式 `/config` 文件或环境凭证需单独备份。SQLite 和媒体文件必须作为同一组备份。最可靠的方式是先停止服务，完整备份
 该卷，再重新启动。不要把 `/data` 放到 NFS、SMB 等网络文件系统，也不要让
 多个 PocketIMG 容器同时挂载并写入同一数据目录。
 

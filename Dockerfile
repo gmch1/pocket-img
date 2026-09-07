@@ -52,6 +52,7 @@ LABEL org.opencontainers.image.title="PocketIMG" \
 
 COPY --from=backend-build /pocketimg /usr/local/bin/pocketimg
 COPY --from=backend-build --chown=10001:10001 /runtime-data/ /data/
+RUN chmod 0700 /data
 
 ENV PIH_ADDR=0.0.0.0:8080 \
     PIH_DATA_DIR=/data

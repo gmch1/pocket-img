@@ -7,7 +7,8 @@ PocketIMG 的 Linux x86_64 版本是独立 Go 服务端，不包含 Android 管�
 - CPU 架构：64 位 x86，也就是 `x86_64` / `amd64`；不支持 32 位 `i386` / `i686`。
 - 操作系统：Linux。发布流程会验证产物为静态链接的 x86-64 ELF，因此不依赖发行版提供 glibc、SQLite 或 WebP 动态库。
 - 服务形态：单个 HTTP 服务进程，同时提供管理网页、API、公开图片和健康检查。
-- 不包含：桌面截图功能、Android 管理界面、TLS 证书管理、域名配置、自动更新和系统服务安装器。
+- 提供：仓库内的 systemd 安装脚本，自动初始化并展示管理员 Token。
+- 不包含：桌面截图功能、Android 管理界面、TLS 证书管理、域名配置和自动更新。
 
 ## 获取与校验
 
@@ -33,7 +34,40 @@ make build-amd64
 
 输出位于 `dist/phone-image-host-linux-amd64`。构建过程需要 Go 和 Node.js，运行发布产物不需要。
 
-## 快速启动
+## 自动安装（推荐）
+
+部署主机需要 Linux x86_64、systemd、Bash、curl、flock、runuser 和 useradd。取得并校验发布二进制后，在与二进制版本匹配的仓库中执行：
+
+```bash
+sudo bash scripts/install-linux.sh /绝对路径/PocketIMG-<version>-linux-amd64
+```
+
+脚本自动创建服务账号、生成 32 字节随机 Token、设置文件权限、安装并启动 systemd 服务。健康检查成功后直接输出访问地址、管理员空间、登录 Token 和保存位置。二进制仍需按上节自行下载与校验；脚本不自动下载版本。
+
+默认配置：
+
+- 管理员空间：`admin`。
+- 凭证文件：`/etc/pocketimg/credentials/tokens.json`，服务账号拥有，权限 `0600`。
+- 部署配置：`/etc/pocketimg/service.env`，root 拥有，权限 `0640`；由 Bash 读取，不是 systemd EnvironmentFile 格式。
+- 数据：`/var/lib/pocketimg`；程序：`/usr/local/bin/pocketimg`。
+- 监听：`127.0.0.1:8080`，仅本机可访问；保留 `PIH_COOKIE_SECURE=true`，适合外部 HTTPS 反向代理。
+
+若直接在可信局域网通过 HTTP 使用，首次安装可执行：
+
+```bash
+sudo env PIH_ADDR=0.0.0.0:8080 PIH_COOKIE_SECURE=false \
+  bash scripts/install-linux.sh /绝对路径/PocketIMG-<version>-linux-amd64
+```
+
+此时浏览器访问 `http://服务器局域网地址:8080`。安装输出中的回环地址是服务器本机的健康检查入口。
+
+重新运行安装脚本会复用原 Token、空间和保存的部署参数；提供新版本二进制即可更新本安装器管理的服务。无人值守更新设置 `PIH_INSTALL_QUIET=1` 可抑制明文 Token 输出。普通服务重启不会打印 Token。
+
+已有手工管理的 systemd unit 不会被覆盖，继续使用下文的手工升级方式。首次安装支持通过现有 `PIH_TOKENS_FILE`、`PIH_TOKENS` 或 `PIH_TOKEN` 提供凭证（只选一种）；文件须能由 `pocketimg` 读取。自定义数据目录继续使用手工部署。
+
+配置缺失但数据已存在时，安装停止，不会重建管理员。若生成凭证后启动失败，凭证会保留，修复启动问题后再次执行即可。备份时保存 `/etc/pocketimg/`、所有外部凭证文件以及完整数据目录；安装终端输出包含登录凭证，请按凭证管理。
+
+## 手工启动（高级方式）
 
 准备权限为 `0600` 的 Token 配置文件：
 
@@ -75,7 +109,7 @@ curl --fail http://127.0.0.1:8080/healthz
 
 | 环境变量 | 默认值 | 说明 |
 | --- | --- | --- |
-| `PIH_TOKENS_FILE` | 无 | 推荐方式；指向权限受限的 Token JSON 文件。 |
+| `PIH_TOKENS_FILE` | 无 | 显式 Token JSON 文件；未提供任何来源时只读取数据目录中已安装的 `tokens.json`，不会自动生成。 |
 | `PIH_TOKENS` | 无 | 直接传入 Token JSON；不建议放进可能被日志或进程列表采集的启动脚本。 |
 | `PIH_TOKEN` | 无 | 兼容旧部署的单空间 Token，空间 ID 固定为 `default`。 |
 | `PIH_ADMIN_SPACE_ID` | 单空间时自动选择 | 多空间时指定管理员空间；该值必须存在于 Token 映射中。 |
@@ -85,7 +119,7 @@ curl --fail http://127.0.0.1:8080/healthz
 | `PIH_READ_TIMEOUT` | `60s` | HTTP 请求读取超时；公网慢速上传可提高到 `180s`。 |
 | `PIH_WRITE_TIMEOUT` | `120s` | HTTP 响应写入超时；公网慢速上传可提高到 `240s`。 |
 
-`PIH_TOKENS_FILE`、`PIH_TOKENS`、`PIH_TOKEN` 必须且只能配置一个。空间 ID 是数据所有权的一部分；轮换 Token 时只修改同一个空间 ID 对应的值，不要为了换 Token 而改名。
+显式 Token 来源只能配置一个；都未设置时，普通后端读取 `PIH_DATA_DIR/tokens.json`，该文件必须是权限 `0600` 的普通文件。文件不存在时仍启动失败，初始化由安装入口完成。空间 ID 是数据所有权的一部分；轮换 Token 时只修改同一个空间 ID 对应的值，不要为了换 Token 而改名。
 
 Go 后端也保留可选的受限反向 SSH 隧道。仅当确实需要它时设置 `PIH_TUNNEL_ENABLED=true`，并同时提供以下配置：
 
@@ -121,7 +155,7 @@ Go 后端也保留可选的受限反向 SSH 隧道。仅当确实需要它时设
 
 SQLite 只保存元数据、用户、Session 和缩略图任务，图片本身位于 `objects/` 与 `thumbnails/`。不要只备份数据库或只复制图片目录，两者必须保持一致；数据目录也不应放在网络文件系统上。
 
-## 使用 systemd 长期运行
+## 手工配置 systemd（高级方式）
 
 以下示例使用独立的低权限账号，服务仍然只是同一个 Go 二进制，没有额外管理壳。不同发行版的 `useradd` 路径可能略有差异。
 

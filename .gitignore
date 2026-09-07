@@ -1,6 +1,7 @@
 /data/
 /dist/
 /tokens.json
+/config/
 /frontend/node_modules/
 /frontend/.vite/
 /frontend/*.tsbuildinfo

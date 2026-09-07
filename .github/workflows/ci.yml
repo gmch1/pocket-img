@@ -131,6 +131,9 @@ jobs:
           done
           docker exec "${container}" test -f /data/metadata.sqlite3
 
+      - name: Verify automatic installation and credential reuse
+        run: PIH_TEST_IMAGE=pocketimg:ci bash scripts/test-docker-install.sh
+
   macos:
     name: macOS client
     runs-on: macos-15
