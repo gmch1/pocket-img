@@ -8,7 +8,7 @@ services:
       dockerfile: Dockerfile
     restart: unless-stopped
     ports:
-      - "${PIH_PORT:-8080}:8080"
+      - "${PIH_PORT:-18746}:8080"
     environment:
       PIH_ADDR: 0.0.0.0:8080
       PIH_DATA_DIR: /data

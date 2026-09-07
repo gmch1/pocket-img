@@ -21,11 +21,13 @@ bash scripts/install-docker.sh
 
 离线或本地已有镜像可同时设置 `PIH_INSTALL_PULL=0`，跳过拉取。
 
-自动凭证保存在数据卷的 `/data/tokens.json`，权限为 `0600`，所有者为 `10001:10001`。初始化容器和服务使用同一卷、同一 UID；不会写入只读 `/config`。默认管理员空间为 `admin`，入口为 `http://宿主机地址:8080`。修改端口：
+自动凭证保存在数据卷的 `/data/tokens.json`，权限为 `0600`，所有者为 `10001:10001`。初始化容器和服务使用同一卷、同一 UID；不会写入只读 `/config`。默认管理员空间为 `admin`，新安装入口为 `http://宿主机地址:18746`，容器内部仍监听 `8080`。修改宿主机端口：
 
 ```bash
-PIH_PORT=18080 bash scripts/install-docker.sh
+bash scripts/install-docker.sh --port 19876
 ```
+
+也支持 `PIH_PORT=19876` 或 `.env` 中的同名配置。安装脚本在未指定端口时复用已有容器的宿主机端口（包括停止的容器），否则使用 `18746`。如果使用裸 Compose 命令，或删除容器后重建，请通过 `.env` 保存自定义 `PIH_PORT`；旧部署要继续使用 `8080` 也应显式设置。
 
 重复安装、容器重建和升级复用原凭证。普通 `docker compose up -d` 能读取已有的自动凭证，但不会初始化新实例或直接展示 Token；首次安装使用脚本。安装失败后保留凭证，修复问题再运行；已有数据但凭证缺失时要求恢复原配置，不生成新身份。
 
@@ -88,7 +90,7 @@ PIH_TOKEN='replace-with-a-random-64-character-hex-token' \
 docker compose up --detach --build
 ```
 
-默认入口为 `http://宿主机地址:8080`。可以通过 `PIH_PORT` 修改宿主机端口：
+默认入口为 `http://宿主机地址:18746`。可以通过 `PIH_PORT` 修改宿主机端口：
 
 ```bash
 PIH_PORT=18080 \
@@ -164,7 +166,7 @@ Compose 使用 `pocketimg-data` 命名卷挂载 `/data`。其中包含：
 镜像内置健康检查：
 
 ```bash
-curl --fail http://127.0.0.1:8080/healthz
+curl --fail http://127.0.0.1:18746/healthz
 docker compose ps
 docker compose logs --follow pocketimg
 ```

@@ -4,7 +4,7 @@ PocketIMG 的 Linux Server、Android App、macOS Shot 和 fnOS 应用使用独�
 
 | 组件 | 标签 | 工作流 | 主要产物 |
 | --- | --- | --- | --- |
-| Linux Server | `server-v<version>` | `release-server.yml` | Linux amd64 二进制与 SHA-256 |
+| Linux Server | `server-v<version>` | `release-server.yml` | Linux amd64 二进制、同版本安装包及各自 SHA-256 |
 | Android App | `android-v<version>` | `release-android.yml` | 签名 ARM64 APK 与 SHA-256 |
 | macOS Shot | `macos-v<version>` | `release-macos.yml` | Apple Silicon（arm64）应用 ZIP、自动更新 tar.xz、SHA-256 与签名 appcast |
 | fnOS | `fnos-v<version>` | `release-fnos.yml` | fnOS FPK、SHA-256 与 amd64/arm64 GHCR 镜像 |
@@ -12,6 +12,12 @@ PocketIMG 的 Linux Server、Android App、macOS Shot 和 fnOS 应用使用独�
 版本必须是三个非负整数，例如 `0.4.41`。发布标签不接受预发布后缀。首轮组件化发布以旧的全平台 `v0.4.40` 作为 Release Notes 比较基线，之后每个工作流只比较同组件的上一个标签。
 
 ## 单组件发布
+
+推送 `main` 会自动触发 CI，验证源码及容器，但不会创建 Release 或更新用户已经安装的服务。要让 GitHub 一键安装入口取得新功能，还需要发布 Server 组件；单纯修改文案无需单独发布 Mac 或 Android。
+
+Server 构建会调用 `scripts/package-linux-installer.sh`，把二进制、`scripts/install-linux.sh` 与 systemd unit 打成 `PocketIMG-<version>-linux-amd64-install.tar.gz`，并附带 SHA-256。根目录 `install.sh` 只选择包含该附件及校验文件的稳定 Server Release。历史发布不补写附件；首次启用此流程必须发布新版本。
+
+Docker 镜像目前由 fnOS 发布流程生成，因此发布 Server 二进制不会自动更新 GHCR 镜像。需要交付更新后的容器时，按 fnOS 组件流程发布；不需要因此发布 Mac 截图客户端。
 
 确认目标提交已经进入 `main` 且 CI 通过后，只推送需要发布的标签：
 
