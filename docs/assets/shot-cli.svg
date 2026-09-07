@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="600" viewBox="0 0 1440 600" role="img" aria-labelledby="title desc">
+  <title id="title">把截图链接带进 CLI 对话</title>
+  <desc id="desc">流程示意，非终端实拍。截图上传后自动复制公开 URL，用户切回终端并按 Command-V 粘贴。工具需要支持访问图片链接；应用不会自动向终端输入或提交。</desc>
+  <rect width="1440" height="600" fill="#f7f6f0"/>
+  <g font-family="-apple-system, BlinkMacSystemFont, 'Noto Sans CJK SC', sans-serif">
+    <text x="48" y="49" font-size="14" font-weight="700" fill="#43786b" letter-spacing="2">POCKETIMG SHOT / CLI WORKFLOW</text>
+    <text x="48" y="101" font-size="34" font-weight="700" fill="#203a35">图片不好粘贴？把截图变成一条链接。</text>
+    <text x="48" y="137" font-size="16" fill="#64736d">为 Codex 等 CLI 对话提供截图引用，无需手动保存文件、寻找路径。</text>
+    <rect x="1170" y="29" width="222" height="32" rx="16" fill="#e5ebe4"/>
+    <text x="1281" y="50" text-anchor="middle" font-size="13" fill="#52665d">流程示意 · 非终端实拍</text>
+    <rect x="48" y="188" width="383" height="294" rx="18" fill="#e8eee4"/>
+    <g font-size="19" fill="#254c3d" font-weight="700">
+      <text x="78" y="234">01　截图并上传</text><text x="78" y="326">02　链接自动进入剪贴板</text><text x="78" y="418">03　切回 CLI，⌘V 粘贴</text>
+    </g>
+    <g font-size="14" fill="#5a7265"><text x="123" y="261">框选画面，按需标注，点击上传。</text><text x="123" y="353">上传成功后，无需再去图库找链接。</text><text x="123" y="445">附上问题，再由你确认并发送。</text></g>
+    <path d="M451 330H497 M488 321L497 330L488 339" fill="none" stroke="#759e88" stroke-width="2"/>
+    <rect x="519" y="188" width="873" height="294" rx="18" fill="#182923"/>
+    <path d="M537 188H1374Q1392 188 1392 206V230H519V206Q519 188 537 188" fill="#243930"/>
+    <circle cx="544" cy="209" r="5" fill="#de8e7b"/><circle cx="562" cy="209" r="5" fill="#dfc47b"/><circle cx="580" cy="209" r="5" fill="#87b99a"/>
+    <text x="955" y="215" text-anchor="middle" font-size="12" fill="#a8bbac">CLI 对话输入区 / 通用示意</text>
+    <text x="553" y="279" font-size="13" fill="#8fa899">准备发送给编程助手的问题</text>
+    <text x="553" y="323" font-size="18" fill="#f0f2e7">› 请参考这张截图，分析页面布局的问题：</text>
+    <text x="574" y="363" font-family="monospace" font-size="20" fill="#97dbb6">https://img.example.com/i/demo.webp</text>
+    <rect x="1014" y="345" width="2" height="23" fill="#c3dfca"/>
+    <path d="M553 397H1356" stroke="#3e5447"/>
+    <text x="553" y="438" font-size="14" fill="#a8bbac">粘贴的是图片 URL，不是图片附件；不会自动输入或代替你提交。</text>
+    <text x="48" y="532" font-size="15" fill="#52685f">适用于无法直接粘贴图片的终端或远程会话；实际读图取决于 CLI 的链接访问、图片处理能力与网络权限。</text>
+    <text x="48" y="563" font-size="14" fill="#64736d">使用可公开访问的图片链接。分享前检查截图中的密钥和个人信息；图中 example.com 地址仅为占位示例。</text>
+  </g>
+</svg>
