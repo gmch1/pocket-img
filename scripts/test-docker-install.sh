@@ -48,6 +48,7 @@ login() {
       "http://127.0.0.1:$tested_port/api/auth/session"
 }
 login
+python3 scripts/test-docker-api.py "$container" "http://127.0.0.1:$tested_port"
 unset PIH_PORT
 second=$(install_test)
 [[ $(printf '%s\n' "$second" | sed -n 's/^登录 Token：//p') == "$token" ]]
