@@ -49,8 +49,9 @@ jobs:
 
       - name: Test GitHub installer
         run: |
-          bash -n install.sh scripts/install-linux.sh scripts/package-linux-installer.sh
+          bash -n install.sh scripts/install-linux.sh scripts/package-linux-installer.sh scripts/package-docker-installer.sh
           python3 scripts/test-github-install.py
+          python3 scripts/test-docker-release.py
 
   container:
     name: Container image
@@ -138,6 +139,9 @@ jobs:
 
       - name: Verify automatic installation and credential reuse
         run: PIH_TEST_IMAGE=pocketimg:ci bash scripts/test-docker-install.sh
+
+      - name: Test release bundle installation and upgrade
+        run: PIH_TEST_IMAGE=pocketimg:ci PIH_TEST_RELEASE_BUNDLE=1 bash scripts/test-docker-install.sh
 
   macos:
     name: macOS client

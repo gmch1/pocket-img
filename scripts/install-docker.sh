@@ -25,7 +25,7 @@ export PIH_PORT=${configured_port:-18746}
 [[ $PIH_PORT =~ ^[0-9]{1,5}$ ]] && ((10#$PIH_PORT >= 1024 && 10#$PIH_PORT <= 65535)) || { echo '端口必须为 1024–65535 的整数。' >&2; exit 1; }
 export PIH_PORT=$((10#$PIH_PORT))
 
-if [[ -n ${PIH_IMAGE:-} ]]; then
+if [[ -n ${PIH_IMAGE:-} || ! -f Dockerfile ]]; then
   if [[ ${PIH_INSTALL_PULL:-1} != 0 ]]; then docker compose pull pocketimg; fi
 else
   docker compose build pocketimg
