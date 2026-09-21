@@ -85,7 +85,7 @@ final class ConfigurationTests: XCTestCase {
     }
 
     @MainActor
-    func testPixelInspectorCopiesHoveredHexColorWithCommandC() throws {
+    func testPixelInspectorExitsOnlyAfterCopyingHoveredHexColor() throws {
         let window = NSWindow(
             contentRect: CGRect(x: 100, y: 200, width: 2, height: 1),
             styleMask: [.borderless],
@@ -94,6 +94,8 @@ final class ConfigurationTests: XCTestCase {
         )
         let view = CaptureOverlayView(frame: CGRect(x: 0, y: 0, width: 2, height: 1))
         window.contentView = view
+        let delegate = ColorCopyExitObserver()
+        view.delegate = delegate
         let copy = try XCTUnwrap(NSEvent.keyEvent(
             with: .keyDown,
             location: .zero,
@@ -108,6 +110,8 @@ final class ConfigurationTests: XCTestCase {
         ))
         // Copy is unavailable before a screenshot and hover position exist.
         XCTAssertFalse(view.performKeyEquivalent(with: copy))
+        XCTAssertEqual(delegate.exitCount, 0)
+        XCTAssertTrue(view.isSelecting)
 
         let context = try XCTUnwrap(CGContext(
             data: nil,
@@ -126,13 +130,18 @@ final class ConfigurationTests: XCTestCase {
 
         // Retina coordinates must select the same pixel as the magnifier.
         view.initializeHoverPoint(atScreenPoint: CGPoint(x: 100.25, y: 200.75))
+        // A failed copy reported by the coordinator must keep the session open.
+        view.onCopySampledColor = { false }
+        XCTAssertFalse(view.performKeyEquivalent(with: copy))
+        XCTAssertEqual(delegate.exitCount, 0)
+        XCTAssertTrue(view.isSelecting)
+        view.onCopySampledColor = nil
+
         XCTAssertTrue(view.performKeyEquivalent(with: copy))
         XCTAssertEqual(NSPasteboard.general.string(forType: .string), "#FF0000")
-
-        // Copying a color keeps the session available for further sampling.
-        view.initializeHoverPoint(atScreenPoint: CGPoint(x: 101.25, y: 200.75))
-        XCTAssertTrue(view.performKeyEquivalent(with: copy))
-        XCTAssertEqual(NSPasteboard.general.string(forType: .string), "#0000FF")
+        XCTAssertEqual(delegate.colorAtExit, "#FF0000")
+        XCTAssertEqual(delegate.exitCount, 1)
+        XCTAssertFalse(view.isSelecting)
     }
 
     @MainActor
@@ -170,6 +179,28 @@ final class ConfigurationTests: XCTestCase {
             at: CGPoint(x: 220, y: 120), in: windows, to: pasteboard
         ))
         XCTAssertEqual(pasteboard.string(forType: .string), "#0000FF")
+        // The key window must exit the session after the other screen's color
+        // has reached the clipboard through the coordinator callback.
+        let receiver = try XCTUnwrap(windows[0].contentView as? CaptureOverlayView)
+        let delegate = ColorCopyExitObserver()
+        receiver.delegate = delegate
+        receiver.onCopySampledColor = {
+            CaptureCoordinator.copySampledColor(
+                at: CGPoint(x: 220, y: 120), in: windows, to: .general
+            )
+        }
+        let copy = try XCTUnwrap(NSEvent.keyEvent(
+            with: .keyDown, location: .zero, modifierFlags: .command,
+            timestamp: 0, windowNumber: windows[0].windowNumber, context: nil,
+            characters: "c", charactersIgnoringModifiers: "c", isARepeat: false,
+            keyCode: UInt16(kVK_ANSI_C)
+        ))
+        XCTAssertTrue(receiver.performKeyEquivalent(with: copy))
+        XCTAssertEqual(delegate.colorAtExit, "#0000FF")
+        XCTAssertEqual(delegate.exitCount, 1)
+        XCTAssertFalse(receiver.isSelecting)
+        receiver.onCopySampledColor = nil
+
         XCTAssertFalse(CaptureCoordinator.copySampledColor(
             at: CGPoint(x: 400, y: 120), in: windows, to: pasteboard
         ))
@@ -518,5 +549,26 @@ final class ConfigurationTests: XCTestCase {
         let space = HotKey(keyCode: UInt32(kVK_Space), modifiers: 0, keyLabel: "Space")
         XCTAssertEqual(space.localizedDisplayName(language: .simplifiedChinese), "空格")
         XCTAssertEqual(space.localizedDisplayName(language: .english), "Space")
+    }
+}
+
+@MainActor
+private final class ColorCopyExitObserver: CaptureOverlayViewDelegate {
+    private(set) var exitCount = 0
+    private(set) var colorAtExit: String?
+
+    func captureOverlayDidStartSelection(_ overlay: CaptureOverlayView) {}
+
+    func captureOverlayDidCancel(_ overlay: CaptureOverlayView) {
+        exitCount += 1
+        colorAtExit = NSPasteboard.general.string(forType: .string)
+    }
+
+    func captureOverlay(_ overlay: CaptureOverlayView, didFinish payload: UploadPayload, action: CaptureAction) {
+        XCTFail("Copying a color must not export a screenshot")
+    }
+
+    func captureOverlay(_ overlay: CaptureOverlayView, didFailWith error: Error) {
+        XCTFail("Unexpected color copy error: \(error)")
     }
 }

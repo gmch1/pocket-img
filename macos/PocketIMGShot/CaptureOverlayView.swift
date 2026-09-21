@@ -574,7 +574,11 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
            event.charactersIgnoringModifiers?.lowercased() == "c" {
             switch mode {
             case .selecting:
-                return onCopySampledColor?() ?? copySampledColor(to: .general)
+                guard onCopySampledColor?() ?? copySampledColor(to: .general) else {
+                    return false
+                }
+                isFinishing = true
+                delegate?.captureOverlayDidCancel(self)
             case .editing:
                 finish(.copy)
             }
