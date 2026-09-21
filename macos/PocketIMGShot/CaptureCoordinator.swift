@@ -37,7 +37,7 @@ final class CaptureCoordinator: NSObject, CaptureOverlayViewDelegate, NSWindowDe
         finished = false
         installKeyMonitor()
         installEscapeHotKey()
-        showPreparationWindows()
+        // Preserve the source app’s focus and hover state until every display is captured.
 
         captureTask = Task { [weak self] in
             guard let self else { return }
@@ -65,24 +65,11 @@ final class CaptureCoordinator: NSObject, CaptureOverlayViewDelegate, NSWindowDe
                 captureTask = nil
                 DiagnosticLog.record("capture overlays ready displays=\(displays.count)")
             } catch is CancellationError {
-                // Cancellation already tears down the preparation windows and callbacks.
+                // Cancellation already tears down the capture session and callbacks.
             } catch {
                 failCapture(error)
             }
         }
-    }
-
-    private func showPreparationWindows() {
-        windows = NSScreen.screens.map { screen in
-            let view = CapturePreparationView(
-                frame: NSRect(origin: .zero, size: screen.frame.size)
-            ) { [weak self] in
-                self?.cancel()
-            }
-            return makeWindow(for: screen, contentView: view, opaque: false)
-        }
-        DiagnosticLog.record("capture preparation windows shown count=\(windows.count)")
-        activateWindows()
     }
 
     private func showCaptureWindows(
@@ -92,7 +79,6 @@ final class CaptureCoordinator: NSObject, CaptureOverlayViewDelegate, NSWindowDe
         language: AppLanguage,
         onAnnotationStyleChange: @escaping (AnnotationStylePreferences) -> Void
     ) {
-        let preparationWindows = windows
         windows = displays.map { display in
             let view = CaptureOverlayView(frame: NSRect(origin: .zero, size: display.screen.frame.size))
             view.annotationStyle = annotationStyle
@@ -102,30 +88,15 @@ final class CaptureCoordinator: NSObject, CaptureOverlayViewDelegate, NSWindowDe
             view.screenshot = display.image
             view.delegate = self
 
-            let window = preparationWindows.first {
-                $0.screen?.displayID == display.screen.displayID
-            } ?? makeWindow(for: display.screen, contentView: view, opaque: true)
-            window.contentView = view
-            window.backgroundColor = .black
-            window.isOpaque = true
-            window.setFrame(display.screen.frame, display: true)
-            return window
+            return makeWindow(for: display.screen, contentView: view)
         }
-
-        let activeWindowIDs = Set(windows.map { ObjectIdentifier($0) })
-        for window in preparationWindows
-            where !activeWindowIDs.contains(ObjectIdentifier(window)) {
-            window.orderOut(nil)
-            window.contentView = nil
-            window.close()
-        }
+        // Only show windows and claim focus after the screenshots are frozen.
         activateWindows()
     }
 
     private func makeWindow(
         for screen: NSScreen,
-        contentView: NSView,
-        opaque: Bool
+        contentView: NSView
     ) -> CaptureWindow {
         let window = CaptureWindow(
             contentRect: screen.frame,
@@ -136,8 +107,8 @@ final class CaptureCoordinator: NSObject, CaptureOverlayViewDelegate, NSWindowDe
         )
         window.contentView = contentView
         window.delegate = self
-        window.backgroundColor = opaque ? .black : .clear
-        window.isOpaque = opaque
+        window.backgroundColor = .black
+        window.isOpaque = true
         window.hasShadow = false
         window.level = .screenSaver
         window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
@@ -265,10 +236,6 @@ final class CaptureCoordinator: NSObject, CaptureOverlayViewDelegate, NSWindowDe
         }
         if let overlay = window.contentView as? CaptureOverlayView {
             return overlay.synchronizeCursor(atScreenPoint: pointer)
-        } else if let preparationView = window.contentView as? CapturePreparationView {
-            window.invalidateCursorRects(for: preparationView)
-            NSCursor.crosshair.set()
-            return true
         }
         return false
     }
@@ -402,16 +369,6 @@ final class CaptureCoordinator: NSObject, CaptureOverlayViewDelegate, NSWindowDe
             false,
             onScreenWindowsOnly: true
         )
-        let captureWindowIDs = Set(windows.compactMap { window -> CGWindowID? in
-            guard window.windowNumber > 0 else { return nil }
-            return CGWindowID(window.windowNumber)
-        })
-        let excludedWindows = content.windows.filter {
-            captureWindowIDs.contains($0.windowID)
-        }
-        DiagnosticLog.record(
-            "capture excluded overlay windows=\(excludedWindows.count)"
-        )
         var captured: [CapturedDisplay] = []
 
         for screen in NSScreen.screens {
@@ -421,7 +378,7 @@ final class CaptureCoordinator: NSObject, CaptureOverlayViewDelegate, NSWindowDe
             }
             let filter = SCContentFilter(
                 display: display,
-                excludingWindows: excludedWindows
+                excludingWindows: []
             )
             let configuration = SCStreamConfiguration()
             let captureSize = CaptureGeometry.capturePixelSize(
@@ -445,42 +402,6 @@ final class CaptureCoordinator: NSObject, CaptureOverlayViewDelegate, NSWindowDe
             captured.append(CapturedDisplay(screen: screen, image: image))
         }
         return captured
-    }
-}
-
-final class CapturePreparationView: NSView {
-    private var onCancel: (() -> Void)?
-
-    init(frame frameRect: NSRect, onCancel: @escaping () -> Void) {
-        self.onCancel = onCancel
-        super.init(frame: frameRect)
-    }
-
-    @available(*, unavailable)
-    required init?(coder: NSCoder) {
-        nil
-    }
-
-    override var acceptsFirstResponder: Bool { true }
-
-    override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
-        true
-    }
-
-    override func resetCursorRects() {
-        addValidatedCursorRect(bounds, cursor: .crosshair)
-    }
-
-    override func mouseDown(with event: NSEvent) {}
-    override func mouseDragged(with event: NSEvent) {}
-    override func mouseUp(with event: NSEvent) {}
-
-    override func keyDown(with event: NSEvent) {
-        if event.keyCode == 53 {
-            onCancel?()
-            return
-        }
-        super.keyDown(with: event)
     }
 }
 

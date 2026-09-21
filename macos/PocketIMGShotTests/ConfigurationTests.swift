@@ -18,30 +18,54 @@ final class ConfigurationTests: XCTestCase {
     }
 
     @MainActor
-    func testCapturePreparationViewTakesImmediateInputAndCancelsWithEscape() throws {
-        var cancelled = false
-        let view = CapturePreparationView(frame: CGRect(x: 0, y: 0, width: 800, height: 600)) {
-            cancelled = true
-        }
-
-        XCTAssertTrue(view.acceptsFirstResponder)
-        XCTAssertTrue(view.acceptsFirstMouse(for: nil))
-
-        let escape = try XCTUnwrap(NSEvent.keyEvent(
+    func testPixelInspectorCopiesHoveredHexColorWithCommandC() throws {
+        let window = NSWindow(
+            contentRect: CGRect(x: 100, y: 200, width: 2, height: 1),
+            styleMask: [.borderless],
+            backing: .buffered,
+            defer: false
+        )
+        let view = CaptureOverlayView(frame: CGRect(x: 0, y: 0, width: 2, height: 1))
+        window.contentView = view
+        let copy = try XCTUnwrap(NSEvent.keyEvent(
             with: .keyDown,
             location: .zero,
-            modifierFlags: [],
+            modifierFlags: .command,
             timestamp: 0,
-            windowNumber: 0,
+            windowNumber: window.windowNumber,
             context: nil,
-            characters: "\u{1b}",
-            charactersIgnoringModifiers: "\u{1b}",
+            characters: "c",
+            charactersIgnoringModifiers: "c",
             isARepeat: false,
-            keyCode: UInt16(kVK_Escape)
+            keyCode: UInt16(kVK_ANSI_C)
         ))
-        view.keyDown(with: escape)
+        // Copy is unavailable before a screenshot and hover position exist.
+        XCTAssertFalse(view.performKeyEquivalent(with: copy))
 
-        XCTAssertTrue(cancelled)
+        let context = try XCTUnwrap(CGContext(
+            data: nil,
+            width: 4,
+            height: 2,
+            bitsPerComponent: 8,
+            bytesPerRow: 16,
+            space: try XCTUnwrap(CGColorSpace(name: CGColorSpace.sRGB)),
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ))
+        context.setFillColor(CGColor(red: 1, green: 0, blue: 0, alpha: 1))
+        context.fill(CGRect(x: 0, y: 0, width: 2, height: 2))
+        context.setFillColor(CGColor(red: 0, green: 0, blue: 1, alpha: 1))
+        context.fill(CGRect(x: 2, y: 0, width: 2, height: 2))
+        view.screenshot = try XCTUnwrap(context.makeImage())
+
+        // Retina coordinates must select the same pixel as the magnifier.
+        view.initializeHoverPoint(atScreenPoint: CGPoint(x: 100.25, y: 200.75))
+        XCTAssertTrue(view.performKeyEquivalent(with: copy))
+        XCTAssertEqual(NSPasteboard.general.string(forType: .string), "#FF0000")
+
+        // Copying a color keeps the session available for further sampling.
+        view.initializeHoverPoint(atScreenPoint: CGPoint(x: 101.25, y: 200.75))
+        XCTAssertTrue(view.performKeyEquivalent(with: copy))
+        XCTAssertEqual(NSPasteboard.general.string(forType: .string), "#0000FF")
     }
 
     @MainActor

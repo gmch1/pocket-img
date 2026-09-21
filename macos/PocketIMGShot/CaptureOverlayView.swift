@@ -149,6 +149,10 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
         let red: Int
         let green: Int
         let blue: Int
+
+        var hexColor: String {
+            String(format: "#%02X%02X%02X", red, green, blue)
+        }
     }
 
     private enum Appearance {
@@ -564,10 +568,20 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
 
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
         let modifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
-        if mode == .editing,
+        if !isFinishing,
            modifiers == .command,
            event.charactersIgnoringModifiers?.lowercased() == "c" {
-            finish(.copy)
+            switch mode {
+            case .selecting:
+                guard let screenshot, let hoverPoint,
+                      let inspection = pixelInspection(at: hoverPoint, screenshot: screenshot) else {
+                    return false
+                }
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(inspection.hexColor, forType: .string)
+            case .editing:
+                finish(.copy)
+            }
             return true
         }
         return super.performKeyEquivalent(with: event)
@@ -1169,13 +1183,7 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
         NSColor.white.withAlphaComponent(0.28).setStroke()
         NSBezierPath(roundedRect: swatch, xRadius: 4, yRadius: 4).stroke()
 
-        let hex = String(
-            format: "#%02X%02X%02X",
-            inspection.red,
-            inspection.green,
-            inspection.blue
-        )
-        hex.draw(
+        inspection.hexColor.draw(
             at: CGPoint(x: frame.minX + 36, y: frame.minY + 107),
             withAttributes: [
                 .font: NSFont.monospacedSystemFont(ofSize: 13, weight: .semibold),
