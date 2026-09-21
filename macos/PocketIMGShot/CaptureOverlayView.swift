@@ -183,6 +183,7 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
     }
 
     weak var delegate: CaptureOverlayViewDelegate?
+    var onCopySampledColor: (() -> Bool)?
     var onAnnotationStyleChange: ((AnnotationStylePreferences) -> Void)?
     var annotationStyle = AnnotationStylePreferences.default {
         didSet {
@@ -573,18 +574,25 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
            event.charactersIgnoringModifiers?.lowercased() == "c" {
             switch mode {
             case .selecting:
-                guard let screenshot, let hoverPoint,
-                      let inspection = pixelInspection(at: hoverPoint, screenshot: screenshot) else {
-                    return false
-                }
-                NSPasteboard.general.clearContents()
-                NSPasteboard.general.setString(inspection.hexColor, forType: .string)
+                return onCopySampledColor?() ?? copySampledColor(to: .general)
             case .editing:
                 finish(.copy)
             }
             return true
         }
         return super.performKeyEquivalent(with: event)
+    }
+
+    var isSelecting: Bool { mode == .selecting && !isFinishing }
+
+    @discardableResult
+    func copySampledColor(to pasteboard: NSPasteboard) -> Bool {
+        guard isSelecting, let screenshot, let hoverPoint,
+              let inspection = pixelInspection(at: hoverPoint, screenshot: screenshot) else {
+            return false
+        }
+        pasteboard.clearContents()
+        return pasteboard.setString(inspection.hexColor, forType: .string)
     }
 
     override func scrollWheel(with event: NSEvent) {

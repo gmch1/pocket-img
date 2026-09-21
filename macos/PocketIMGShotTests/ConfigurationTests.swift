@@ -51,9 +51,9 @@ final class ConfigurationTests: XCTestCase {
             space: try XCTUnwrap(CGColorSpace(name: CGColorSpace.sRGB)),
             bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
         ))
-        context.setFillColor(CGColor(red: 1, green: 0, blue: 0, alpha: 1))
+        context.setFillColor(CGColor(srgbRed: 1, green: 0, blue: 0, alpha: 1))
         context.fill(CGRect(x: 0, y: 0, width: 2, height: 2))
-        context.setFillColor(CGColor(red: 0, green: 0, blue: 1, alpha: 1))
+        context.setFillColor(CGColor(srgbRed: 0, green: 0, blue: 1, alpha: 1))
         context.fill(CGRect(x: 2, y: 0, width: 2, height: 2))
         view.screenshot = try XCTUnwrap(context.makeImage())
 
@@ -66,6 +66,51 @@ final class ConfigurationTests: XCTestCase {
         view.initializeHoverPoint(atScreenPoint: CGPoint(x: 101.25, y: 200.75))
         XCTAssertTrue(view.performKeyEquivalent(with: copy))
         XCTAssertEqual(NSPasteboard.general.string(forType: .string), "#0000FF")
+    }
+
+    @MainActor
+    func testColorCopyUsesPointerWindowInsteadOfKeyWindow() throws {
+        let pasteboard = NSPasteboard.withUniqueName()
+        defer { pasteboard.releaseGlobally() }
+        let windows = [0, 1].map { index in
+            let window = CaptureWindow(
+                contentRect: CGRect(x: 100 + index * 100, y: 100, width: 80, height: 80),
+                styleMask: [.borderless], backing: .buffered, defer: false
+            )
+            window.isReleasedWhenClosed = false
+            window.contentView = CaptureOverlayView(frame: CGRect(x: 0, y: 0, width: 80, height: 80))
+            window.orderFrontRegardless()
+            return window
+        }
+        defer { windows.forEach { $0.close() } }
+        for (index, window) in windows.enumerated() {
+            let context = try XCTUnwrap(CGContext(
+                data: nil, width: 160, height: 160, bitsPerComponent: 8, bytesPerRow: 640,
+                space: try XCTUnwrap(CGColorSpace(name: CGColorSpace.sRGB)),
+                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+            ))
+            context.setFillColor(CGColor(srgbRed: index == 0 ? 1 : 0,
+                                         green: 0, blue: index == 1 ? 1 : 0, alpha: 1))
+            context.fill(CGRect(x: 0, y: 0, width: 160, height: 160))
+            (window.contentView as? CaptureOverlayView)?.screenshot = try XCTUnwrap(context.makeImage())
+        }
+        windows[0].makeKey()
+        // Start with a stale sample on the original screen.
+        (windows[0].contentView as? CaptureOverlayView)?.initializeHoverPoint(
+            atScreenPoint: CGPoint(x: 120, y: 120)
+        )
+        XCTAssertTrue(CaptureCoordinator.copySampledColor(
+            at: CGPoint(x: 220, y: 120), in: windows, to: pasteboard
+        ))
+        XCTAssertEqual(pasteboard.string(forType: .string), "#0000FF")
+        XCTAssertFalse(CaptureCoordinator.copySampledColor(
+            at: CGPoint(x: 400, y: 120), in: windows, to: pasteboard
+        ))
+        windows[1].orderOut(nil)
+        XCTAssertFalse(CaptureCoordinator.copySampledColor(
+            at: CGPoint(x: 220, y: 120), in: windows, to: pasteboard
+        ))
+        XCTAssertEqual(pasteboard.string(forType: .string), "#0000FF")
     }
 
     @MainActor

@@ -87,11 +87,31 @@ final class CaptureCoordinator: NSObject, CaptureOverlayViewDelegate, NSWindowDe
             view.onAnnotationStyleChange = onAnnotationStyleChange
             view.screenshot = display.image
             view.delegate = self
+            view.onCopySampledColor = { [weak self] in
+                guard let self else { return false }
+                return Self.copySampledColor(
+                    at: NSEvent.mouseLocation, in: self.windows, to: .general
+                )
+            }
 
             return makeWindow(for: display.screen, contentView: view)
         }
         // Only show windows and claim focus after the screenshots are frozen.
         activateWindows()
+    }
+
+    @discardableResult
+    static func copySampledColor(
+        at screenPoint: CGPoint,
+        in windows: [NSWindow],
+        to pasteboard: NSPasteboard
+    ) -> Bool {
+        guard let window = windows.first(where: {
+            $0.isVisible && $0.frame.contains(screenPoint)
+        }), let overlay = window.contentView as? CaptureOverlayView,
+              overlay.isSelecting else { return false }
+        overlay.initializeHoverPoint(atScreenPoint: screenPoint)
+        return overlay.copySampledColor(to: pasteboard)
     }
 
     private func makeWindow(
