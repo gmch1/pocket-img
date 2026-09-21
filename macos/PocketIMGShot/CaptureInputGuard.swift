@@ -61,6 +61,9 @@ final class CaptureInputGuard {
     }
 
     func start(onFailure: @escaping () -> Void) throws {
+        // Snapshot before creating the tap: a down intercepted during setup must
+        // not be mistaken for a gesture that had already reached the source app.
+        state = CaptureMouseInputState(pressedButtons: Self.pressedButtons)
         let eventTypes: [CGEventType] = [
             .leftMouseDown, .leftMouseUp, .leftMouseDragged,
             .rightMouseDown, .rightMouseUp, .rightMouseDragged,
@@ -98,9 +101,12 @@ final class CaptureInputGuard {
         self.tap = tap
         self.source = source
         self.onFailure = onFailure
-        state = CaptureMouseInputState(pressedButtons: Self.pressedButtons)
         CFRunLoopAddSource(CFRunLoopGetMain(), source, .commonModes)
         CGEvent.tapEnable(tap: tap, enable: true)
+        guard CGEvent.tapIsEnabled(tap: tap) else {
+            invalidate()
+            throw CaptureError.inputProtectionUnavailable
+        }
     }
 
     func stop() {
