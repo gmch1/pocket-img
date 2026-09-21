@@ -15,6 +15,7 @@
 		B00000000000000000000007 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000007 /* SettingsView.swift */; };
 		B00000000000000000000008 /* Annotation.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000008 /* Annotation.swift */; };
 		B00000000000000000000009 /* CaptureCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000009 /* CaptureCoordinator.swift */; };
+		B00000000000000000000019 /* CaptureInputGuard.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000019 /* CaptureInputGuard.swift */; };
 		B0000000000000000000000A /* CaptureOverlayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0000000000000000000000A /* CaptureOverlayView.swift */; };
 		B0000000000000000000000B /* PocketIMGClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0000000000000000000000B /* PocketIMGClient.swift */; };
 		B0000000000000000000000C /* ToastPresenter.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0000000000000000000000C /* ToastPresenter.swift */; };
@@ -62,6 +63,7 @@
 		F00000000000000000000007 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		F00000000000000000000008 /* Annotation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Annotation.swift; sourceTree = "<group>"; };
 		F00000000000000000000009 /* CaptureCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptureCoordinator.swift; sourceTree = "<group>"; };
+		F00000000000000000000019 /* CaptureInputGuard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptureInputGuard.swift; sourceTree = "<group>"; };
 		F0000000000000000000000A /* CaptureOverlayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptureOverlayView.swift; sourceTree = "<group>"; };
 		F0000000000000000000000B /* PocketIMGClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PocketIMGClient.swift; sourceTree = "<group>"; };
 		F0000000000000000000000C /* ToastPresenter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ToastPresenter.swift; sourceTree = "<group>"; };
@@ -141,6 +143,7 @@
 				F00000000000000000000007 /* SettingsView.swift */,
 				F00000000000000000000008 /* Annotation.swift */,
 				F00000000000000000000009 /* CaptureCoordinator.swift */,
+				F00000000000000000000019 /* CaptureInputGuard.swift */,
 				F0000000000000000000000A /* CaptureOverlayView.swift */,
 				F0000000000000000000000B /* PocketIMGClient.swift */,
 				F0000000000000000000000C /* ToastPresenter.swift */,
@@ -311,6 +314,7 @@
 				B00000000000000000000007 /* SettingsView.swift in Sources */,
 				B00000000000000000000008 /* Annotation.swift in Sources */,
 				B00000000000000000000009 /* CaptureCoordinator.swift in Sources */,
+				B00000000000000000000019 /* CaptureInputGuard.swift in Sources */,
 				B0000000000000000000000A /* CaptureOverlayView.swift in Sources */,
 				B0000000000000000000000B /* PocketIMGClient.swift in Sources */,
 				B0000000000000000000000C /* ToastPresenter.swift in Sources */,

@@ -13,8 +13,11 @@ final class CaptureCoordinator: NSObject, CaptureOverlayViewDelegate, NSWindowDe
 
     private var windows: [CaptureWindow] = []
     private var captureTask: Task<Void, Never>?
+    private var preparationTimeoutTask: Task<Void, Never>?
     private var focusRecoveryTask: Task<Void, Never>?
     private var keyMonitor: Any?
+    private var inputGuard: CaptureInputGuard?
+    private var sessionID = UUID()
     private let escapeHotKey = GlobalHotKey(identifier: 2)
     private var onFinish: ((UploadPayload, CaptureAction) -> Void)?
     private var onCancel: (() -> Void)?
@@ -35,9 +38,27 @@ final class CaptureCoordinator: NSObject, CaptureOverlayViewDelegate, NSWindowDe
         self.onCancel = onCancel
         self.onError = onError
         finished = false
+        let sessionID = UUID()
+        self.sessionID = sessionID
+        let inputGuard = CaptureInputGuard()
+        do {
+            try inputGuard.start { [weak self] in
+                guard let self, self.sessionID == sessionID else { return }
+                self.failCapture(CaptureError.inputProtectionUnavailable)
+            }
+            self.inputGuard = inputGuard
+        } catch {
+            failCapture(error)
+            return
+        }
         installKeyMonitor()
         installEscapeHotKey()
         // Preserve the source app’s focus and hover state until every display is captured.
+        preparationTimeoutTask = Task { @MainActor [weak self] in
+            do { try await Task.sleep(for: .seconds(15)) } catch { return }
+            guard let self, !self.finished, self.sessionID == sessionID else { return }
+            self.failCapture(CaptureError.preparationTimedOut)
+        }
 
         captureTask = Task { [weak self] in
             guard let self else { return }
@@ -47,14 +68,17 @@ final class CaptureCoordinator: NSObject, CaptureOverlayViewDelegate, NSWindowDe
                 guard !displays.isEmpty else {
                     throw CaptureError.noDisplays
                 }
-                if NSEvent.pressedMouseButtons != 0 {
+                if CaptureInputGuard.pressedButtons != 0 {
                     DiagnosticLog.record("capture waiting for an active mouse gesture to finish")
                 }
-                while NSEvent.pressedMouseButtons != 0 {
+                while CaptureInputGuard.pressedButtons != 0 {
                     try await Task.sleep(for: .milliseconds(16))
                 }
                 try Task.checkCancellation()
-                guard !finished else { return }
+                guard !finished, self.sessionID == sessionID else { return }
+                guard !inputGuard.protectionLost else {
+                    throw CaptureError.inputProtectionUnavailable
+                }
                 showCaptureWindows(
                     displays,
                     annotationStyle: annotationStyle,
@@ -62,11 +86,16 @@ final class CaptureCoordinator: NSObject, CaptureOverlayViewDelegate, NSWindowDe
                     language: language,
                     onAnnotationStyleChange: onAnnotationStyleChange
                 )
+                inputGuard.stop()
+                self.inputGuard = nil
+                preparationTimeoutTask?.cancel()
+                preparationTimeoutTask = nil
                 captureTask = nil
                 DiagnosticLog.record("capture overlays ready displays=\(displays.count)")
             } catch is CancellationError {
                 // Cancellation already tears down the capture session and callbacks.
             } catch {
+                guard !Task.isCancelled, self.sessionID == sessionID else { return }
                 failCapture(error)
             }
         }
@@ -313,6 +342,10 @@ final class CaptureCoordinator: NSObject, CaptureOverlayViewDelegate, NSWindowDe
     }
 
     private func clearCallbacks() {
+        preparationTimeoutTask?.cancel()
+        preparationTimeoutTask = nil
+        inputGuard?.stop()
+        inputGuard = nil
         focusRecoveryTask?.cancel()
         focusRecoveryTask = nil
         if let keyMonitor {
@@ -441,6 +474,8 @@ private extension NSScreen {
 enum CaptureError: LocalizedError, AppLocalizedError {
     case noDisplays
     case imageEncodingFailed
+    case inputProtectionUnavailable
+    case preparationTimedOut
 
     var errorDescription: String? {
         localizedMessage(language: .system)
@@ -452,6 +487,10 @@ enum CaptureError: LocalizedError, AppLocalizedError {
             return L10n.text("error.capture.no_displays", language: language)
         case .imageEncodingFailed:
             return L10n.text("error.capture.encoding_failed", language: language)
+        case .inputProtectionUnavailable:
+            return L10n.text("error.capture.input_protection", language: language)
+        case .preparationTimedOut:
+            return L10n.text("error.capture.preparation_timeout", language: language)
         }
     }
 }

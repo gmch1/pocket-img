@@ -105,3 +105,8 @@
 "error.client.invalid_response" = "PocketIMG returned an unrecognized response.";
 "error.client.request_failed" = "PocketIMG request failed (HTTP %d).";
 "error.network" = "Couldn’t connect to PocketIMG. Check the network and server address.";
+
+"alert.accessibility_permission_title" = "Accessibility Permission Required";
+"alert.accessibility_permission_body" = "PocketIMG Shot temporarily blocks mouse clicks, drags, and scrolling while preparing a screenshot so they do not affect the original app. This preserves hover states without switching windows. Enable PocketIMG Shot in System Settings → Privacy & Security → Accessibility, then return to the page and press the screenshot shortcut again. Video recording does not require this permission.";
+"error.capture.input_protection" = "Screenshot preparation stopped because mouse input protection is unavailable. Check PocketIMG Shot’s Accessibility permission in System Settings, then try again.";
+"error.capture.preparation_timeout" = "Screenshot preparation timed out and mouse input protection was released. Release any held mouse buttons and try again.";

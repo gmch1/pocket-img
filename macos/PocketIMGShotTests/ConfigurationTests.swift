@@ -4,6 +4,73 @@ import XCTest
 
 final class ConfigurationTests: XCTestCase {
     @MainActor
+    func testCaptureInputCanReadPhysicalButtonsWithoutInstallingATap() {
+        XCTAssertEqual(CaptureInputGuard.pressedButtons >> 32, 0)
+    }
+
+    func testCaptureInputSuppressesCompleteClicksForEachMouseButton() {
+        let gestures: [(CGEventType, CGEventType, CGEventType, Int64)] = [
+            (.leftMouseDown, .leftMouseDragged, .leftMouseUp, 0),
+            (.rightMouseDown, .rightMouseDragged, .rightMouseUp, 1),
+            (.otherMouseDown, .otherMouseDragged, .otherMouseUp, 2),
+            (.otherMouseDown, .otherMouseDragged, .otherMouseUp, 4),
+        ]
+        for (down, drag, up, button) in gestures {
+            var state = CaptureMouseInputState(pressedButtons: 0)
+            XCTAssertTrue(state.shouldSuppress(down, button: button))
+            XCTAssertTrue(state.shouldSuppress(drag, button: button))
+            XCTAssertTrue(state.shouldSuppress(up, button: button))
+            XCTAssertEqual(state.swallowedButtons, 0)
+        }
+    }
+
+    func testCaptureInputPreservesHoverMovementAndEscape() {
+        var state = CaptureMouseInputState(pressedButtons: 0)
+        XCTAssertFalse(state.shouldSuppress(.mouseMoved))
+        XCTAssertFalse(state.shouldSuppress(.keyDown))
+        XCTAssertFalse(state.shouldSuppress(.keyUp))
+        XCTAssertTrue(state.shouldSuppress(.scrollWheel))
+        state.finish()
+        XCTAssertFalse(state.shouldSuppress(.scrollWheel))
+        XCTAssertFalse(state.shouldSuppress(.leftMouseDown))
+    }
+
+    func testCaptureInputLetsAnExistingDragFinishWithoutAStuckButton() {
+        var state = CaptureMouseInputState(pressedButtons: 1)
+        XCTAssertFalse(state.shouldSuppress(.leftMouseDragged))
+        XCTAssertFalse(state.shouldSuppress(.leftMouseUp))
+        // A subsequent click during preparation is intercepted normally.
+        XCTAssertTrue(state.shouldSuppress(.leftMouseDown))
+        XCTAssertTrue(state.shouldSuppress(.leftMouseUp))
+    }
+
+    func testCaptureCancellationOnlyDrainsAlreadySuppressedGestures() {
+        var state = CaptureMouseInputState(pressedButtons: 0)
+        XCTAssertTrue(state.shouldSuppress(.leftMouseDown))
+        state.finish()
+        // New input is immediately usable while the original button is held.
+        XCTAssertFalse(state.shouldSuppress(.rightMouseDown, button: 1))
+        XCTAssertFalse(state.shouldSuppress(.rightMouseUp, button: 1))
+        XCTAssertFalse(state.shouldSuppress(.scrollWheel))
+        XCTAssertTrue(state.shouldSuppress(.leftMouseDragged))
+        XCTAssertTrue(state.shouldSuppress(.leftMouseUp))
+        XCTAssertEqual(state.swallowedButtons, 0)
+        XCTAssertFalse(state.shouldSuppress(.leftMouseDown))
+        XCTAssertFalse(state.shouldSuppress(.leftMouseUp))
+    }
+
+    func testCaptureInputDrainCanRecoverFromAMissedDeviceRelease() {
+        var state = CaptureMouseInputState(pressedButtons: 0)
+        XCTAssertTrue(state.shouldSuppress(.leftMouseDown))
+        XCTAssertTrue(state.shouldSuppress(.rightMouseDown, button: 1))
+        state.finish()
+        state.discardReleasedButtons(pressedButtons: 2)
+        XCTAssertEqual(state.swallowedButtons, 2)
+        state.discardReleasedButtons(pressedButtons: 0)
+        XCTAssertEqual(state.swallowedButtons, 0)
+    }
+
+    @MainActor
     func testMenuBarIconUsesAReusableTemplateAsset() throws {
         let image = try XCTUnwrap(NSImage(named: "MenuBarIcon"))
 

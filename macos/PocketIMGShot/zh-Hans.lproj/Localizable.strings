@@ -105,3 +105,8 @@
 "error.client.invalid_response" = "PocketIMG 返回了无法识别的响应。";
 "error.client.request_failed" = "PocketIMG 请求失败（HTTP %d）。";
 "error.network" = "无法连接 PocketIMG，请检查网络和服务器地址。";
+
+"alert.accessibility_permission_title" = "需要辅助功能权限";
+"alert.accessibility_permission_body" = "PocketIMG Shot 会在截图准备期间临时拦截鼠标点击、拖动和滚轮，避免误操作原应用，同时不切换窗口以保留页面 hover 状态。请在“系统设置 → 隐私与安全性 → 辅助功能”中允许 PocketIMG Shot，然后返回原页面，再次按截图快捷键。视频录制不需要此权限。";
+"error.capture.input_protection" = "鼠标输入保护不可用，已停止截图准备。请检查“系统设置”中 PocketIMG Shot 的辅助功能权限后重试。";
+"error.capture.preparation_timeout" = "截图准备超时，鼠标输入保护已解除。请松开鼠标按键后重试。";

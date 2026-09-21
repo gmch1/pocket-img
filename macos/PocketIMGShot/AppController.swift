@@ -1,4 +1,5 @@
 import AppKit
+import ApplicationServices
 import Combine
 import CoreGraphics
 import Foundation
@@ -173,6 +174,7 @@ final class AppController: ObservableObject {
     func startCapture() {
         guard case .idle = activity else { return }
         guard ensureScreenCaptureAccess(for: settings.hotKey) else { return }
+        guard ensureCaptureInputAccess() else { return }
 
         transition(to: .screenshot)
         statusMessage = ""
@@ -545,6 +547,26 @@ final class AppController: ObservableObject {
             isVideoRecording = false
             canToggleVideoRecording = false
         }
+    }
+
+    private func ensureCaptureInputAccess() -> Bool {
+        guard !AXIsProcessTrusted() else { return true }
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = L10n.text("alert.accessibility_permission_title", language: settings.language)
+        alert.informativeText = L10n.text("alert.accessibility_permission_body", language: settings.language)
+        alert.addButton(withTitle: L10n.text("button.open_system_settings", language: settings.language))
+        alert.addButton(withTitle: L10n.text("button.cancel", language: settings.language))
+        NSApplication.shared.activate(ignoringOtherApps: true)
+        if alert.runModal() == .alertFirstButtonReturn {
+            let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true]
+            _ = AXIsProcessTrustedWithOptions(options as CFDictionary)
+            if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") {
+                NSWorkspace.shared.open(url)
+            }
+        }
+        // Permission UI changes focus. Start a fresh capture after the user returns.
+        return false
     }
 
     private func ensureScreenCaptureAccess(for hotKey: HotKey) -> Bool {
