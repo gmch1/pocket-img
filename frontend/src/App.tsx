@@ -131,6 +131,7 @@ export default function App() {
   const [toast, setToast] = useState<Toast | null>(null);
   const authRef = useRef<AuthState>(auth);
   const uploadQueue = useRef<Promise<void>>(Promise.resolve());
+  const uploadInput = useRef<HTMLInputElement | null>(null);
   const taskSequence = useRef(0);
   const toastTimer = useRef<number | undefined>(undefined);
   const gallerySelectionSurface = useRef<HTMLElement | null>(null);
@@ -520,6 +521,22 @@ export default function App() {
 
       <main className="gallery-shell">
         <div className="paste-line"><kbd>Ctrl</kbd><span>+</span><kbd>V</kbd><span>粘贴图片或 MP4 视频即可上传</span></div>
+        <div className="mobile-upload">
+          <button className="primary-button" type="button" onClick={() => uploadInput.current?.click()}>点击上传</button>
+          <input
+            ref={uploadInput}
+            type="file"
+            accept="image/*,video/mp4"
+            multiple
+            hidden
+            aria-label="选择上传的图片或 MP4 视频"
+            onChange={(event) => {
+              const files = Array.from(event.currentTarget.files ?? []);
+              event.currentTarget.value = "";
+              enqueueFiles(files);
+            }}
+          />
+        </div>
         {galleryError ? (
           <div className="state-panel state-panel--error" role="alert">
             <span className="state-panel__mark"><AlertIcon /></span>

@@ -234,6 +234,8 @@ button:focus-visible, input:focus-visible, [role="button"]:focus-visible { outli
 .toast--error { background: #7e342f; }
 @keyframes toast-in { from { opacity: 0; transform: translate(-50%, 6px); } }
 
+.mobile-upload { display: none; }
+
 @media (max-width: 720px) {
   .topbar { grid-template-columns: auto 1fr auto; gap: 8px; padding: 8px 12px; }
   .brand span { display: none; }
@@ -242,7 +244,10 @@ button:focus-visible, input:focus-visible, [role="button"]:focus-visible { outli
   .gallery-shell { padding-inline: 10px; }
   .image-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; }
   .image-card { border-radius: 11px; }
-  .paste-line { margin-bottom: 14px; }
+  .paste-line { display: none; }
+  .mobile-upload { display: flex; justify-content: center; margin-bottom: 14px; }
+  .mobile-upload .primary-button { min-height: 44px; padding-inline: 24px; font-size: 13px; transition: background 0.15s ease, transform 0.15s ease; }
+  .mobile-upload .primary-button:active { background: color-mix(in srgb, var(--accent) 88%, var(--ink)); transform: scale(0.97); }
   .selection-toolbar { width: max-content; bottom: max(12px, env(safe-area-inset-bottom)); }
   .selection-toolbar strong { padding-inline: 8px; }
   .selection-toolbar button { padding-inline: 9px; }
