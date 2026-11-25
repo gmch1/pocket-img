@@ -229,6 +229,38 @@ final class ConfigurationTests: XCTestCase {
         XCTAssertFalse(view.synchronizeCursor(atScreenPoint: CGPoint(x: 340, y: 440)))
     }
 
+    @MainActor
+    func testPixelInspectorSurvivesRepeatedRedraws() throws {
+        let frame = CGRect(x: 100, y: 200, width: 240, height: 180)
+        let window = NSWindow(contentRect: frame, styleMask: [.borderless], backing: .buffered, defer: false)
+        let view = CaptureOverlayView(frame: CGRect(origin: .zero, size: frame.size))
+        window.contentView = view
+
+        let bitmap = try XCTUnwrap(NSBitmapImageRep(
+            bitmapDataPlanes: nil, pixelsWide: 240, pixelsHigh: 180,
+            bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
+            colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0
+        ))
+        let graphicsContext = try XCTUnwrap(NSGraphicsContext(bitmapImageRep: bitmap))
+        graphicsContext.cgContext.setFillColor(CGColor(srgbRed: 0.1, green: 0.2, blue: 0.3, alpha: 1))
+        graphicsContext.cgContext.fill(view.bounds)
+        view.screenshot = try XCTUnwrap(graphicsContext.cgContext.makeImage())
+        NSGraphicsContext.saveGraphicsState()
+        defer { NSGraphicsContext.restoreGraphicsState() }
+        NSGraphicsContext.current = graphicsContext
+        view.draw(view.bounds)
+        let pixels = try XCTUnwrap(bitmap.bitmapData)
+        let byteCount = bitmap.bytesPerRow * bitmap.pixelsHigh
+        let withoutInspector = Data(bytes: pixels, count: byteCount)
+
+        view.initializeHoverPoint(atScreenPoint: CGPoint(x: 140, y: 240))
+        XCTAssertNotNil(view.hoverPoint)
+        for _ in 0..<1000 {
+            autoreleasepool { view.draw(view.bounds) }
+        }
+        XCTAssertNotEqual(Data(bytes: pixels, count: byteCount), withoutInspector)
+    }
+
     func testAutomaticUpdateFeedUsesSignedHTTPSAppcast() throws {
         let info = Bundle.main.infoDictionary
 

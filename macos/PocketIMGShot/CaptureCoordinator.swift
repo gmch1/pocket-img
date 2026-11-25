@@ -226,8 +226,15 @@ final class CaptureCoordinator: NSObject, CaptureOverlayViewDelegate, NSWindowDe
                 )
                 applyCaptureFocus(includeHidden: false)
             }
-            if !hasCaptureFocus {
-                DiagnosticLog.record("capture focus unavailable after retries")
+            // macOS can defer activation during Space and display transitions.
+            do { try await Task.sleep(for: .milliseconds(1500)) } catch { return }
+            guard !Task.isCancelled, !finished, !windows.isEmpty else { return }
+            if hasCaptureFocus {
+                scheduleCaptureCursorSynchronization()
+                DiagnosticLog.record("capture focus restored after final retry")
+            } else {
+                DiagnosticLog.record("capture cancelled because focus is unavailable after retries session=\(sessionID)")
+                cancel()
             }
         }
     }
@@ -258,18 +265,17 @@ final class CaptureCoordinator: NSObject, CaptureOverlayViewDelegate, NSWindowDe
 
     func windowDidResignKey(_ notification: Notification) {
         guard !finished else { return }
+        let sessionID = self.sessionID
         Task { @MainActor [weak self] in
             await Task.yield()
-            self?.restoreCaptureFocusIfNeeded()
+            guard let self, self.sessionID == sessionID else { return }
+            self.restoreCaptureFocusIfNeeded()
         }
     }
 
     private func restoreCaptureFocusIfNeeded() {
         guard !finished, !windows.isEmpty else { return }
-        if let keyWindow = NSApplication.shared.keyWindow,
-           windows.contains(where: { $0 === keyWindow }) {
-            return
-        }
+        guard !hasCaptureFocus else { return }
         DiagnosticLog.record("capture focus lost; restoring overlay focus")
         activateWindows(includeHidden: false)
     }
@@ -309,9 +315,11 @@ final class CaptureCoordinator: NSObject, CaptureOverlayViewDelegate, NSWindowDe
             ) { [weak self] in
                 guard let self, !self.finished else { return }
                 // Let the Carbon callback unwind before unregistering its handler.
+                let sessionID = self.sessionID
                 Task { @MainActor [weak self] in
                     await Task.yield()
-                    self?.cancel()
+                    guard let self, !self.finished, self.sessionID == sessionID else { return }
+                    self.cancel()
                 }
             }
         } catch {

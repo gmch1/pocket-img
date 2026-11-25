@@ -141,6 +141,11 @@ protocol CaptureOverlayViewDelegate: AnyObject {
 
 @MainActor
 final class CaptureOverlayView: NSView, NSTextFieldDelegate {
+    private static let hexColorAttributes: [NSAttributedString.Key: Any] = [
+        .font: NSFont.monospacedDigitSystemFont(ofSize: 13, weight: .semibold),
+        .foregroundColor: NSColor.white,
+    ]
+
     private struct PixelInspection {
         let crop: CGImage
         let cropRect: CGRect
@@ -1197,10 +1202,7 @@ final class CaptureOverlayView: NSView, NSTextFieldDelegate {
 
         inspection.hexColor.draw(
             at: CGPoint(x: frame.minX + 36, y: frame.minY + 107),
-            withAttributes: [
-                .font: NSFont.monospacedSystemFont(ofSize: 13, weight: .semibold),
-                .foregroundColor: NSColor.white,
-            ]
+            withAttributes: Self.hexColorAttributes
         )
         "\(inspection.pixelX), \(inspection.pixelY)".draw(
             at: CGPoint(x: frame.maxX - 58, y: frame.minY + 109),

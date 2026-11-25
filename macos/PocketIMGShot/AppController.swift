@@ -74,9 +74,12 @@ final class AppController: ObservableObject {
         var registrationErrors: [String] = []
         do {
             try captureHotKey.register(settings.hotKey) { [weak self] in
+                DiagnosticLog.record("capture hotkey received")
                 self?.startCapture()
             }
+            DiagnosticLog.record("capture hotkey registered keyCode=\(settings.hotKey.keyCode)")
         } catch {
+            DiagnosticLog.record(error, phase: "register capture hotkey")
             registrationErrors.append(localizedDescription(for: error))
         }
 
@@ -103,6 +106,7 @@ final class AppController: ObservableObject {
 
     func setHotKeyRecording(_ recording: Bool) {
         if recording {
+            DiagnosticLog.record("capture hotkey suspended for shortcut recording")
             captureHotKey.unregister()
             videoHotKey.unregister()
         } else {
@@ -172,9 +176,18 @@ final class AppController: ObservableObject {
     }
 
     func startCapture() {
-        guard case .idle = activity else { return }
-        guard ensureScreenCaptureAccess(for: settings.hotKey) else { return }
-        guard ensureCaptureInputAccess() else { return }
+        guard case .idle = activity else {
+            DiagnosticLog.record("capture request ignored activity=\(activity)")
+            return
+        }
+        guard ensureScreenCaptureAccess(for: settings.hotKey) else {
+            DiagnosticLog.record("capture request deferred for screen recording permission")
+            return
+        }
+        guard ensureCaptureInputAccess() else {
+            DiagnosticLog.record("capture request deferred for accessibility permission")
+            return
+        }
 
         transition(to: .screenshot)
         statusMessage = ""
